@@ -1,88 +1,33 @@
 ```
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/node_modules/
+**/*.rs.bk
+
 # Dependencies
 node_modules/
-
-# Build outputs
-dist/
-build/
-target/
-
-# Tauri specific
-src-tauri/target/
-**/*.app
-**/*.dmg
-**/*.exe
-**/*.msi
-**/*.AppImage
-
-# Temporary files
-*.tmp
-*.temp
-.DS_Store
-Thumbs.db
-
-# Environment
-.env
-.env.local
-*.env.*
+vendor/
 
 # Logs
 *.log
 
-# IDE
+# Environment variables
+.env
+.env.local
+.env.*
+
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Python (if any Python files exist in project)
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-venv/
-.venv/
+# OS generated files
+.DS_Store
+Thumbs.db
 
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# MyPy
-.mypy_cache/
-
-# PyTest
-.pytest_cache/
-
-# Gradle
-.gradle/
-
-# Rust/Cargo (for Tauri)
-Cargo.lock
-**/Cargo.toml.orig
-
-# Compressed files
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+# Build outputs
+dist/
+build/
+target/
 ```
