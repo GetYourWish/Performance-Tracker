@@ -289,6 +289,18 @@ fn open_data_folder(file_path: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // On Windows, hide the console window for GUI applications
+    #[cfg(all(target_os = "windows", not(debug_assertions)))]
+    {
+        use windows_sys::Win32::System::Console::{FreeConsole, GetConsoleWindow};
+        unsafe {
+            let hwnd = GetConsoleWindow();
+            if !hwnd.is_null() {
+                let _ = FreeConsole();
+            }
+        }
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
