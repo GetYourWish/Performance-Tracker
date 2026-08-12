@@ -50,7 +50,6 @@
   "plugins": {
     "fs": {
       "requireLiteralLeadingDot": false
-    },
-    "dialog": {}
+    }
   }
 }
