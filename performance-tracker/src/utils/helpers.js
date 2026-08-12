@@ -88,27 +88,26 @@ export function getTaskCategory(taskIndex, boardItems, markers, categories) {
   let aboveMarker = null
   let belowMarker = null
 
-  // Find nearest markers above and below
-  for (let i = boardItems.length - 1; i >= 0; i--) {
+  // Find nearest marker above (before) the task
+  for (let i = taskIndex - 1; i >= 0; i--) {
     const item = boardItems[i]
-    if (item.type === 'marker') {
-      if (i < taskIndex) {
-        aboveMarker = item
-        break
-      }
+    if (item && item.type === 'marker') {
+      aboveMarker = item
+      break
     }
   }
 
+  // Find nearest marker below (after) the task
   for (let i = taskIndex + 1; i < boardItems.length; i++) {
     const item = boardItems[i]
-    if (item.type === 'marker') {
+    if (item && item.type === 'marker') {
       belowMarker = item
       break
     }
   }
 
-  // Only assign category if both markers exist and match
-  if (aboveMarker && belowMarker && aboveMarker.categoryId === belowMarker.categoryId) {
+  // Assign category from above marker if it exists (range-based: from marker down to next marker or end)
+  if (aboveMarker) {
     const category = categories.find(c => c.id === aboveMarker.categoryId)
     return category || null
   }

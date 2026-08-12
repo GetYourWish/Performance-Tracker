@@ -109,42 +109,46 @@ function Board({ data, onSave }) {
   }, [])
 
   const handleCompletionConfirm = useCallback((completionData) => {
-    const updatedTasks = tasks.map(t => {
-      if (t.id === completionData.taskId) {
-        // Get category at time of completion
-        const taskIndex = boardItems.findIndex(item => item.type === 'task' && item.taskId === t.id)
-        const category = getTaskCategory(taskIndex, boardItems, markers, categories)
-        
-        return {
-          ...t,
-          completion: {
-            completedDate: completionData.date,
-            completedAt: new Date().toISOString(),
-            difficultyId: completionData.difficultyId,
-            categoryId: category ? category.id : null,
-            note: completionData.note || ''
+    // Capture current boardItems reference to avoid stale closure
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(t => {
+        if (t.id === completionData.taskId) {
+          // Get category at time of completion using current boardItems
+          const taskIndex = boardItems.findIndex(item => item.type === 'task' && item.taskId === t.id)
+          const category = getTaskCategory(taskIndex, boardItems, markers, categories)
+          
+          return {
+            ...t,
+            completion: {
+              completedDate: completionData.date,
+              completedAt: new Date().toISOString(),
+              difficultyId: completionData.difficultyId,
+              categoryId: category ? category.id : null,
+              note: completionData.note || ''
+            }
           }
         }
-      }
-      return t
-    })
+        return t
+      })
 
-    const updatedBoard = boardItems.filter(item => 
-      !(item.type === 'task' && item.taskId === completionData.taskId)
-    )
+      const updatedBoard = boardItems.filter(item => 
+        !(item.type === 'task' && item.taskId === completionData.taskId)
+      )
 
-    setTasks(updatedTasks)
-    setBoardItems(updatedBoard)
+      setBoardItems(updatedBoard)
 
-    onSave({
-      ...data,
-      tasks: updatedTasks,
-      board: updatedBoard,
-      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+      onSave({
+        ...data,
+        tasks: updatedTasks,
+        board: updatedBoard,
+        meta: { ...data.meta, updatedAt: new Date().toISOString() }
+      })
+
+      return updatedTasks
     })
 
     setCompletionTask(null)
-  }, [tasks, boardItems, markers, categories, data, onSave])
+  }, [boardItems, markers, categories, data, onSave])
 
   const handleDragStart = (event) => {
     setDraggingItem(event.active)
@@ -191,7 +195,38 @@ function Board({ data, onSave }) {
     })
   }
 
-  const handleMarkerDrop = (categoryId) => {
+  const handleMarkerDrop = (categoryId, isNewCategory = false) => {
+    // If this is a new category being created, we need to add it to categories first
+    if (isNewCategory && typeof categoryId === 'object') {
+      // categoryId is actually the new category object
+      const newCategory = categoryId
+      const updatedCategories = [...categories, newCategory]
+      
+      const newMarker = {
+        id: generateId(),
+        categoryId: newCategory.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      const updatedMarkers = [...markers, newMarker]
+      const updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
+
+      setCategories(updatedCategories)
+      setMarkers(updatedMarkers)
+      setBoardItems(updatedBoard)
+
+      onSave({
+        ...data,
+        categories: updatedCategories,
+        markers: updatedMarkers,
+        board: updatedBoard,
+        meta: { ...data.meta, updatedAt: new Date().toISOString() }
+      })
+      return
+    }
+    
+    // Normal case - existing category
     const newMarker = {
       id: generateId(),
       categoryId,
@@ -229,6 +264,7 @@ function Board({ data, onSave }) {
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
   }, [markers, boardItems, data, onSave])
+
 
   // Render board rows in order
   const renderBoardRows = () => {

@@ -129,34 +129,52 @@ fn backup_data(file_path: String) -> Result<String, String> {
     fs::copy(&file_path, &backup_path)
         .map_err(|e| format!("Failed to create backup: {}", e))?;
     
-    // Clean up old backups (keep last 20)
+    // Clean up old backups (keep last 20) - sort by timestamp in filename
     if let Ok(entries) = fs::read_dir(&backup_dir) {
         let mut backups: Vec<_> = entries
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
+            .filter(|e| {
+                e.path()
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map_or(false, |n| n.starts_with("tracker_") && n.ends_with(".json"))
+            })
             .collect();
-        
-        backups.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).unwrap_or_else(|_| std::time::SystemTime::now()));
-        
-        while backups.len() > 20 {
-            if let Some(old) = backups.first() {
-                let _ = fs::remove_file(old.path());
-                backups.remove(0);
-            }
+
+        // Sort by timestamp extracted from filename (descending - newest first)
+        backups.sort_by(|a, b| {
+            let a_ts = a.path()
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_prefix("tracker_"))
+                .and_then(|n| n.strip_suffix(".json"))
+                .unwrap_or("0");
+            let b_ts = b.path()
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_prefix("tracker_"))
+                .and_then(|n| n.strip_suffix(".json"))
+                .unwrap_or("0");
+            b_ts.cmp(a_ts) // descending order
+        });
+
+        // Remove all but the last 20
+        for old in backups.iter().skip(20) {
+            let _ = fs::remove_file(old.path());
         }
     }
     
     Ok(backup_path.to_string_lossy().to_string())
 }
 
-fn setup_file_watcher(app_handle: AppHandle, file_path: String) {
+fn setup_file_watcher(app_handle: AppHandle, file_path: String) -> Result<(), String> {
     let app_handle_clone = app_handle.clone();
     let last_write = Arc::new(Mutex::new(Instant::now()));
     let last_write_clone = last_write.clone();
-    
+
     let (tx, rx) = std::sync::mpsc::channel();
-    
-    let watcher = RecommendedWatcher::new(
+
+    let mut watcher = RecommendedWatcher::new(
         move |res| {
             if let Ok(event) = res {
                 let _ = tx.send(event);
@@ -164,33 +182,40 @@ fn setup_file_watcher(app_handle: AppHandle, file_path: String) {
         },
         Config::default(),
     )
-    .map_err(|e| e.to_string());
-    
-    if let Ok(mut watcher) = watcher {
-        let watch_path = PathBuf::from(&file_path);
-        let _ = watcher.watch(&watch_path, RecursiveMode::NonRecursive);
-        
-        std::thread::spawn(move || {
-            while let Ok(_event) = rx.recv() {
-                let now = Instant::now();
-                let mut last_write_guard = last_write_clone.lock().unwrap();
-                
-                // Debounce - ignore if we wrote recently
-                if now.duration_since(*last_write_guard) < Duration::from_millis(500) {
-                    continue;
-                }
-                
-                *last_write_guard = now;
-                drop(last_write_guard);
-                
-                // Emit event to frontend
-                let _ = app_handle_clone.emit("tauri://file-watcher", &file_path);
+    .map_err(|e| format!("Failed to create watcher: {}", e))?;
+
+    let watch_path = PathBuf::from(&file_path);
+    watcher
+        .watch(&watch_path, RecursiveMode::NonRecursive)
+        .map_err(|e| format!("Failed to watch path: {}", e))?;
+
+    std::thread::spawn(move || {
+        while let Ok(_event) = rx.recv() {
+            let now = Instant::now();
+            let mut last_write_guard = last_write_clone.lock().unwrap();
+
+            // Debounce - ignore if we wrote recently
+            if now.duration_since(*last_write_guard) < Duration::from_millis(500) {
+                continue;
             }
-        });
-        
-        // Store watcher in app state to keep it alive
-        app_handle.manage(watcher);
-    }
+
+            *last_write_guard = now;
+            drop(last_write_guard);
+
+            // Emit event to frontend
+            let _ = app_handle_clone.emit("tauri://file-watcher", &file_path);
+        }
+    });
+
+    // Store watcher in app state to keep it alive
+    app_handle.manage(watcher);
+    
+    Ok(())
+}
+
+#[tauri::command]
+fn setup_file_watcher_cmd(app_handle: AppHandle, file_path: String) -> Result<(), String> {
+    setup_file_watcher(app_handle, file_path)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -208,7 +233,8 @@ pub fn run() {
             save_data,
             create_default_data,
             get_default_path,
-            backup_data
+            backup_data,
+            setup_file_watcher_cmd
         ])
         .setup(|_app| {
             // Setup will be called when app starts

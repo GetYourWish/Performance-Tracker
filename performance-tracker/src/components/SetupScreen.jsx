@@ -1,37 +1,73 @@
 import { useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-dialog'
 
 function SetupScreen({ onComplete }) {
   const [selectedPath, setSelectedPath] = useState('')
   const [error, setError] = useState('')
-
+  const [isProcessing, setIsProcessing] = useState(false)
+  
   const handleSelectFile = async () => {
-    // This will be implemented with Tauri dialog in the actual app
-    // For now, just use default
-    setSelectedPath('default')
-    setError('')
+    try {
+      const filePath = await open({
+        title: 'Select tracker.json file',
+        multiple: false,
+        filters: [{
+          name: 'JSON',
+          extensions: ['json']
+        }]
+      })
+      
+      if (filePath) {
+        setSelectedPath(filePath)
+        setError('')
+      }
+    } catch (err) {
+      setError('Failed to select file: ' + err.message)
+    }
   }
 
   const handleSelectFolder = async () => {
-    // This will be implemented with Tauri dialog in the actual app
-    // For now, just use default
-    setSelectedPath('default')
-    setError('')
+    try {
+      const folderPath = await open({
+        title: 'Select Folder',
+        directory: true,
+        multiple: false
+      })
+      
+      if (folderPath) {
+        setSelectedPath(folderPath)
+        setError('')
+      }
+    } catch (err) {
+      setError('Failed to select folder: ' + err.message)
+    }
   }
 
-  const handleUseDefault = () => {
-    // Default path will be handled by Tauri backend
-    setSelectedPath('default')
-    setError('')
+  const handleUseDefault = async () => {
+    try {
+      const defaultPath = await invoke('get_default_path')
+      setSelectedPath(defaultPath)
+      setError('')
+    } catch (err) {
+      setError('Failed to get default path: ' + err.message)
+    }
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedPath) {
       setError('Please select a file or folder, or use the default location')
       return
     }
 
-    // Backend will create default path
-    onComplete(null)
+    setIsProcessing(true)
+    try {
+      // Pass the selected path to the handler
+      await onComplete(selectedPath)
+    } catch (err) {
+      setError('Setup failed: ' + err.message)
+      setIsProcessing(false)
+    }
   }
 
   return (
@@ -45,21 +81,21 @@ function SetupScreen({ onComplete }) {
 
         <div className="setup-options">
           <div className="setup-option">
-            <button onClick={handleSelectFile} className="option-btn">
+            <button onClick={handleSelectFile} className="option-btn" disabled={isProcessing}>
               Select Existing tracker.json
             </button>
             <p>Choose an existing data file from your SyncThis folder</p>
           </div>
 
           <div className="setup-option">
-            <button onClick={handleSelectFolder} className="option-btn">
+            <button onClick={handleSelectFolder} className="option-btn" disabled={isProcessing}>
               Select Folder
             </button>
             <p>Choose a folder where tracker.json will be created/used</p>
           </div>
 
           <div className="setup-option">
-            <button onClick={handleUseDefault} className="option-btn">
+            <button onClick={handleUseDefault} className="option-btn" disabled={isProcessing}>
               Use Default Location
             </button>
             <p>Create/use SyncThis/tracker.json next to the app</p>
@@ -77,9 +113,9 @@ function SetupScreen({ onComplete }) {
         <button 
           onClick={handleSubmit}
           className="continue-btn"
-          disabled={!selectedPath}
+          disabled={!selectedPath || isProcessing}
         >
-          Continue
+          {isProcessing ? 'Setting Up...' : 'Continue'}
         </button>
       </div>
     </div>
