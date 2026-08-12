@@ -23,13 +23,21 @@ function App() {
   useEffect(() => {
     if (!dataFile) return
 
-    const unlisten = listen('tauri://file-watcher', async (event) => {
-      console.log('File changed externally:', event.payload)
-      await loadData()
-    })
+    let unsubscribeFn = null
+    
+    const setupListener = async () => {
+      unsubscribeFn = await listen('tauri://file-watcher', async (event) => {
+        console.log('File changed externally:', event.payload)
+        await loadData()
+      })
+    }
+    
+    setupListener()
 
     return () => {
-      unlisten.then(fn => fn())
+      if (unsubscribeFn) {
+        unsubscribeFn()
+      }
     }
   }, [dataFile])
 
@@ -51,17 +59,20 @@ function App() {
   }
 
   const loadData = async (filePath = dataFile) => {
-    if (!filePath) return
+    if (!filePath) {
+      setLoading(false)
+      return
+    }
     
     try {
       const loadedData = await invoke('load_data', { filePath })
       setData(loadedData)
-      setLoading(false)
     } catch (error) {
       console.error('Failed to load data:', error)
       if (error.message.includes('not found') || error.message.includes('corrupt')) {
         setSetupRequired(true)
       }
+    } finally {
       setLoading(false)
     }
   }
@@ -80,9 +91,19 @@ function App() {
 
   const handleSetupComplete = async (filePath) => {
     try {
-      await invoke('set_app_state', { dataFilePath: filePath })
-      setDataFile(filePath)
-      await loadData(filePath)
+      // Get default path from backend if no specific path selected
+      let finalPath = filePath
+      if (!filePath || filePath === 'default') {
+        finalPath = await invoke('get_default_path')
+      }
+      
+      // Create default data if file doesn't exist
+      const defaultData = await invoke('create_default_data')
+      await invoke('save_data', { filePath: finalPath, data: defaultData })
+      
+      await invoke('set_app_state', { dataFilePath: finalPath })
+      setDataFile(finalPath)
+      await loadData(finalPath)
       setSetupRequired(false)
     } catch (error) {
       console.error('Setup failed:', error)

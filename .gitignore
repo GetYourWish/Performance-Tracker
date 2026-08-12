@@ -1,18 +1,42 @@
 ```
-# Build artifacts
-target/
-**/target/
-
 # Dependencies
 node_modules/
-**/node_modules/
+target/
 
 # Tauri specific
 src-tauri/target/
-**/src-tauri/target/
+**/*.rs.bk
 
-# Environment variables
+# Logs
+*.log
+
+# Environment
 .env
 .env.local
-.env.*
+*.env.*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Build outputs
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.a
+*.out
 ```

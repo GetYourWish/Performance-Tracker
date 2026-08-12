@@ -8,18 +8,22 @@ function CategoryGrabber({ categories, onDrop }) {
 
   const handleDragStart = (e, categoryId) => {
     e.dataTransfer.setData('categoryId', categoryId)
+    e.dataTransfer.setData('type', 'existing-category')
   }
 
   const handleCreateCategory = () => {
     if (!newCategoryName.trim()) return
 
-    onDrop(generateId(), {
+    const newCategory = {
       id: generateId(),
       name: newCategoryName.trim(),
       color: newCategoryColor,
       order: categories.length,
       active: true
-    }, true)
+    }
+
+    // Pass the category object and indicate it's new
+    onDrop(newCategory, true)
 
     setNewCategoryName('')
     setIsCreating(false)
