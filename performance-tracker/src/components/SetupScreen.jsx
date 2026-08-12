@@ -23,7 +23,8 @@ function SetupScreen({ onComplete }) {
         setError('')
       }
     } catch (err) {
-      setError('Failed to select file: ' + err.message)
+      console.error('Failed to select file:', err)
+      setError('Failed to select file: ' + (err.message || 'Unknown error'))
     }
   }
 
@@ -36,11 +37,13 @@ function SetupScreen({ onComplete }) {
       })
       
       if (folderPath) {
-        setSelectedPath(folderPath)
+        // Append tracker.json to the selected folder path
+        const fullPath = folderPath.endsWith('tracker.json') ? folderPath : `${folderPath}${folderPath.endsWith('/') || folderPath.endsWith('\\') ? '' : '/'}tracker.json`
+        setSelectedPath(fullPath)
         setError('')
       }
     } catch (err) {
-      setError('Failed to select folder: ' + err.message)
+      setError('Failed to select folder: ' + (err.message || 'Unknown error'))
     }
   }
 

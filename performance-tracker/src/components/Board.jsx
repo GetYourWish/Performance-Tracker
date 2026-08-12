@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -14,9 +14,87 @@ import {
   verticalListSortingStrategy
 } from '@dnd-kit/sortable'
 import CompletionPopup from './CompletionPopup'
-import CategoryGrabber from './CategoryGrabber'
 import BoardRow from './BoardRow'
 import { generateId, getCurrentDate, getTaskCategory } from '../utils/helpers'
+
+// Sidebar component for categories
+function CategorySidebar({ categories, onDrop }) {
+  const [isCreating, setIsCreating] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [newCategoryColor, setNewCategoryColor] = useState('#60a5fa')
+  
+  const handleDragStart = (e, categoryId) => {
+    e.dataTransfer.setData('categoryId', categoryId)
+    e.dataTransfer.setData('type', 'existing-category')
+  }
+  
+  const handleCreateCategory = () => {
+    if (!newCategoryName.trim()) return
+
+    const newCategory = {
+      id: generateId(),
+      name: newCategoryName.trim(),
+      color: newCategoryColor,
+      order: categories.length,
+      active: true
+    }
+
+    onDrop(newCategory, true)
+
+    setNewCategoryName('')
+    setIsCreating(false)
+  }
+  
+  return (
+    <div className="category-grabber">
+      <h4>Categories</h4>
+      <p className="drag-hint">Drag a category to the board to add a marker</p>
+      
+      <div className="categories-list">
+        {categories.map(category => (
+          <div
+            key={category.id}
+            className="category-chip"
+            draggable
+            onDragStart={(e) => handleDragStart(e, category.id)}
+            style={{ 
+              backgroundColor: category.color,
+              opacity: 0.8
+            }}
+          >
+            {category.name}
+          </div>
+        ))}
+
+        {isCreating ? (
+          <div className="new-category-form">
+            <input
+              type="text"
+              placeholder="Category name"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              autoFocus
+            />
+            <input
+              type="color"
+              value={newCategoryColor}
+              onChange={(e) => setNewCategoryColor(e.target.value)}
+            />
+            <button onClick={handleCreateCategory}>Add</button>
+            <button onClick={() => setIsCreating(false)}>Cancel</button>
+          </div>
+        ) : (
+          <button 
+            className="add-category-btn"
+            onClick={() => setIsCreating(true)}
+          >
+            + Add Category
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function Board({ data, onSave }) {
   // Derive state directly from props - no duplication
@@ -25,12 +103,31 @@ function Board({ data, onSave }) {
   const markers = useMemo(() => data?.markers || [], [data?.markers])
   const categories = useMemo(() => data?.categories || [], [data?.categories])
   const difficulties = useMemo(() => data?.difficulties || [], [data?.difficulties])
+  const settings = useMemo(() => data?.settings || {}, [data?.settings])
   
   const [editingTask, setEditingTask] = useState(null)
   const [newTaskText, setNewTaskText] = useState('')
   const [completionTask, setCompletionTask] = useState(null)
   const [showCategoryGrabber, setShowCategoryGrabber] = useState(false)
   const [draggingItem, setDraggingItem] = useState(null)
+  
+  // Apply theme from settings
+  useEffect(() => {
+    const theme = settings.theme || 'system'
+    const root = document.documentElement
+    
+    if (theme === 'dark') {
+      root.setAttribute('data-theme', 'dark')
+    } else if (theme === 'light') {
+      root.setAttribute('data-theme', 'light')
+    } else {
+      // System theme
+      root.removeAttribute('data-theme')
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        root.setAttribute('data-theme', 'dark')
+      }
+    }
+  }, [settings.theme])
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -177,8 +274,6 @@ function Board({ data, onSave }) {
     const [removed] = newBoard.splice(oldIndex, 1)
     newBoard.splice(newIndex, 0, removed)
 
-    setBoardItems(newBoard)
-
     onSave({
       ...data,
       board: newBoard,
@@ -300,69 +395,65 @@ function Board({ data, onSave }) {
 
   return (
     <div className="board-container">
-      <div className="board-header">
-        <h2>Board</h2>
-        <button 
-          className="categories-toggle"
-          onClick={() => setShowCategoryGrabber(!showCategoryGrabber)}
-        >
-          {showCategoryGrabber ? 'Hide Categories' : 'Show Categories'}
-        </button>
-      </div>
+      <div className="board-content-wrapper">
+        <div className="board-main">
+          <div className="board-header">
+            <h2>Board</h2>
+          </div>
 
-      <div className="board-content">
-        {showCategoryGrabber && (
-          <CategoryGrabber 
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={boardItems.map(i => i.type === 'task' ? i.taskId : i.markerId)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="board-list">
+                {renderBoardRows()}
+                
+                {tasks.length === 0 && boardItems.length === 0 && (
+                  <div className="board-empty-state">
+                    <h3>No tasks yet</h3>
+                    <p>Type below to add your first task and start tracking your performance!</p>
+                  </div>
+                )}
+                
+                <div className="new-task-row">
+                  <input
+                    type="text"
+                    className="new-task-input"
+                    placeholder="Type a task and press Enter..."
+                    value={newTaskText}
+                    onChange={(e) => setNewTaskText(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    autoFocus
+                  />
+                </div>
+              </div>
+            </SortableContext>
+
+            <DragOverlay>
+              {draggingItem ? (
+                <div className="drag-overlay">
+                  {draggingItem.data.current?.type === 'task' 
+                    ? tasks.find(t => t.id === draggingItem.id)?.text
+                    : 'Category Marker'
+                  }
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </div>
+        
+        <div className="board-sidebar">
+          <CategorySidebar 
             categories={categories}
             onDrop={handleMarkerDrop}
           />
-        )}
-
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={boardItems.map(i => i.type === 'task' ? i.taskId : i.markerId)}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="board-list">
-              {renderBoardRows()}
-              
-              {tasks.length === 0 && boardItems.length === 0 && (
-                <div className="board-empty-state">
-                  <h3>No tasks yet</h3>
-                  <p>Type below to add your first task and start tracking your performance!</p>
-                </div>
-              )}
-              
-              <div className="new-task-row">
-                <input
-                  type="text"
-                  className="new-task-input"
-                  placeholder="Type a task and press Enter..."
-                  value={newTaskText}
-                  onChange={(e) => setNewTaskText(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  autoFocus
-                />
-              </div>
-            </div>
-          </SortableContext>
-
-          <DragOverlay>
-            {draggingItem ? (
-              <div className="drag-overlay">
-                {draggingItem.data.current?.type === 'task' 
-                  ? tasks.find(t => t.id === draggingItem.id)?.text
-                  : 'Category Marker'
-                }
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+        </div>
       </div>
 
       {completionTask && (
