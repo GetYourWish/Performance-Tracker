@@ -148,14 +148,16 @@ fn backup_data(file_path: String) -> Result<String, String> {
                 .and_then(|n| n.to_str())
                 .and_then(|n| n.strip_prefix("tracker_"))
                 .and_then(|n| n.strip_suffix(".json"))
-                .unwrap_or("0");
+                .unwrap_or("0")
+                .to_string();
             let b_ts = b.path()
                 .file_name()
                 .and_then(|n| n.to_str())
                 .and_then(|n| n.strip_prefix("tracker_"))
                 .and_then(|n| n.strip_suffix(".json"))
-                .unwrap_or("0");
-            b_ts.cmp(a_ts) // descending order
+                .unwrap_or("0")
+                .to_string();
+            b_ts.cmp(&a_ts) // descending order
         });
 
         // Remove all but the last 20
