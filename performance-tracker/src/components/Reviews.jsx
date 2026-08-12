@@ -29,7 +29,7 @@ function Reviews({ data }) {
     return {
       date: dateStr,
       score,
-        count: daysTasks.length,
+      count: daysTasks.length,
       tasks: daysTasks
     }
   }, [selectedDate, completedTasks, difficulties, settings])
