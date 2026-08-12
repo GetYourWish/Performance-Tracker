@@ -3,7 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, getYear, startOfYear, endOfYear } from 'date-fns'
 import { calculateDayScore, parseDate, formatDate, groupTasksByDate } from '../utils/helpers'
 
-function Reviews({ data }) {
+function Reviews({ data, onDayClick }) {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [reviewType, setReviewType] = useState('daily')
   const [heatmapYear, setHeatmapYear] = useState(getYear(new Date()))
@@ -249,6 +249,8 @@ function Reviews({ data }) {
                     <Cell 
                       key={index} 
                       fill={entry.score > 0 ? '#60a5fa' : 'var(--bg-tertiary)'}
+                      onClick={() => onDayClick && onDayClick(parseDate(entry.date))}
+                      style={{ cursor: onDayClick ? 'pointer' : 'default' }}
                     />
                   ))}
                   <Bar dataKey="score" radius={[4, 4, 0, 0]} />
@@ -274,10 +276,14 @@ function Reviews({ data }) {
                   style={{
                     backgroundColor: getColorIntensity(cell.value, maxHeatmapValue)
                   }}
-                  title={`${cell.date}: ${cell.value.toFixed(1)} points`}
+                  title={`${cell.date}: Score ${cell.value.toFixed(1)}`}
                   onClick={() => {
-                    setSelectedDate(parseDate(cell.date))
-                    setReviewType('daily')
+                    if (onDayClick) {
+                      onDayClick(parseDate(cell.date))
+                    } else {
+                      setSelectedDate(parseDate(cell.date))
+                      setReviewType('daily')
+                    }
                   }}
                 />
               ))}

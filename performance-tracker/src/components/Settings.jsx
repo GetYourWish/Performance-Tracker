@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 
-function Settings({ data, onSave, dataFile }) {
+function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder, onChangeDataLocation }) {
   const [activeTab, setActiveTab] = useState('data')
 
   const settings = data?.settings || {}
@@ -28,6 +29,27 @@ function Settings({ data, onSave, dataFile }) {
     })
   }
 
+  const handleMoveDifficulty = (index, direction) => {
+    const newIndex = index + direction
+    if (newIndex < 0 || newIndex >= difficulties.length) return
+    
+    const updated = [...difficulties]
+    const temp = updated[index]
+    updated[index] = updated[newIndex]
+    updated[newIndex] = temp
+    
+    // Update order values
+    updated.forEach((d, i) => {
+      d.order = i
+    })
+    
+    onSave({
+      ...data,
+      difficulties: updated,
+      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+    })
+  }
+
   const handleAddDifficulty = () => {
     const newDifficulty = {
       id: `diff-${Date.now()}`,
@@ -47,6 +69,27 @@ function Settings({ data, onSave, dataFile }) {
   const handleCategoryUpdate = (index, field, value) => {
     const updated = [...categories]
     updated[index] = { ...updated[index], [field]: value }
+    onSave({
+      ...data,
+      categories: updated,
+      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+    })
+  }
+
+  const handleMoveCategory = (index, direction) => {
+    const newIndex = index + direction
+    if (newIndex < 0 || newIndex >= categories.length) return
+    
+    const updated = [...categories]
+    const temp = updated[index]
+    updated[index] = updated[newIndex]
+    updated[newIndex] = temp
+    
+    // Update order values
+    updated.forEach((c, i) => {
+      c.order = i
+    })
+    
     onSave({
       ...data,
       categories: updated,
@@ -120,6 +163,33 @@ function Settings({ data, onSave, dataFile }) {
               <label>Current File Location</label>
               <div className="file-path">{dataFile || 'Not set'}</div>
             </div>
+            
+            <div className="data-actions">
+              <button className="action-btn" onClick={onOpenFolder}>
+                Open Data Folder
+              </button>
+              <button className="action-btn" onClick={onBackupNow}>
+                Backup Now
+              </button>
+              <button className="action-btn danger" onClick={onChangeDataLocation}>
+                Change Data Location
+              </button>
+            </div>
+            
+            {conflicts && conflicts.length > 0 && (
+              <div className="conflict-warning">
+                <strong>⚠️ Conflict Files Detected:</strong>
+                <ul>
+                  {conflicts.map((conflict, idx) => (
+                    <li key={idx}>{conflict}</li>
+                  ))}
+                </ul>
+                <p className="setting-note">
+                  Syncthing has created conflict files. Please review them manually to avoid data loss.
+                </p>
+              </div>
+            )}
+            
             <p className="setting-note">
               The data file is synced with Syncthing. Keep it in your SyncThis folder for best results.
             </p>
@@ -155,6 +225,24 @@ function Settings({ data, onSave, dataFile }) {
                     value={difficulty.color}
                     onChange={(e) => handleDifficultyUpdate(index, 'color', e.target.value)}
                   />
+                  <div className="reorder-buttons">
+                    <button 
+                      className="reorder-btn" 
+                      onClick={() => handleMoveDifficulty(index, -1)}
+                      disabled={index === 0}
+                      aria-label="Move up"
+                    >
+                      ↑
+                    </button>
+                    <button 
+                      className="reorder-btn" 
+                      onClick={() => handleMoveDifficulty(index, 1)}
+                      disabled={index === difficulties.length - 1}
+                      aria-label="Move down"
+                    >
+                      ↓
+                    </button>
+                  </div>
                   <label>
                     <input
                       type="checkbox"
@@ -191,6 +279,24 @@ function Settings({ data, onSave, dataFile }) {
                     value={category.color}
                     onChange={(e) => handleCategoryUpdate(index, 'color', e.target.value)}
                   />
+                  <div className="reorder-buttons">
+                    <button 
+                      className="reorder-btn" 
+                      onClick={() => handleMoveCategory(index, -1)}
+                      disabled={index === 0}
+                      aria-label="Move up"
+                    >
+                      ↑
+                    </button>
+                    <button 
+                      className="reorder-btn" 
+                      onClick={() => handleMoveCategory(index, 1)}
+                      disabled={index === categories.length - 1}
+                      aria-label="Move down"
+                    >
+                      ↓
+                    </button>
+                  </div>
                   <label>
                     <input
                       type="checkbox"

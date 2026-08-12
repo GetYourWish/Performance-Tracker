@@ -649,6 +649,35 @@
   align-self: flex-start;
 }
 
+/* Reorder buttons for difficulties and categories */
+.reorder-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.reorder-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 16px;
+  transition: all var(--transition-fast);
+}
+
+.reorder-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.reorder-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 /* Setup Screen */
 .setup-screen {
   display: flex;
@@ -734,4 +763,93 @@
 .continue-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Data actions in settings */
+.data-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.data-actions .action-btn {
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.data-actions .action-btn:hover {
+  background: var(--bg-tertiary);
+}
+
+.data-actions .action-btn.danger {
+  color: #ef4444;
+}
+
+.data-actions .action-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Conflict warning */
+.conflict-warning {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid #fbbf24;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.conflict-warning strong {
+  color: #fbbf24;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.conflict-warning ul {
+  margin: 8px 0;
+  padding-left: 20px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: monospace;
+}
+
+.conflict-warning .setting-note {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Category marker - readable text with semi-transparent background */
+.category-marker {
+  padding: 8px 20px;
+  border-radius: 20px;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 14px;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* Empty state for board */
+.board-empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+}
+
+.board-empty-state h3 {
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.board-empty-state p {
+  font-size: 14px;
+}
+
+/* Scrollable content */
+.scrollable {
+  overflow-y: auto;
 }

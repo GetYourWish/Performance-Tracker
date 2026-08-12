@@ -67,6 +67,9 @@ function Board({ data, onSave }) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleCreateTask()
+    } else if (e.key === 'Escape') {
+      // Cancel new task input
+      setNewTaskText('')
     }
   }
 
@@ -327,6 +330,13 @@ function Board({ data, onSave }) {
           >
             <div className="board-list">
               {renderBoardRows()}
+              
+              {tasks.length === 0 && boardItems.length === 0 && (
+                <div className="board-empty-state">
+                  <h3>No tasks yet</h3>
+                  <p>Type below to add your first task and start tracking your performance!</p>
+                </div>
+              )}
               
               <div className="new-task-row">
                 <input
