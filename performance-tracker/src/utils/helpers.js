@@ -1,6 +1,22 @@
-// Generate unique ID
+// Generate unique ID using crypto API if available, fallback to Date.now
 export function generateId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
   return `${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 9)}`
+}
+
+// Sanitize text input - prevent XSS and limit length
+export function sanitizeInput(text, maxLength = 500) {
+  if (!text) return ''
+  const trimmed = text.trim().slice(0, maxLength)
+  // Basic XSS prevention - escape HTML entities
+  return trimmed
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
 }
 
 // Get current date as YYYY-MM-DD
@@ -56,7 +72,7 @@ export function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate()
 }
 
-// Calculate score for a set of completed tasks
+// Calculate score for a set of completed tasks - OPTIMIZED with difficulty map lookup
 export function calculateDayScore(completedTasks, difficulties, fatigueIncrement = 0.10, fatigueCap = 3.0) {
   if (!completedTasks || completedTasks.length === 0) {
     return 0
@@ -70,8 +86,11 @@ export function calculateDayScore(completedTasks, difficulties, fatigueIncrement
   let totalScore = 0
   let multiplier = 1.0
 
+  // Create difficulty lookup map for O(1) access instead of O(n) find
+  const difficultyMap = new Map(difficulties.map(d => [d.id, d]))
+
   for (const task of sorted) {
-    const difficulty = difficulties.find(d => d.id === task.completion.difficultyId)
+    const difficulty = difficultyMap.get(task.completion.difficultyId)
     const baseScore = difficulty ? difficulty.score : 0
     const adjustedScore = baseScore * multiplier
     totalScore += adjustedScore
@@ -81,6 +100,23 @@ export function calculateDayScore(completedTasks, difficulties, fatigueIncrement
   }
 
   return totalScore
+}
+
+// Pre-group tasks by date for efficient heatmap calculation - O(n) instead of O(n*m)
+export function groupTasksByDate(completedTasks) {
+  const grouped = new Map()
+  
+  for (const task of completedTasks) {
+    if (!task.completion || !task.completion.completedDate) continue
+    
+    const dateStr = task.completion.completedDate
+    if (!grouped.has(dateStr)) {
+      grouped.set(dateStr, [])
+    }
+    grouped.get(dateStr).push(task)
+  }
+  
+  return grouped
 }
 
 // Get category for a task based on board position

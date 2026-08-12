@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -19,11 +19,13 @@ import BoardRow from './BoardRow'
 import { generateId, getCurrentDate, getTaskCategory } from '../utils/helpers'
 
 function Board({ data, onSave }) {
-  const [tasks, setTasks] = useState(data?.tasks?.filter(t => !t.completion) || [])
-  const [boardItems, setBoardItems] = useState(data?.board || [])
-  const [markers, setMarkers] = useState(data?.markers || [])
-  const [categories, setCategories] = useState(data?.categories || [])
-  const [difficulties] = useState(data?.difficulties || [])
+  // Derive state directly from props - no duplication
+  const tasks = useMemo(() => data?.tasks?.filter(t => !t.completion) || [], [data?.tasks])
+  const boardItems = useMemo(() => data?.board || [], [data?.board])
+  const markers = useMemo(() => data?.markers || [], [data?.markers])
+  const categories = useMemo(() => data?.categories || [], [data?.categories])
+  const difficulties = useMemo(() => data?.difficulties || [], [data?.difficulties])
+  
   const [editingTask, setEditingTask] = useState(null)
   const [newTaskText, setNewTaskText] = useState('')
   const [completionTask, setCompletionTask] = useState(null)
@@ -51,8 +53,6 @@ function Board({ data, onSave }) {
     const updatedTasks = [...tasks, newTask]
     const updatedBoard = [...boardItems, { type: 'task', taskId: newTask.id }]
 
-    setTasks(updatedTasks)
-    setBoardItems(updatedBoard)
     setNewTaskText('')
 
     onSave({
@@ -78,8 +78,6 @@ function Board({ data, onSave }) {
       return t
     })
 
-    setTasks(updatedTasks)
-
     onSave({
       ...data,
       tasks: updatedTasks,
@@ -92,9 +90,6 @@ function Board({ data, onSave }) {
     const updatedBoard = boardItems.filter(item => 
       !(item.type === 'task' && item.taskId === taskId)
     )
-
-    setTasks(updatedTasks)
-    setBoardItems(updatedBoard)
 
     onSave({
       ...data,
@@ -109,42 +104,35 @@ function Board({ data, onSave }) {
   }, [])
 
   const handleCompletionConfirm = useCallback((completionData) => {
-    // Capture current boardItems reference to avoid stale closure
-    setTasks(prevTasks => {
-      const updatedTasks = prevTasks.map(t => {
-        if (t.id === completionData.taskId) {
-          // Get category at time of completion using current boardItems
-          const taskIndex = boardItems.findIndex(item => item.type === 'task' && item.taskId === t.id)
-          const category = getTaskCategory(taskIndex, boardItems, markers, categories)
-          
-          return {
-            ...t,
-            completion: {
-              completedDate: completionData.date,
-              completedAt: new Date().toISOString(),
-              difficultyId: completionData.difficultyId,
-              categoryId: category ? category.id : null,
-              note: completionData.note || ''
-            }
+    // Since state is derived from props, we directly compute updated data
+    const taskIndex = boardItems.findIndex(item => item.type === 'task' && item.taskId === completionData.taskId)
+    const category = getTaskCategory(taskIndex, boardItems, markers, categories)
+    
+    const updatedTasks = data.tasks.map(t => {
+      if (t.id === completionData.taskId) {
+        return {
+          ...t,
+          completion: {
+            completedDate: completionData.date,
+            completedAt: new Date().toISOString(),
+            difficultyId: completionData.difficultyId,
+            categoryId: category ? category.id : null,
+            note: completionData.note || ''
           }
         }
-        return t
-      })
+      }
+      return t
+    })
 
-      const updatedBoard = boardItems.filter(item => 
-        !(item.type === 'task' && item.taskId === completionData.taskId)
-      )
+    const updatedBoard = boardItems.filter(item => 
+      !(item.type === 'task' && item.taskId === completionData.taskId)
+    )
 
-      setBoardItems(updatedBoard)
-
-      onSave({
-        ...data,
-        tasks: updatedTasks,
-        board: updatedBoard,
-        meta: { ...data.meta, updatedAt: new Date().toISOString() }
-      })
-
-      return updatedTasks
+    onSave({
+      ...data,
+      tasks: updatedTasks,
+      board: updatedBoard,
+      meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
 
     setCompletionTask(null)
@@ -212,10 +200,6 @@ function Board({ data, onSave }) {
       const updatedMarkers = [...markers, newMarker]
       const updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
 
-      setCategories(updatedCategories)
-      setMarkers(updatedMarkers)
-      setBoardItems(updatedBoard)
-
       onSave({
         ...data,
         categories: updatedCategories,
@@ -237,9 +221,6 @@ function Board({ data, onSave }) {
     const updatedMarkers = [...markers, newMarker]
     const updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
 
-    setMarkers(updatedMarkers)
-    setBoardItems(updatedBoard)
-
     onSave({
       ...data,
       markers: updatedMarkers,
@@ -253,9 +234,6 @@ function Board({ data, onSave }) {
     const updatedBoard = boardItems.filter(item => 
       !(item.type === 'marker' && item.markerId === markerId)
     )
-
-    setMarkers(updatedMarkers)
-    setBoardItems(updatedBoard)
 
     onSave({
       ...data,

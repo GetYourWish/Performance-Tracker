@@ -1,14 +1,14 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { getCurrentDate } from '../utils/helpers'
 
 function CompletionPopup({ task, difficulties, onConfirm, onCancel }) {
   const [selectedDifficulty, setSelectedDifficulty] = useState(null)
   const [date, setDate] = useState(getCurrentDate())
   const [note, setNote] = useState('')
-
+  
   const activeDifficulties = difficulties.filter(d => d.active !== false)
-
-  const handleConfirm = () => {
+  
+  const handleConfirm = useCallback(() => {
     if (!selectedDifficulty) return
 
     onConfirm({
@@ -17,26 +17,36 @@ function CompletionPopup({ task, difficulties, onConfirm, onCancel }) {
       date,
       note
     })
-  }
-
-  const handleKeyDown = (e) => {
+  }, [selectedDifficulty, date, note, task.id, onConfirm])
+  
+  const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && selectedDifficulty) {
       handleConfirm()
     } else if (e.key === 'Escape') {
       onCancel()
     }
-  }
+  }, [handleConfirm, onCancel, selectedDifficulty])
 
   return (
-    <div className="popup-overlay" onKeyDown={handleKeyDown}>
+    <div 
+      className="popup-overlay" 
+      onKeyDown={handleKeyDown}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="completion-popup-title"
+    >
       <div className="completion-popup">
-        <h3>Complete Task</h3>
+        <h3 id="completion-popup-title">Complete Task</h3>
         
         <div className="task-text">{task.text}</div>
 
         <div className="form-group">
-          <label>Difficulty</label>
-          <div className="difficulty-selector">
+          <label id="difficulty-label">Difficulty</label>
+          <div 
+            className="difficulty-selector"
+            role="radiogroup"
+            aria-labelledby="difficulty-label"
+          >
             {activeDifficulties.map(difficulty => (
               <button
                 key={difficulty.id}
@@ -47,6 +57,8 @@ function CompletionPopup({ task, difficulties, onConfirm, onCancel }) {
                   borderColor: difficulty.color
                 }}
                 onClick={() => setSelectedDifficulty(difficulty.id)}
+                role="radio"
+                aria-checked={selectedDifficulty === difficulty.id}
               >
                 {difficulty.label} ({difficulty.score})
               </button>
@@ -55,9 +67,10 @@ function CompletionPopup({ task, difficulties, onConfirm, onCancel }) {
         </div>
 
         <div className="form-group">
-          <label>Date Completed</label>
+          <label htmlFor="completion-date">Date Completed</label>
           <input
             type="date"
+            id="completion-date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             className="date-input"
@@ -65,13 +78,15 @@ function CompletionPopup({ task, difficulties, onConfirm, onCancel }) {
         </div>
 
         <div className="form-group">
-          <label>Note (optional)</label>
+          <label htmlFor="completion-note">Note (optional)</label>
           <textarea
+            id="completion-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Add a short note..."
             rows={2}
             className="note-input"
+            maxLength={500}
           />
         </div>
 
@@ -86,6 +101,7 @@ function CompletionPopup({ task, difficulties, onConfirm, onCancel }) {
             className="btn-confirm"
             onClick={handleConfirm}
             disabled={!selectedDifficulty}
+            aria-disabled={!selectedDifficulty}
           >
             Complete
           </button>
