@@ -16,6 +16,34 @@ struct AppState {
     data_file_path: Option<String>,
 }
 
+// Conflict detection - check for Syncthing conflict files
+fn detect_conflict_files(file_path: &str) -> Vec<String> {
+    let path = PathBuf::from(file_path);
+    let parent = match path.parent() {
+        Some(p) => p,
+        None => return vec![],
+    };
+    
+    let file_name = match path.file_name().and_then(|n| n.to_str()) {
+        Some(n) => n,
+        None => return vec![],
+    };
+    
+    let mut conflicts = vec![];
+    
+    if let Ok(entries) = fs::read_dir(parent) {
+        for entry in entries.flatten() {
+            let entry_name = entry.file_name().to_string_lossy().to_string();
+            // Check for Syncthing conflict pattern: filename.conflict-YYYYMMDD-HHMMSS.ext
+            if entry_name.contains(".conflict-") && entry_name.contains(file_name) {
+                conflicts.push(entry.path().to_string_lossy().to_string());
+            }
+        }
+    }
+    
+    conflicts
+}
+
 #[tauri::command]
 fn get_app_state(app_handle: AppHandle) -> Result<AppState, String> {
     let state = app_handle.state::<Arc<Mutex<AppState>>>();
@@ -227,6 +255,38 @@ fn setup_file_watcher_cmd(app_handle: AppHandle, file_path: String) -> Result<()
     setup_file_watcher(app_handle, file_path)
 }
 
+#[tauri::command]
+fn check_conflicts(file_path: String) -> Result<Vec<String>, String> {
+    Ok(detect_conflict_files(&file_path))
+}
+
+#[tauri::command]
+fn open_data_folder(file_path: String) -> Result<(), String> {
+    let path = PathBuf::from(&file_path);
+    let parent = path.parent().ok_or("Failed to get parent directory")?;
+    
+    // Open folder in file explorer
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("explorer")
+        .arg(parent)
+        .spawn()
+        .map_err(|e| format!("Failed to open folder: {}", e))?;
+    
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg(parent)
+        .spawn()
+        .map_err(|e| format!("Failed to open folder: {}", e))?;
+    
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open")
+        .arg(parent)
+        .spawn()
+        .map_err(|e| format!("Failed to open folder: {}", e))?;
+    
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -243,7 +303,9 @@ pub fn run() {
             create_default_data,
             get_default_path,
             backup_data,
-            setup_file_watcher_cmd
+            setup_file_watcher_cmd,
+            check_conflicts,
+            open_data_folder
         ])
         .setup(|_app| {
             // Setup will be called when app starts
