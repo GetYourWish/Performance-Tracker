@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, getYear, startOfYear, endOfYear } from 'date-fns'
-import { calculateDayScore, parseDate, formatDate } from '../utils/helpers'
+import { calculateDayScore, parseDate, formatDate, groupTasksByDate } from '../utils/helpers'
 
 function Reviews({ data }) {
   const [selectedDate, setSelectedDate] = useState(new Date())
@@ -14,11 +14,21 @@ function Reviews({ data }) {
   const settings = data?.settings || {}
 
   const completedTasks = tasks.filter(t => t.completion)
+  
+  // Pre-group completed tasks by date for O(1) lookup - MAJOR PERFORMANCE IMPROVEMENT
+  const tasksByDate = useMemo(() => {
+    return groupTasksByDate(completedTasks)
+  }, [completedTasks])
+  
+  // Create difficulty map for O(1) lookup
+  const difficultyMap = useMemo(() => {
+    return new Map(difficulties.map(d => [d.id, d]))
+  }, [difficulties])
 
-  // Daily Review Data
+  // Daily Review Data - OPTIMIZED: Use pre-grouped tasks
   const dailyData = useMemo(() => {
     const dateStr = formatDate(selectedDate)
-    const daysTasks = completedTasks.filter(t => t.completion.completedDate === dateStr)
+    const daysTasks = tasksByDate.get(dateStr) || []
     const score = calculateDayScore(
       daysTasks, 
       difficulties, 
@@ -32,9 +42,9 @@ function Reviews({ data }) {
       count: daysTasks.length,
       tasks: daysTasks
     }
-  }, [selectedDate, completedTasks, difficulties, settings])
+  }, [selectedDate, tasksByDate, difficulties, settings])
 
-  // Weekly Review Data
+  // Weekly Review Data - OPTIMIZED: Use pre-grouped tasks
   const weeklyData = useMemo(() => {
     const start = startOfWeek(selectedDate, { weekStartsOn: settings.weekStartsOn || 1 })
     const end = endOfWeek(selectedDate, { weekStartsOn: settings.weekStartsOn || 1 })
@@ -42,7 +52,7 @@ function Reviews({ data }) {
 
     const chartData = days.map(day => {
       const dateStr = formatDate(day)
-      const daysTasks = completedTasks.filter(t => t.completion.completedDate === dateStr)
+      const daysTasks = tasksByDate.get(dateStr) || []
       const score = calculateDayScore(
         daysTasks,
         difficulties,
@@ -68,9 +78,9 @@ function Reviews({ data }) {
       totalCount,
       bestDay
     }
-  }, [selectedDate, completedTasks, difficulties, settings])
+  }, [selectedDate, tasksByDate, difficulties, settings])
 
-  // Heatmap Data
+  // Heatmap Data - OPTIMIZED: Use pre-grouped tasks (O(n) instead of O(n*m))
   const heatmapData = useMemo(() => {
     const start = startOfYear(new Date(heatmapYear, 0, 1))
     const end = endOfYear(new Date(heatmapYear, 0, 1))
@@ -78,7 +88,7 @@ function Reviews({ data }) {
 
     return days.map(day => {
       const dateStr = formatDate(day)
-      const daysTasks = completedTasks.filter(t => t.completion.completedDate === dateStr)
+      const daysTasks = tasksByDate.get(dateStr) || []
       
       let value = 0
       if (settings.heatmapMode === 'count') {
@@ -98,7 +108,7 @@ function Reviews({ data }) {
         value
       }
     })
-  }, [heatmapYear, completedTasks, difficulties, settings])
+  }, [heatmapYear, tasksByDate, difficulties, settings])
 
   const getColorIntensity = (value, maxValue) => {
     if (value === 0) return 'var(--bg-tertiary)'
