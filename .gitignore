@@ -1,33 +1,92 @@
 ```
-# Tauri build artifacts
+# Rust/Cargo
+target/
+Cargo.lock
+
+# Tauri
 src-tauri/target/
-src-tauri/node_modules/
-**/*.rs.bk
 
 # Dependencies
 node_modules/
 vendor/
 
+# Build artifacts
+dist/
+build/
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+
 # Logs
 *.log
 
-# Environment variables
+# Environment
 .env
 .env.local
 .env.*
 
-# IDE files
+# Editor/IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*.tmp
 
-# OS generated files
+# OS
 .DS_Store
 Thumbs.db
 
-# Build outputs
-dist/
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Python (if applicable)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Java (if applicable)
+*.class
+*.jar
+*.war
+*.ear
+.gradle/
 build/
-target/
+
+# Node.js (if applicable)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
