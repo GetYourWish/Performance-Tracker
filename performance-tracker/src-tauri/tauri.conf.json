@@ -45,8 +45,7 @@
       "wix": null,
       "nsis": {
         "installMode": "currentUser"
-      },
-      "console": false
+      }
     }
   },
   "plugins": {
