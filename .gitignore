@@ -1,34 +1,22 @@
 ```
 # Build artifacts
 target/
+**/target/
 
 # Dependencies
 Cargo.lock
+**/Cargo.lock
 
-# Logs and temp files
+# Tauri specific
+src-tauri/target/
+**/src-tauri/target/
+
+# Logs
 *.log
+
+# Temporary files
 *.tmp
-
-# Environment
-.env
-.env.local
-.env.*
-
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Coverage reports
-coverage/
-htmlcov/
-*.coverage
-
-# OS specific
+*~
 .DS_Store
 Thumbs.db
-
-# Rust specific
-**/*.rs.bk
 ```
