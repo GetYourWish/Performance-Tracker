@@ -49,7 +49,7 @@
   },
   "plugins": {
     "fs": {
-      "scope": ["**"]
+      "requireLiteralLeadingDot": false
     },
     "dialog": {}
   }
