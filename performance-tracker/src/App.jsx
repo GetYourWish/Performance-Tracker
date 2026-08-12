@@ -176,9 +176,20 @@ function App() {
         finalPath = await invoke('get_default_path')
       }
       
-      // Create default data if file doesn't exist
-      const defaultData = await invoke('create_default_data')
-      await invoke('save_data', { filePath: finalPath, data: defaultData })
+      // Check if file exists - if not, create default data
+      let existingData = null
+      try {
+        existingData = await invoke('load_data', { filePath: finalPath })
+      } catch (e) {
+        // File doesn't exist or is invalid, will create new
+        existingData = null
+      }
+      
+      if (!existingData) {
+        // Create default data if file doesn't exist
+        const defaultData = await invoke('create_default_data')
+        await invoke('save_data', { filePath: finalPath, data: defaultData })
+      }
       
       await invoke('set_app_state', { dataFilePath: finalPath })
       setDataFile(finalPath)
