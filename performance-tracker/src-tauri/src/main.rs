@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, Window};
+use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct AppState {
@@ -15,7 +15,7 @@ struct AppState {
 fn get_app_state(app_handle: AppHandle) -> Result<AppState, String> {
     let state = app_handle.state::<Arc<Mutex<AppState>>>();
     let state_guard = state.lock().map_err(|e| e.to_string())?;
-    Ok(state_guard.clone())
+    Ok((*state_guard).clone())
 }
 
 #[tauri::command]
@@ -96,7 +96,7 @@ fn get_default_path(app_handle: AppHandle) -> Result<String, String> {
     let sync_this_dir = exe_dir.join("SyncThis");
     
     // Try to create SyncThis directory
-    if let Err(e) = fs::create_dir_all(&sync_this_dir) {
+    if let Err(_e) = fs::create_dir_all(&sync_this_dir) {
         // Fall back to Documents
         let documents_dir = app_handle
             .path()
@@ -156,7 +156,7 @@ fn setup_file_watcher(app_handle: AppHandle, file_path: String) {
     
     let (tx, rx) = std::sync::mpsc::channel();
     
-    let mut watcher = RecommendedWatcher::new(
+    let watcher = RecommendedWatcher::new(
         move |res| {
             if let Ok(event) = res {
                 let _ = tx.send(event);
@@ -210,10 +210,14 @@ pub fn run() {
             get_default_path,
             backup_data
         ])
-        .setup(|app| {
+        .setup(|_app| {
             // Setup will be called when app starts
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn main() {
+    run();
 }
