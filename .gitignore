@@ -1,15 +1,24 @@
 ```
+# Build artifacts
+performance-tracker/dist/
+performance-tracker/build/
+performance-tracker/target/
+
 # Dependencies
-node_modules/
-target/
+performance-tracker/node_modules/
+performance-tracker/.venv/
+performance-tracker/venv/
+performance-tracker/__pycache__/
+performance-tracker/.mypy_cache/
+performance-tracker/.pytest_cache/
+performance-tracker/.gradle/
 
-# Tauri-specific
-src-tauri/target/
-**/*.rs.bk
-
-# Build outputs
-dist/
-build/
+# Editor/IDE files
+performance-tracker/.vscode/
+performance-tracker/.idea/
+*.swp
+*.swo
+*.tmp
 
 # Logs
 *.log
@@ -19,33 +28,12 @@ build/
 .env.local
 *.env.*
 
-# Editor/IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
-
-# OS
-.DS_Store
-Thumbs.db
-
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Python (if applicable)
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-pip-log.txt
-pip-selfcheck.json
-.pytest_cache/
-.mypy_cache/
+# OS files
+.DS_Store
+Thumbs.db
 ```

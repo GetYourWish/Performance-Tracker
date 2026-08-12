@@ -50,10 +50,7 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
         </div>
         <div 
           className="category-marker"
-          style={{ 
-            backgroundColor: category.color,
-            opacity: 0.3
-          }}
+          style={{ backgroundColor: category.color }}
         >
           /{category.name}
         </div>
