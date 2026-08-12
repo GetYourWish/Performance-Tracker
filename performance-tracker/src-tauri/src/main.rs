@@ -6,6 +6,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
+// Track last write time to prevent self-triggered events
+struct FileWatchState {
+    last_write: Instant,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct AppState {
     data_file_path: Option<String>,
@@ -171,8 +176,10 @@ fn backup_data(file_path: String) -> Result<String, String> {
 
 fn setup_file_watcher(app_handle: AppHandle, file_path: String) -> Result<(), String> {
     let app_handle_clone = app_handle.clone();
-    let last_write = Arc::new(Mutex::new(Instant::now()));
-    let last_write_clone = last_write.clone();
+    let watch_state = Arc::new(Mutex::new(FileWatchState {
+        last_write: Instant::now(),
+    }));
+    let watch_state_clone = watch_state.clone();
 
     let (tx, rx) = std::sync::mpsc::channel();
 
@@ -191,26 +198,26 @@ fn setup_file_watcher(app_handle: AppHandle, file_path: String) -> Result<(), St
         .watch(&watch_path, RecursiveMode::NonRecursive)
         .map_err(|e| format!("Failed to watch path: {}", e))?;
 
+    // Store watcher in app state to keep it alive
+    app_handle.manage(watcher);
+    app_handle.manage(watch_state);
+
     std::thread::spawn(move || {
         while let Ok(_event) = rx.recv() {
             let now = Instant::now();
-            let mut last_write_guard = last_write_clone.lock().unwrap();
+            let mut state_guard = watch_state_clone.lock().unwrap();
 
-            // Debounce - ignore if we wrote recently
-            if now.duration_since(*last_write_guard) < Duration::from_millis(500) {
+            // Debounce - ignore changes within 500ms of last write (our own saves)
+            if now.duration_since(state_guard.last_write) < Duration::from_millis(500) {
                 continue;
             }
 
-            *last_write_guard = now;
-            drop(last_write_guard);
+            drop(state_guard);
 
-            // Emit event to frontend
+            // Emit event to frontend for external changes only
             let _ = app_handle_clone.emit("tauri://file-watcher", &file_path);
         }
     });
-
-    // Store watcher in app state to keep it alive
-    app_handle.manage(watcher);
     
     Ok(())
 }

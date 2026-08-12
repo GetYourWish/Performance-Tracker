@@ -1,40 +1,51 @@
 ```
-# Build artifacts
+# Dependencies
+node_modules/
 target/
 
-# Dependencies
-Cargo.lock
+# Tauri-specific
+src-tauri/target/
+**/*.rs.bk
 
-# Logs and temp files
+# Build outputs
+dist/
+build/
+
+# Logs
 *.log
-*.tmp
 
 # Environment
 .env
 .env.local
 *.env.*
 
-# Editors
+# Editor/IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*.tmp
 
-# OS generated files
+# OS
 .DS_Store
 Thumbs.db
 
-# Coverage reports
+# Coverage
 coverage/
 htmlcov/
 .coverage
 
-# MyPy cache
-.mypy_cache/
-# Pytest cache
-.pytest_cache/
-
-# Virtual environments
+# Python (if applicable)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
 venv/
 .venv/
+pip-log.txt
+pip-selfcheck.json
+.pytest_cache/
+.mypy_cache/
 ```
