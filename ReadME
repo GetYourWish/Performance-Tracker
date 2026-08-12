@@ -1,1 +1,242 @@
-This is an initation.
+# Performance Tracker
+
+A personal local-first desktop performance tracker for Windows. Track your tasks, visualize your productivity, and build a satisfying history of what you've accomplished.
+
+## Core Philosophy
+
+This is **not** a to-do app. This is a **performance history tracker**.
+
+- Focus on what you **did**, not what's left to do
+- Lightweight, clean, fast, and personal
+- Local-first with no cloud dependencies
+- Compatible with Syncthing for cross-device syncing
+- Single JSON data file for portability
+
+## Features
+
+### Board View
+- Notepad-like task entry - just type and press Enter
+- Drag-and-drop reordering of tasks
+- Category markers to organize tasks visually
+- Quick completion and deletion actions
+
+### Completion Flow
+- Mark tasks complete with a single click
+- Select difficulty level (Easy, Medium, Hard, Very Hard)
+- Choose completion date (defaults to today)
+- Add optional notes
+
+### Reviews & Analytics
+- **Daily Review**: See your productivity score and completed tasks for any date
+- **Weekly Review**: View totals, best day, and a bar chart of the week
+- **Heatmap**: GitHub-style contribution heatmap showing your activity over the year
+
+### Scoring System
+Dynamic scoring that rewards volume and difficulty:
+- Each task has a base score from its difficulty level
+- Additional tasks on the same day get a fatigue bonus (default 10% per task)
+- Configurable fatigue cap (default 3x multiplier)
+- Scores recalculate automatically when you change difficulty settings
+
+### Categories
+- Optional category system using visual markers on the board
+- Drag categories from the grabber onto the board to create markers
+- Tasks between matching markers automatically inherit that category
+- Categories are purely organizational - never required for task entry
+
+### Settings
+- Manage difficulty levels (labels, scores, colors)
+- Manage categories (names, colors)
+- Theme selection (Light, Dark, System)
+- Week start day (Monday or Sunday)
+- Scoring configuration (fatigue bonus, cap)
+- Heatmap mode (Score or Task Count)
+- Data file location
+
+## Technical Stack
+
+- **Frontend**: React + Vite
+- **Desktop Framework**: Tauri v2
+- **Drag & Drop**: dnd-kit
+- **Charts**: Recharts
+- **Date Utilities**: date-fns
+- **Styling**: Custom CSS (no heavy frameworks)
+
+## Data Storage
+
+All your data lives in a single JSON file (`tracker.json` by default).
+
+### Default Location
+- Primary: `SyncThis/tracker.json` next to the executable
+- Fallback: `Documents/PerformanceTracker/SyncThis/tracker.json`
+
+### JSON Structure
+```json
+{
+  "schemaVersion": 1,
+  "meta": {
+    "createdAt": "2025-01-01T00:00:00Z",
+    "updatedAt": "2025-01-01T00:00:00Z"
+  },
+  "settings": { ... },
+  "difficulties": [ ... ],
+  "categories": [ ... ],
+  "markers": [ ... ],
+  "board": [ ... ],
+  "tasks": [ ... ]
+}
+```
+
+### Syncthing Compatibility
+The app is designed to work seamlessly with Syncthing:
+- Automatic file watching detects external changes
+- Safe atomic writes prevent corruption
+- Automatic backups before risky operations
+- Conflict detection and handling
+
+## Installation & Development
+
+### Prerequisites
+- Node.js 18+ 
+- Rust (for Tauri builds)
+- Windows SDK (for Windows builds)
+
+### Install Dependencies
+```bash
+cd performance-tracker
+npm install
+```
+
+### Development Mode
+```bash
+npm run tauri dev
+```
+
+### Build Windows Executable
+```bash
+npm run tauri build
+```
+
+The built executable will be in `src-tauri/target/release/`.
+
+## Project Structure
+
+```
+performance-tracker/
+├── src/                    # React frontend
+│   ├── components/         # UI components
+│   │   ├── Board.jsx       # Main task board
+│   │   ├── BoardRow.jsx    # Individual task/marker rows
+│   │   ├── CategoryGrabber.jsx  # Category panel
+│   │   ├── CompletionPopup.jsx  # Task completion dialog
+│   │   ├── Reviews.jsx     # Daily/Weekly/Heatmap views
+│   │   ├── Settings.jsx    # Settings panels
+│   │   └── SetupScreen.jsx # First-launch setup
+│   ├── utils/
+│   │   └── helpers.js      # Utility functions
+│   ├── App.jsx             # Main app component
+│   ├── App.css             # App styles
+│   └── index.css           # Global styles
+├── src-tauri/              # Tauri backend (Rust)
+│   ├── src/
+│   │   └── main.rs         # Rust backend code
+│   ├── icons/              # App icons
+│   ├── Cargo.toml          # Rust dependencies
+│   ├── build.rs            # Build script
+│   └── tauri.conf.json     # Tauri configuration
+├── dist/                   # Built frontend assets
+├── package.json            # Node dependencies
+└── vite.config.js          # Vite configuration
+```
+
+## Usage Guide
+
+### Creating Tasks
+1. Click on the empty row at the bottom of the board
+2. Type your task text
+3. Press Enter to save
+4. A new empty row appears automatically
+
+### Organizing with Categories
+1. Click "Show Categories" to open the category grabber
+2. Create categories with names and colors
+3. Drag a category chip onto the board to create a marker
+4. Place markers above and below related tasks
+5. Tasks between matching markers show a subtle category indicator
+
+### Completing Tasks
+1. Hover over a task row
+2. Click the green checkmark button
+3. Select the difficulty level
+4. Adjust the date if needed (defaults to today)
+5. Add an optional note
+6. Click "Complete"
+
+### Deleting Tasks
+1. Hover over a task row
+2. Click the red trash icon
+3. Task is immediately removed (no confirmation)
+
+### Viewing Your Progress
+- **Daily**: Select any date to see tasks completed and your score
+- **Weekly**: View the current week's totals and chart
+- **Heatmap**: Browse yearly activity at a glance, click any day for details
+
+## Configuration
+
+### Difficulty Levels
+Default difficulties:
+- Easy (score: 1)
+- Medium (score: 2)
+- Hard (score: 3)
+- Very Hard (score: 5)
+
+You can customize labels, scores, and colors in Settings > Difficulties.
+
+### Scoring Formula
+For each day, tasks are sorted by completion time:
+```
+Task 1: base_score × 1.0
+Task 2: base_score × 1.1
+Task 3: base_score × 1.2
+...
+Task N: base_score × min(1.0 + (N-1)×0.1, 3.0)
+```
+
+### Backups
+Automatic backups are stored in `.backups/` folder next to your data file:
+- Timestamped filenames (e.g., `tracker_20250101_143022.json`)
+- Keeps last 20 backups
+- Created before risky operations
+
+## Design Principles
+
+1. **Data Safety First**: Atomic writes, backups, conflict detection
+2. **Notepad Simplicity**: No forms, no mandatory metadata
+3. **Core Functionality**: Task tracking, completion, reviews
+4. **Visual Polish**: Clean, modern, satisfying UI
+5. **No Bloat**: No deadlines, priorities, statuses, or kanban columns
+
+## What This App Is NOT
+
+- ❌ A project management tool
+- ❌ A traditional to-do list
+- ❌ Cloud-based or requiring internet
+- ❌ A kanban board with columns
+- ❌ A deadline/priority tracker
+- ❌ A team collaboration tool
+
+## Future Considerations
+
+- Android version reading the same JSON format
+- Enhanced conflict resolution strategies
+- More visualization options
+- Export/import functionality
+
+## License
+
+MIT License
+
+## Repository
+
+https://github.com/GetYourWish/Performance-Tracker
