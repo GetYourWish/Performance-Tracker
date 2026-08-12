@@ -1,22 +1,48 @@
 ```
-# Build artifacts
-target/
-**/target/
+# Tauri-specific ignores
+src-tauri/target/
+src-tauri/node_modules/
+**/*.rs.bk
+Cargo.lock
 
 # Dependencies
-Cargo.lock
-**/Cargo.lock
+node_modules/
+vendor/
 
-# Tauri specific
-src-tauri/target/
-**/src-tauri/target/
+# Build artifacts
+dist/
+build/
+target/
+*.app
+*.exe
+*.dll
+*.so
+*.dylib
 
 # Logs
 *.log
 
-# Temporary files
-*.tmp
+# Environment
+.env
+.env.local
+.env.*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
 *~
+
+# OS
 .DS_Store
 Thumbs.db
+
+# Python (if applicable)
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.so
+.Python
 ```
