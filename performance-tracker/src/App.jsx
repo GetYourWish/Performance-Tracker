@@ -1,6 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
 import Board from './components/Board'
 import Reviews from './components/Reviews'
 import Settings from './components/Settings'
@@ -32,8 +30,8 @@ function App() {
     let unsubscribeFn = null
     
     const setupListener = async () => {
-      unsubscribeFn = await listen('tauri://file-watcher', async (event) => {
-        console.log('File changed externally:', event.payload)
+      unsubscribeFn = window.api.onExternalChange(async (filePath) => {
+        console.log('File changed externally:', filePath)
         await loadData(true) // true = external change, preserve typing
       })
       
@@ -55,7 +53,7 @@ function App() {
     if (!dataFile) return
     
     try {
-      const conflictFiles = await invoke('check_conflicts', { filePath: dataFile })
+      const conflictFiles = await window.api.checkConflicts(dataFile)
       if (conflictFiles && conflictFiles.length > 0) {
         setConflicts(conflictFiles)
         console.warn('Conflict files detected:', conflictFiles)
@@ -69,7 +67,7 @@ function App() {
 
   const loadAppState = async () => {
     try {
-      const appState = await invoke('get_app_state')
+      const appState = await window.api.getAppState()
       if (appState.dataFilePath) {
         setDataFile(appState.dataFilePath)
         await loadData(appState.dataFilePath)
@@ -91,7 +89,7 @@ function App() {
     }
     
     try {
-      const loadedData = await invoke('load_data', { filePath })
+      const loadedData = await window.api.loadData(filePath)
       
       // Validate and heal data on load
       const healedData = validateAndHealData(loadedData)
@@ -128,9 +126,9 @@ function App() {
       if (pendingSaveRef.current && dataFile) {
         try {
           // Create backup before saving
-          await invoke('backup_data', { filePath: dataFile })
+          await window.api.backupNow(dataFile)
           
-          await invoke('save_data', { filePath: dataFile, data: pendingSaveRef.current })
+          await window.api.saveData(dataFile, pendingSaveRef.current)
           setData(pendingSaveRef.current)
           pendingSaveRef.current = null
         } catch (error) {
@@ -157,8 +155,8 @@ function App() {
     
     if (pendingSaveRef.current && dataFile) {
       try {
-        await invoke('backup_data', { filePath: dataFile })
-        await invoke('save_data', { filePath: dataFile, data: pendingSaveRef.current })
+        await window.api.backupNow(dataFile)
+        await window.api.saveData(dataFile, pendingSaveRef.current)
         setData(pendingSaveRef.current)
         pendingSaveRef.current = null
       } catch (error) {
@@ -173,13 +171,13 @@ function App() {
       // Get default path from backend if no specific path selected
       let finalPath = filePath
       if (!filePath || filePath === 'default') {
-        finalPath = await invoke('get_default_path')
+        finalPath = await window.api.getDefaultPath()
       }
       
       // Check if file exists - if not, create default data
       let existingData = null
       try {
-        existingData = await invoke('load_data', { filePath: finalPath })
+        existingData = await window.api.loadData(finalPath)
       } catch (e) {
         // File doesn't exist or is invalid, will create new
         existingData = null
@@ -187,11 +185,12 @@ function App() {
       
       if (!existingData) {
         // Create default data if file doesn't exist
-        const defaultData = await invoke('create_default_data')
-        await invoke('save_data', { filePath: finalPath, data: defaultData })
+        const { createDefaultData } = await import('./utils/helpers')
+        const defaultData = createDefaultData()
+        await window.api.saveData(finalPath, defaultData)
       }
       
-      await invoke('set_app_state', { dataFilePath: finalPath })
+      await window.api.setAppState({ dataFilePath: finalPath })
       setDataFile(finalPath)
       await loadData(finalPath)
       setSetupRequired(false)
@@ -264,7 +263,7 @@ function App() {
             conflicts={conflicts}
             onBackupNow={async () => {
               try {
-                const backupPath = await invoke('backup_data', { filePath: dataFile })
+                const backupPath = await window.api.backupNow(dataFile)
                 console.log('Backup created:', backupPath)
                 alert(`Backup created at: ${backupPath}`)
               } catch (error) {
@@ -274,7 +273,7 @@ function App() {
             }}
             onOpenFolder={async () => {
               try {
-                await invoke('open_data_folder', { filePath: dataFile })
+                await window.api.openDataFolder(dataFile)
               } catch (error) {
                 console.error('Failed to open folder:', error)
                 alert('Failed to open folder: ' + error.message)
@@ -283,7 +282,7 @@ function App() {
             onChangeDataLocation={async () => {
               // Reset app state to trigger setup screen
               try {
-                await invoke('set_app_state', { dataFilePath: null })
+                await window.api.setAppState({ dataFilePath: null })
                 window.location.reload()
               } catch (error) {
                 console.error('Failed to reset data location:', error)

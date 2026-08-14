@@ -1,6 +1,4 @@
 import { useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
-import { open } from '@tauri-apps/plugin-dialog'
 
 function SetupScreen({ onComplete }) {
   const [selectedPath, setSelectedPath] = useState('')
@@ -9,14 +7,7 @@ function SetupScreen({ onComplete }) {
   
   const handleSelectFile = async () => {
     try {
-      const filePath = await open({
-        title: 'Select tracker.json file',
-        multiple: false,
-        filters: [{
-          name: 'JSON',
-          extensions: ['json']
-        }]
-      })
+      const filePath = await window.api.chooseDataLocation()
       
       if (filePath) {
         setSelectedPath(filePath)
@@ -30,11 +21,7 @@ function SetupScreen({ onComplete }) {
 
   const handleSelectFolder = async () => {
     try {
-      const folderPath = await open({
-        title: 'Select Folder',
-        directory: true,
-        multiple: false
-      })
+      const folderPath = await window.api.chooseFolder()
       
       if (folderPath) {
         // Append tracker.json to the selected folder path
@@ -49,7 +36,7 @@ function SetupScreen({ onComplete }) {
 
   const handleUseDefault = async () => {
     try {
-      const defaultPath = await invoke('get_default_path')
+      const defaultPath = await window.api.getDefaultPath()
       setSelectedPath(defaultPath)
       setError('')
     } catch (err) {
