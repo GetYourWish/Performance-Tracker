@@ -6,7 +6,8 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  DragOverlay
+  DragOverlay,
+  useDroppable
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -16,6 +17,27 @@ import {
 import CompletionPopup from './CompletionPopup'
 import BoardRow from './BoardRow'
 import { generateId, getCurrentDate, getTaskCategory } from '../utils/helpers'
+
+// Insertion point component for precise drop locations
+function InsertionPoint({ id, onDrop }) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+  
+  return (
+    <div
+      ref={setNodeRef}
+      className={`insertion-point ${isOver ? 'is-over' : ''}`}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault()
+        const categoryId = e.dataTransfer.getData('categoryId')
+        const type = e.dataTransfer.getData('type')
+        if (categoryId && type === 'existing-category') {
+          onDrop(categoryId, false, id)
+        }
+      }}
+    />
+  )
+}
 
 // Sidebar component for categories
 function CategorySidebar({ categories, onDrop }) {
@@ -281,7 +303,7 @@ function Board({ data, onSave }) {
     })
   }
 
-  const handleMarkerDrop = (categoryId, isNewCategory = false) => {
+  const handleMarkerDrop = (categoryId, isNewCategory = false, insertionId = null) => {
     // If this is a new category being created, we need to add it to categories first
     if (isNewCategory && typeof categoryId === 'object') {
       // categoryId is actually the new category object
@@ -296,7 +318,27 @@ function Board({ data, onSave }) {
       }
 
       const updatedMarkers = [...markers, newMarker]
-      const updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
+      let updatedBoard
+      
+      // Insert at specific position if insertionId is provided
+      if (insertionId !== null) {
+        const insertIndex = boardItems.findIndex(item => {
+          if (item.type === 'task') return item.taskId === insertionId
+          if (item.type === 'marker') return item.markerId === insertionId
+          return false
+        })
+        if (insertIndex >= 0) {
+          updatedBoard = [
+            ...boardItems.slice(0, insertIndex),
+            { type: 'marker', markerId: newMarker.id },
+            ...boardItems.slice(insertIndex)
+          ]
+        } else {
+          updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
+        }
+      } else {
+        updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
+      }
 
       onSave({
         ...data,
@@ -317,7 +359,27 @@ function Board({ data, onSave }) {
     }
 
     const updatedMarkers = [...markers, newMarker]
-    const updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
+    let updatedBoard
+    
+    // Insert at specific position if insertionId is provided
+    if (insertionId !== null) {
+      const insertIndex = boardItems.findIndex(item => {
+        if (item.type === 'task') return item.taskId === insertionId
+        if (item.type === 'marker') return item.markerId === insertionId
+        return false
+      })
+      if (insertIndex >= 0) {
+        updatedBoard = [
+          ...boardItems.slice(0, insertIndex),
+          { type: 'marker', markerId: newMarker.id },
+          ...boardItems.slice(insertIndex)
+        ]
+      } else {
+        updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
+      }
+    } else {
+      updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
+    }
 
     onSave({
       ...data,
@@ -342,17 +404,28 @@ function Board({ data, onSave }) {
   }, [markers, boardItems, data, onSave])
 
 
-  // Render board rows in order
+  // Render board rows with insertion points
   const renderBoardRows = () => {
-    return boardItems.map((item) => {
+    const rows = []
+    
+    // Add insertion point at the top
+    rows.push(
+      <InsertionPoint 
+        key="insert-top" 
+        id="insert-top" 
+        onDrop={(categoryId, isNew, _) => handleMarkerDrop(categoryId, isNew, null)} 
+      />
+    )
+    
+    boardItems.forEach((item, index) => {
       if (item.type === 'task') {
         const task = tasks.find(t => t.id === item.taskId)
-        if (!task || task.completion) return null
+        if (!task || task.completion) return
 
         const taskIndex = boardItems.indexOf(item)
         const category = getTaskCategory(taskIndex, boardItems, markers, categories)
 
-        return (
+        rows.push(
           <BoardRow
             key={item.taskId}
             id={item.taskId}
@@ -369,16 +442,23 @@ function Board({ data, onSave }) {
             onComplete={() => handleCompleteClick(task)}
           />
         )
-      }
-
-      if (item.type === 'marker') {
+        
+        // Add insertion point after this task
+        rows.push(
+          <InsertionPoint 
+            key={`insert-${item.taskId}`} 
+            id={item.taskId} 
+            onDrop={(categoryId, isNew, _) => handleMarkerDrop(categoryId, isNew, item.taskId)} 
+          />
+        )
+      } else if (item.type === 'marker') {
         const marker = markers.find(m => m.id === item.markerId)
-        if (!marker) return null
+        if (!marker) return
 
         const category = categories.find(c => c.id === marker.categoryId)
-        if (!category) return null
+        if (!category) return
 
-        return (
+        rows.push(
           <BoardRow
             key={item.markerId}
             id={item.markerId}
@@ -387,10 +467,19 @@ function Board({ data, onSave }) {
             onDelete={() => handleDeleteMarker(item.markerId)}
           />
         )
+        
+        // Add insertion point after this marker
+        rows.push(
+          <InsertionPoint 
+            key={`insert-${item.markerId}`} 
+            id={item.markerId} 
+            onDrop={(categoryId, isNew, _) => handleMarkerDrop(categoryId, isNew, item.markerId)} 
+          />
+        )
       }
-
-      return null
     })
+    
+    return rows
   }
 
   return (
