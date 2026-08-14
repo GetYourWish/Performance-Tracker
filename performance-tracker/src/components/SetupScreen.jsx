@@ -1,6 +1,4 @@
 import { useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
-import { open } from '@tauri-apps/plugin-dialog'
 
 function SetupScreen({ onComplete }) {
   const [selectedPath, setSelectedPath] = useState('')
@@ -9,14 +7,7 @@ function SetupScreen({ onComplete }) {
   
   const handleSelectFile = async () => {
     try {
-      const filePath = await open({
-        title: 'Select tracker.json file',
-        multiple: false,
-        filters: [{
-          name: 'JSON',
-          extensions: ['json']
-        }]
-      })
+      const filePath = await window.api.chooseDataLocation()
       
       if (filePath) {
         setSelectedPath(filePath)
@@ -28,28 +19,9 @@ function SetupScreen({ onComplete }) {
     }
   }
 
-  const handleSelectFolder = async () => {
-    try {
-      const folderPath = await open({
-        title: 'Select Folder',
-        directory: true,
-        multiple: false
-      })
-      
-      if (folderPath) {
-        // Append tracker.json to the selected folder path
-        const fullPath = folderPath.endsWith('tracker.json') ? folderPath : `${folderPath}${folderPath.endsWith('/') || folderPath.endsWith('\\') ? '' : '/'}tracker.json`
-        setSelectedPath(fullPath)
-        setError('')
-      }
-    } catch (err) {
-      setError('Failed to select folder: ' + (err.message || 'Unknown error'))
-    }
-  }
-
   const handleUseDefault = async () => {
     try {
-      const defaultPath = await invoke('get_default_path')
+      const defaultPath = await window.api.getDefaultPath()
       setSelectedPath(defaultPath)
       setError('')
     } catch (err) {
@@ -85,23 +57,16 @@ function SetupScreen({ onComplete }) {
         <div className="setup-options">
           <div className="setup-option">
             <button onClick={handleSelectFile} className="option-btn" disabled={isProcessing}>
-              Select Existing tracker.json
+              Select tracker.json Location
             </button>
-            <p>Choose an existing data file from your SyncThis folder</p>
-          </div>
-
-          <div className="setup-option">
-            <button onClick={handleSelectFolder} className="option-btn" disabled={isProcessing}>
-              Select Folder
-            </button>
-            <p>Choose a folder where tracker.json will be created/used</p>
+            <p>Choose where your data file will be stored</p>
           </div>
 
           <div className="setup-option">
             <button onClick={handleUseDefault} className="option-btn" disabled={isProcessing}>
               Use Default Location
             </button>
-            <p>Create/use SyncThis/tracker.json next to the app</p>
+            <p>Use the default location next to the app or in Documents</p>
           </div>
         </div>
 
