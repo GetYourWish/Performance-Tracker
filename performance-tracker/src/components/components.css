@@ -132,6 +132,7 @@
   left: 0;
   top: 50%;
   transform: translateY(-50%);
+  opacity: 0.8;
 }
 
 .task-input {
@@ -768,9 +769,11 @@
 /* Data actions in settings */
 .data-actions {
   display: flex;
+  flex-direction: row;
   gap: 12px;
   margin-bottom: 20px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .data-actions .action-btn {
@@ -780,6 +783,7 @@
   color: var(--text-primary);
   font-weight: 500;
   transition: all var(--transition-fast);
+  white-space: nowrap;
 }
 
 .data-actions .action-btn:hover {
@@ -830,7 +834,21 @@
   color: var(--text-primary);
   font-weight: 500;
   font-size: 14px;
-  background-color: rgba(0, 0, 0, 0.3);
+  opacity: 0.7;
+}
+
+/* Insertion point for dropping category markers */
+.insertion-point {
+  height: 4px;
+  margin: 2px 0;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+}
+
+.insertion-point.is-over {
+  background: #3b82f6;
+  height: 6px;
+  margin: 0;
 }
 
 /* Empty state for board */
