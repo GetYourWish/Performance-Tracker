@@ -843,12 +843,18 @@
   margin: 2px 0;
   border-radius: 2px;
   transition: all 0.15s ease;
+  background: transparent;
 }
 
 .insertion-point.is-over {
   background: #3b82f6;
   height: 6px;
   margin: 0;
+}
+
+/* Make insertion points visible on hover when dragging a category */
+.board-list:has(.category-chip[draggable]) .insertion-point {
+  background: rgba(59, 130, 246, 0.1);
 }
 
 /* Empty state for board */
