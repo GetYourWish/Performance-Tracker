@@ -295,7 +295,7 @@ pub fn run() {
         use windows_sys::Win32::System::Console::{FreeConsole, GetConsoleWindow};
         unsafe {
             let hwnd = GetConsoleWindow();
-            if !hwnd.is_null() {
+            if hwnd != 0 {
                 let _ = FreeConsole();
             }
         }
