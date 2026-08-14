@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 
 function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder, onChangeDataLocation }) {
   const [activeTab, setActiveTab] = useState('data')
