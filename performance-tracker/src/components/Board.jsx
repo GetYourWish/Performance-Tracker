@@ -7,7 +7,8 @@ import {
   useSensor,
   useSensors,
   DragOverlay,
-  useDroppable
+  useDroppable,
+  useDraggable
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -18,6 +19,38 @@ import CompletionPopup from './CompletionPopup'
 import BoardRow from './BoardRow'
 import { generateId, getCurrentDate, getTaskCategory } from '../utils/helpers'
 
+// Draggable category chip for sidebar
+function DraggableCategoryChip({ category }) {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id: `sidebar-category-${category.id}`,
+    data: {
+      type: 'sidebar-category',
+      categoryId: category.id,
+      category
+    }
+  })
+  
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`
+  } : undefined
+  
+  return (
+    <div
+      ref={setNodeRef}
+      className="category-chip"
+      style={{ 
+        backgroundColor: category.color,
+        opacity: 0.8,
+        ...style
+      }}
+      {...listeners}
+      {...attributes}
+    >
+      {category.name}
+    </div>
+  )
+}
+
 // Insertion point component for precise drop locations
 function InsertionPoint({ id, onDrop }) {
   const { setNodeRef, isOver } = useDroppable({ id })
@@ -26,29 +59,15 @@ function InsertionPoint({ id, onDrop }) {
     <div
       ref={setNodeRef}
       className={`insertion-point ${isOver ? 'is-over' : ''}`}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault()
-        const categoryId = e.dataTransfer.getData('categoryId')
-        const type = e.dataTransfer.getData('type')
-        if (categoryId && type === 'existing-category') {
-          onDrop(categoryId, false, id)
-        }
-      }}
     />
   )
 }
 
 // Sidebar component for categories
-function CategorySidebar({ categories, onDrop }) {
+function CategorySidebar({ categories, onCreateCategory }) {
   const [isCreating, setIsCreating] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#60a5fa')
-  
-  const handleDragStart = (e, categoryId) => {
-    e.dataTransfer.setData('categoryId', categoryId)
-    e.dataTransfer.setData('type', 'existing-category')
-  }
   
   const handleCreateCategory = () => {
     if (!newCategoryName.trim()) return
@@ -61,7 +80,7 @@ function CategorySidebar({ categories, onDrop }) {
       active: true
     }
 
-    onDrop(newCategory, true)
+    onCreateCategory(newCategory)
 
     setNewCategoryName('')
     setIsCreating(false)
@@ -74,18 +93,10 @@ function CategorySidebar({ categories, onDrop }) {
       
       <div className="categories-list">
         {categories.map(category => (
-          <div
+          <DraggableCategoryChip
             key={category.id}
-            className="category-chip"
-            draggable
-            onDragStart={(e) => handleDragStart(e, category.id)}
-            style={{ 
-              backgroundColor: category.color,
-              opacity: 0.8
-            }}
-          >
-            {category.name}
-          </div>
+            category={category}
+          />
         ))}
 
         {isCreating ? (
@@ -268,6 +279,26 @@ function Board({ data, onSave }) {
     const { active, over } = event
     setDraggingItem(null)
 
+    // Handle sidebar category being dropped on an insertion point
+    if (active.data.current?.type === 'sidebar-category') {
+      if (over && over.id) {
+        const category = active.data.current.category
+        const categoryId = active.data.current.categoryId
+        
+        // Determine where to insert based on the over id
+        let insertionId = null
+        if (over.id === 'insert-top') {
+          insertionId = null // Insert at top
+        } else {
+          insertionId = over.id // Insert after this item
+        }
+        
+        handleMarkerDrop(categoryId, false, insertionId, category)
+      }
+      return
+    }
+
+    // Handle reordering of tasks and markers within the board
     if (!over || active.id === over.id) return
 
     const oldIndex = boardItems.findIndex(item => {
@@ -303,7 +334,7 @@ function Board({ data, onSave }) {
     })
   }
 
-  const handleMarkerDrop = (categoryId, isNewCategory = false, insertionId = null) => {
+  const handleMarkerDrop = (categoryId, isNewCategory = false, insertionId = null, categoryObj = null) => {
     // If this is a new category being created, we need to add it to categories first
     if (isNewCategory && typeof categoryId === 'object') {
       // categoryId is actually the new category object
@@ -337,7 +368,7 @@ function Board({ data, onSave }) {
           updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
         }
       } else {
-        updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
+        updatedBoard = [{ type: 'marker', markerId: newMarker.id }, ...boardItems]
       }
 
       onSave({
@@ -350,7 +381,49 @@ function Board({ data, onSave }) {
       return
     }
     
-    // Normal case - existing category
+    // Normal case - existing category from sidebar
+    if (categoryObj) {
+      // We have the category object passed directly
+      const newMarker = {
+        id: generateId(),
+        categoryId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      const updatedMarkers = [...markers, newMarker]
+      let updatedBoard
+      
+      // Insert at specific position if insertionId is provided
+      if (insertionId !== null) {
+        const insertIndex = boardItems.findIndex(item => {
+          if (item.type === 'task') return item.taskId === insertionId
+          if (item.type === 'marker') return item.markerId === insertionId
+          return false
+        })
+        if (insertIndex >= 0) {
+          updatedBoard = [
+            ...boardItems.slice(0, insertIndex),
+            { type: 'marker', markerId: newMarker.id },
+            ...boardItems.slice(insertIndex)
+          ]
+        } else {
+          updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
+        }
+      } else {
+        updatedBoard = [{ type: 'marker', markerId: newMarker.id }, ...boardItems]
+      }
+
+      onSave({
+        ...data,
+        markers: updatedMarkers,
+        board: updatedBoard,
+        meta: { ...data.meta, updatedAt: new Date().toISOString() }
+      })
+      return
+    }
+    
+    // Fallback case - existing category without object
     const newMarker = {
       id: generateId(),
       categoryId,
@@ -529,7 +602,9 @@ function Board({ data, onSave }) {
                 <div className="drag-overlay">
                   {draggingItem.data.current?.type === 'task' 
                     ? tasks.find(t => t.id === draggingItem.id)?.text
-                    : 'Category Marker'
+                    : draggingItem.data.current?.type === 'sidebar-category'
+                      ? draggingItem.data.current.category?.name
+                      : 'Category Marker'
                   }
                 </div>
               ) : null}
@@ -540,7 +615,7 @@ function Board({ data, onSave }) {
         <div className="board-sidebar">
           <CategorySidebar 
             categories={categories}
-            onDrop={handleMarkerDrop}
+            onCreateCategory={(newCategory) => handleMarkerDrop(newCategory, true, null)}
           />
         </div>
       </div>
