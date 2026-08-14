@@ -233,7 +233,7 @@ fn setup_file_watcher(app_handle: AppHandle, file_path: String) -> Result<(), St
     std::thread::spawn(move || {
         while let Ok(_event) = rx.recv() {
             let now = Instant::now();
-            let mut state_guard = watch_state_clone.lock().unwrap();
+            let state_guard = watch_state_clone.lock().unwrap();
 
             // Debounce - ignore changes within 500ms of last write (our own saves)
             if now.duration_since(state_guard.last_write) < Duration::from_millis(500) {
