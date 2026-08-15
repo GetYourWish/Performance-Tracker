@@ -53,12 +53,19 @@ function DraggableCategoryChip({ category }) {
 
 // Insertion point component for precise drop locations
 function InsertionPoint({ id, onDrop }) {
-  const { setNodeRef, isOver } = useDroppable({ id })
+  const { setNodeRef, isOver } = useDroppable({ 
+    id,
+    data: {
+      type: 'insertion-point',
+      insertionId: id
+    }
+  })
   
   return (
     <div
       ref={setNodeRef}
       className={`insertion-point ${isOver ? 'is-over' : ''}`}
+      data-insertion-id={id}
     />
   )
 }
@@ -322,7 +329,9 @@ function Board({ data, onSave }) {
     }
 
     // Handle reordering of tasks and markers within the board
+    // Ignore drops on insertion points for task/marker reordering
     if (!over || active.id === over.id) return
+    if (over.data.current?.type === 'insertion-point') return
 
     const oldIndex = boardItems.findIndex(item => {
       if (active.data.current?.type === 'task') {
