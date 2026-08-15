@@ -63,11 +63,12 @@ function InsertionPoint({ id, onDrop }) {
   )
 }
 
-// Sidebar component for categories
+// Sidebar component for categories - collapsible per spec
 function CategorySidebar({ categories, onCreateCategory }) {
   const [isCreating, setIsCreating] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#60a5fa')
+  const [isCollapsed, setIsCollapsed] = useState(false)
   
   const handleCreateCategory = () => {
     if (!newCategoryName.trim()) return
@@ -86,9 +87,31 @@ function CategorySidebar({ categories, onCreateCategory }) {
     setIsCreating(false)
   }
   
+  if (isCollapsed) {
+    return (
+      <div className="category-grabber collapsed">
+        <button 
+          className="categories-toggle"
+          onClick={() => setIsCollapsed(false)}
+        >
+          Show Categories ({categories.length})
+        </button>
+      </div>
+    );
+  }
+  
   return (
     <div className="category-grabber">
-      <h4>Categories</h4>
+      <div className="category-grabber-header">
+        <h4>Categories</h4>
+        <button 
+          className="collapse-btn"
+          onClick={() => setIsCollapsed(true)}
+          aria-label="Collapse categories"
+        >
+          −
+        </button>
+      </div>
       <p className="drag-hint">Drag a category to the board to add a marker</p>
       
       <div className="categories-list">
