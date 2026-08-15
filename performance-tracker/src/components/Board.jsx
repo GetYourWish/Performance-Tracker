@@ -164,6 +164,7 @@ function Board({ data, onSave }) {
   const [completionTask, setCompletionTask] = useState(null)
   const [showCategoryGrabber, setShowCategoryGrabber] = useState(false)
   const [draggingItem, setDraggingItem] = useState(null)
+  const [deleteTask, setDeleteTask] = useState(null)
   
   // Apply theme from settings
   useEffect(() => {
@@ -252,6 +253,30 @@ function Board({ data, onSave }) {
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
   }, [tasks, boardItems, data, onSave])
+
+  const handleMoveItem = useCallback((itemId, direction) => {
+    const itemIndex = boardItems.findIndex(item => {
+      if (item.type === 'task') return item.taskId === itemId
+      if (item.type === 'marker') return item.markerId === itemId
+      return false
+    })
+    
+    if (itemIndex === -1) return
+    
+    const newIndex = direction === 'up' ? itemIndex - 1 : itemIndex + 1
+    if (newIndex < 0 || newIndex >= boardItems.length) return
+    
+    const newBoard = [...boardItems]
+    const temp = newBoard[itemIndex]
+    newBoard[itemIndex] = newBoard[newIndex]
+    newBoard[newIndex] = temp
+    
+    onSave({
+      ...data,
+      board: newBoard,
+      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+    })
+  }, [boardItems, data, onSave])
 
   const handleCompleteClick = useCallback((task) => {
     setCompletionTask(task)
@@ -603,6 +628,9 @@ function Board({ data, onSave }) {
             onCancelEdit={() => setEditingTask(null)}
             onDelete={() => handleDeleteTask(task.id)}
             onComplete={() => handleCompleteClick(task)}
+            onConfirmDelete={(t) => setDeleteTask(t)}
+            onMoveUp={() => handleMoveItem(item.taskId, 'up')}
+            onMoveDown={() => handleMoveItem(item.taskId, 'down')}
           />
         )
         
@@ -628,6 +656,8 @@ function Board({ data, onSave }) {
             marker={marker}
             category={category}
             onDelete={() => handleDeleteMarker(item.markerId)}
+            onMoveUp={() => handleMoveItem(item.markerId, 'up')}
+            onMoveDown={() => handleMoveItem(item.markerId, 'down')}
           />
         )
         
@@ -717,6 +747,44 @@ function Board({ data, onSave }) {
           onConfirm={handleCompletionConfirm}
           onCancel={() => setCompletionTask(null)}
         />
+      )}
+
+      {deleteTask && (
+        <div className="popup-overlay" onClick={() => setDeleteTask(null)}>
+          <div className="completion-popup" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="popup-header">
+              <h3>Delete task?</h3>
+              <button 
+                className="close-btn"
+                onClick={() => setDeleteTask(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="popup-content">
+              <p className="task-text">{deleteTask.text}</p>
+              <p className="warning-text">This cannot be undone.</p>
+            </div>
+            <div className="popup-actions">
+              <button 
+                className="cancel-btn"
+                onClick={() => setDeleteTask(null)}
+              >
+                Cancel
+              </button>
+              <button 
+                className="delete-btn confirm-delete"
+                onClick={() => {
+                  handleDeleteTask(deleteTask.id)
+                  setDeleteTask(null)
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

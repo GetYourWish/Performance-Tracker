@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing, onEdit, onUpdate, onCancelEdit, onDelete, onComplete, onConfirmDelete }) {
+const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing, onEdit, onUpdate, onCancelEdit, onDelete, onComplete, onConfirmDelete, onMoveUp, onMoveDown }) {
   const {
     attributes,
     listeners,
@@ -53,6 +53,24 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
           style={{ backgroundColor: category.color + '4D', color: 'var(--text-primary)' }}
         >
           /{category.name}
+        </div>
+        <div className="move-buttons">
+          <button 
+            className="move-btn"
+            onClick={onMoveUp}
+            aria-label="Move up"
+            title="Move up"
+          >
+            ↑
+          </button>
+          <button 
+            className="move-btn"
+            onClick={onMoveDown}
+            aria-label="Move down"
+            title="Move down"
+          >
+            ↓
+          </button>
         </div>
         <button 
           className="delete-marker-btn"
@@ -135,6 +153,24 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
         >
           ✓
         </button>
+        <div className="move-buttons">
+          <button 
+            className="move-btn"
+            onClick={onMoveUp}
+            aria-label="Move up"
+            title="Move up"
+          >
+            ↑
+          </button>
+          <button 
+            className="move-btn"
+            onClick={onMoveDown}
+            aria-label="Move down"
+            title="Move down"
+          >
+            ↓
+          </button>
+        </div>
         <button 
           className="action-btn delete-btn"
           onClick={() => onConfirmDelete(task)}
