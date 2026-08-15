@@ -202,7 +202,7 @@ function Board({ data, onSave }) {
       completion: null
     }
 
-    const updatedTasks = [...tasks, newTask]
+    const updatedTasks = [...data.tasks, newTask]
     const updatedBoard = [{ type: 'task', taskId: newTask.id }, ...boardItems]
 
     setNewTaskText('')
@@ -213,7 +213,7 @@ function Board({ data, onSave }) {
       board: updatedBoard,
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
-  }, [newTaskText, tasks, boardItems, data, onSave])
+  }, [newTaskText, data.tasks, boardItems, data, onSave])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -226,7 +226,7 @@ function Board({ data, onSave }) {
   }
 
   const handleUpdateTask = useCallback((taskId, newText) => {
-    const updatedTasks = tasks.map(t => {
+    const updatedTasks = data.tasks.map(t => {
       if (t.id === taskId) {
         return { ...t, text: newText, updatedAt: new Date().toISOString() }
       }
@@ -238,10 +238,10 @@ function Board({ data, onSave }) {
       tasks: updatedTasks,
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
-  }, [tasks, data, onSave])
+  }, [data, onSave])
 
   const handleDeleteTask = useCallback((taskId) => {
-    const updatedTasks = tasks.filter(t => t.id !== taskId)
+    const updatedTasks = data.tasks.filter(t => t.id !== taskId)
     const updatedBoard = boardItems.filter(item => 
       !(item.type === 'task' && item.taskId === taskId)
     )
@@ -252,7 +252,7 @@ function Board({ data, onSave }) {
       board: updatedBoard,
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
-  }, [tasks, boardItems, data, onSave])
+  }, [data.tasks, boardItems, data, onSave])
 
   const handleMoveItem = useCallback((itemId, direction) => {
     const itemIndex = boardItems.findIndex(item => {
