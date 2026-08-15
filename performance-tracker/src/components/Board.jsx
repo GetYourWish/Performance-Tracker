@@ -68,11 +68,17 @@ function CategorySidebar({ categories, onCreateCategory, onAddMarker }) {
       id: generateId(),
       name: newCategoryName.trim(),
       color: newCategoryColor,
-      order: categories.length,
+      order: 0,
       active: true
     }
 
-    onCreateCategory(newCategory)
+    // Insert at top and re-index all orders
+    const updatedCategories = [newCategory, ...categories].map((cat, idx) => ({
+      ...cat,
+      order: idx
+    }))
+
+    onCreateCategory(updatedCategories)
 
     setNewCategoryName('')
     setIsCreating(false)
@@ -196,7 +202,7 @@ function Board({ data, onSave }) {
     }
 
     const updatedTasks = [...tasks, newTask]
-    const updatedBoard = [...boardItems, { type: 'task', taskId: newTask.id }]
+    const updatedBoard = [{ type: 'task', taskId: newTask.id }, ...boardItems]
 
     setNewTaskText('')
 
@@ -253,8 +259,44 @@ function Board({ data, onSave }) {
 
   const handleCompletionConfirm = useCallback((completionData) => {
     // Since state is derived from props, we directly compute updated data
+    // Find task index in boardItems to determine category based on markers ONLY
     const taskIndex = boardItems.findIndex(item => item.type === 'task' && item.taskId === completionData.taskId)
-    const category = getTaskCategory(taskIndex, boardItems, markers, categories)
+    
+    // Strict marker-based category derivation: scan boardItems for MARKER entries only
+    // Find nearest marker above and nearest marker below; task gets that category ONLY if
+    // both exist and both reference the same category ID
+    let aboveMarker = null
+    let belowMarker = null
+    
+    for (let i = taskIndex - 1; i >= 0; i--) {
+      const item = boardItems[i]
+      if (item && item.type === 'marker') {
+        aboveMarker = item
+        break
+      }
+    }
+    
+    for (let i = taskIndex + 1; i < boardItems.length; i++) {
+      const item = boardItems[i]
+      if (item && item.type === 'marker') {
+        belowMarker = item
+        break
+      }
+    }
+    
+    let categoryId = null
+    if (aboveMarker && belowMarker && aboveMarker.markerId === belowMarker.markerId) {
+      // Same marker above and below (shouldn't happen normally, but just in case)
+      const marker = markers.find(m => m.id === aboveMarker.markerId)
+      if (marker) categoryId = marker.categoryId
+    } else if (aboveMarker && belowMarker) {
+      // Check if both markers reference the same category
+      const aboveMarkerObj = markers.find(m => m.id === aboveMarker.markerId)
+      const belowMarkerObj = markers.find(m => m.id === belowMarker.markerId)
+      if (aboveMarkerObj && belowMarkerObj && aboveMarkerObj.categoryId === belowMarkerObj.categoryId) {
+        categoryId = aboveMarkerObj.categoryId
+      }
+    }
     
     const updatedTasks = data.tasks.map(t => {
       if (t.id === completionData.taskId) {
@@ -264,7 +306,7 @@ function Board({ data, onSave }) {
             completedDate: completionData.date,
             completedAt: new Date().toISOString(),
             difficultyId: completionData.difficultyId,
-            categoryId: category ? category.id : null,
+            categoryId: categoryId,
             note: completionData.note || ''
           }
         }
@@ -622,15 +664,7 @@ function Board({ data, onSave }) {
               strategy={verticalListSortingStrategy}
             >
               <div className="board-list">
-                {renderBoardRows()}
-                
-                {tasks.length === 0 && boardItems.length === 0 && (
-                  <div className="board-empty-state">
-                    <h3>No tasks yet</h3>
-                    <p>Type below to add your first task and start tracking your performance!</p>
-                  </div>
-                )}
-                
+                {/* New task input at the TOP */}
                 <div className="new-task-row">
                   <input
                     type="text"
@@ -642,6 +676,15 @@ function Board({ data, onSave }) {
                     autoFocus
                   />
                 </div>
+                
+                {renderBoardRows()}
+                
+                {tasks.length === 0 && boardItems.length === 0 && (
+                  <div className="board-empty-state">
+                    <h3>No tasks yet</h3>
+                    <p>Type above to add your first task and start tracking your performance!</p>
+                  </div>
+                )}
               </div>
             </SortableContext>
 
@@ -661,7 +704,7 @@ function Board({ data, onSave }) {
         <div className="board-sidebar">
           <CategorySidebar 
             categories={categories}
-            onCreateCategory={(newCategory) => onSave({ ...data, categories: [...categories, newCategory], meta: { ...data.meta, updatedAt: new Date().toISOString() } })}
+            onCreateCategory={(updatedCategories) => onSave({ ...data, categories: updatedCategories, meta: { ...data.meta, updatedAt: new Date().toISOString() } })}
             onAddMarker={handleAddMarker}
           />
         </div>
