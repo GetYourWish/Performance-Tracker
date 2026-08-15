@@ -985,3 +985,68 @@
   font-size: 13px;
   color: var(--text-muted);
 }
+
+/* Category chip editing styles */
+.category-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.category-chip .chip-actions {
+  display: none;
+  gap: 4px;
+}
+
+.category-chip:hover .chip-actions {
+  display: flex;
+}
+
+.category-edit-input {
+  background: transparent;
+  border: 1px solid var(--text-muted);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  width: 80px;
+}
+
+.category-color-btn,
+.category-delete-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  font-size: 12px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.category-color-btn:hover,
+.category-delete-btn:hover {
+  opacity: 1;
+}
+
+.color-picker-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.category-chip.drop-over {
+  outline: 2px dashed #fff;
+  outline-offset: 2px;
+}
+
+.category-chip.inactive {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
