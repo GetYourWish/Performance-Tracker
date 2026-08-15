@@ -48,18 +48,29 @@
 }
 
 .category-chip {
-  padding: 6px 12px;
-  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
   color: #fff;
-  font-size: 14px;
-  cursor: grab;
-  user-select: none;
-  transition: transform var(--transition-fast);
+  font-weight: 500;
 }
-
-.category-chip:hover {
-  transform: scale(1.05);
+.chip-add-marker-btn {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+.chip-add-marker-btn:hover { background: rgba(255, 255, 255, 0.45); }
 
 .new-category-form {
   display: flex;
