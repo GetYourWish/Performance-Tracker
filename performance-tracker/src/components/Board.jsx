@@ -19,8 +19,8 @@ import CompletionPopup from './CompletionPopup'
 import BoardRow from './BoardRow'
 import { generateId, getCurrentDate, getTaskCategory } from '../utils/helpers'
 
-// Draggable category chip for sidebar
-function DraggableCategoryChip({ category }) {
+// Draggable and droppable category chip for sidebar with inline editing
+function DraggableCategoryChip({ category, onUpdateCategory, index }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: `sidebar-category-${category.id}`,
     data: {
@@ -30,23 +30,143 @@ function DraggableCategoryChip({ category }) {
     }
   })
   
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+    id: `sidebar-drop-${category.id}`,
+    data: {
+      type: 'sidebar-category-drop',
+      categoryId: category.id,
+      index
+    }
+  })
+  
+  const [isEditing, setIsEditing] = useState(false)
+  const [editName, setEditName] = useState(category.name)
+  const [showColorPicker, setShowColorPicker] = useState(false)
+  
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`
   } : undefined
   
+  const handleSave = () => {
+    if (editName.trim()) {
+      onUpdateCategory({ ...category, name: editName.trim() })
+    } else {
+      setEditName(category.name)
+    }
+    setIsEditing(false)
+  }
+  
+  const handleColorChange = (newColor) => {
+    onUpdateCategory({ ...category, color: newColor })
+    setShowColorPicker(false)
+  }
+  
+  const handleDeactivate = () => {
+    onUpdateCategory({ ...category, active: false })
+  }
+  
   return (
     <div
-      ref={setNodeRef}
-      className="category-chip"
+      ref={(node) => {
+        setNodeRef(node)
+        setDroppableRef(node)
+      }}
+      className={`category-chip ${isOver ? 'drop-over' : ''} ${!category.active ? 'inactive' : ''}`}
       style={{ 
         backgroundColor: category.color,
-        opacity: 0.8,
+        opacity: category.active ? 0.8 : 0.5,
+        textDecoration: category.active ? 'none' : 'line-through',
         ...style
       }}
       {...listeners}
       {...attributes}
     >
-      {category.name}
+      {isEditing ? (
+        <>
+          <input
+            type="text"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onBlur={handleSave}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSave()
+              if (e.key === 'Escape') {
+                setEditName(category.name)
+                setIsEditing(false)
+              }
+            }}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+            className="category-edit-input"
+          />
+          <button 
+            className="category-color-btn"
+            onClick={(e) => {
+              e.stopPropagation()
+              setShowColorPicker(!showColorPicker)
+            }}
+          >
+            🎨
+          </button>
+          <button 
+            className="category-delete-btn"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleDeactivate()
+            }}
+          >
+            ✕
+          </button>
+          {showColorPicker && (
+            <div 
+              className="color-picker-dropdown"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="color"
+                value={category.color}
+                onChange={(e) => handleColorChange(e.target.value)}
+              />
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <span onClick={() => setIsEditing(true)}>{category.name}</span>
+          <div className="chip-actions">
+            <button 
+              className="category-color-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowColorPicker(!showColorPicker)
+              }}
+            >
+              🎨
+            </button>
+            <button 
+              className="category-delete-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleDeactivate()
+              }}
+            >
+              ✕
+            </button>
+            {showColorPicker && (
+              <div 
+                className="color-picker-dropdown"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="color"
+                  value={category.color}
+                  onChange={(e) => handleColorChange(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -70,12 +190,19 @@ function InsertionPoint({ id, onDrop }) {
   )
 }
 
-// Sidebar component for categories - collapsible per spec
-function CategorySidebar({ categories, onCreateCategory }) {
+// Sidebar component for categories - collapsible per spec with DndContext for reordering
+function CategorySidebar({ categories, onCreateCategory, onUpdateCategory, onReorderCategories }) {
   const [isCreating, setIsCreating] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#60a5fa')
   const [isCollapsed, setIsCollapsed] = useState(false)
+  
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    })
+  )
   
   const handleCreateCategory = () => {
     if (!newCategoryName.trim()) return
@@ -94,6 +221,35 @@ function CategorySidebar({ categories, onCreateCategory }) {
     setIsCreating(false)
   }
   
+  const handleDragEnd = (event) => {
+    const { active, over } = event
+    
+    if (!over || !onReorderCategories) return
+    
+    const activeData = active.data.current
+    const overData = over.data.current
+    
+    if (activeData?.type !== 'sidebar-category' || overData?.type !== 'sidebar-category-drop') return
+    
+    const fromIndex = activeData.index
+    const toIndex = overData.index
+    
+    if (fromIndex === toIndex) return
+    
+    // Reorder categories array
+    const newCategories = [...categories]
+    const [removed] = newCategories.splice(fromIndex, 1)
+    newCategories.splice(toIndex, 0, removed)
+    
+    // Update order field for all categories
+    const updatedCategories = newCategories.map((cat, idx) => ({
+      ...cat,
+      order: idx
+    }))
+    
+    onReorderCategories(updatedCategories)
+  }
+  
   if (isCollapsed) {
     return (
       <div className="category-grabber collapsed">
@@ -108,54 +264,62 @@ function CategorySidebar({ categories, onCreateCategory }) {
   }
   
   return (
-    <div className="category-grabber">
-      <div className="category-grabber-header">
-        <h4>Categories</h4>
-        <button 
-          className="collapse-btn"
-          onClick={() => setIsCollapsed(true)}
-          aria-label="Collapse categories"
-        >
-          −
-        </button>
-      </div>
-      <p className="drag-hint">Drag a category to the board to add a marker</p>
-      
-      <div className="categories-list">
-        {categories.map(category => (
-          <DraggableCategoryChip
-            key={category.id}
-            category={category}
-          />
-        ))}
-
-        {isCreating ? (
-          <div className="new-category-form">
-            <input
-              type="text"
-              placeholder="Category name"
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              autoFocus
-            />
-            <input
-              type="color"
-              value={newCategoryColor}
-              onChange={(e) => setNewCategoryColor(e.target.value)}
-            />
-            <button onClick={handleCreateCategory}>Add</button>
-            <button onClick={() => setIsCreating(false)}>Cancel</button>
-          </div>
-        ) : (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="category-grabber">
+        <div className="category-grabber-header">
+          <h4>Categories</h4>
           <button 
-            className="add-category-btn"
-            onClick={() => setIsCreating(true)}
+            className="collapse-btn"
+            onClick={() => setIsCollapsed(true)}
+            aria-label="Collapse categories"
           >
-            + Add Category
+            −
           </button>
-        )}
+        </div>
+        <p className="drag-hint">Drag a category to the board to add a marker</p>
+        
+        <div className="categories-list">
+          {categories.filter(c => c.active !== false).map((category, index) => (
+            <DraggableCategoryChip
+              key={category.id}
+              category={category}
+              onUpdateCategory={onUpdateCategory}
+              index={index}
+            />
+          ))}
+
+          {isCreating ? (
+            <div className="new-category-form">
+              <input
+                type="text"
+                placeholder="Category name"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                autoFocus
+              />
+              <input
+                type="color"
+                value={newCategoryColor}
+                onChange={(e) => setNewCategoryColor(e.target.value)}
+              />
+              <button onClick={handleCreateCategory}>Add</button>
+              <button onClick={() => setIsCreating(false)}>Cancel</button>
+            </div>
+          ) : (
+            <button 
+              className="add-category-btn"
+              onClick={() => setIsCreating(true)}
+            >
+              + Add Category
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+    </DndContext>
   )
 }
 
@@ -309,13 +473,13 @@ function Board({ data, onSave }) {
     const { active, over } = event
     setDraggingItem(null)
 
-    // Handle sidebar category being dropped on an insertion point
+    // Handle sidebar category being dropped
     if (active.data.current?.type === 'sidebar-category') {
-      if (over && over.id) {
-        const category = active.data.current.category
-        const categoryId = active.data.current.categoryId
-        
-        // Determine where to insert based on the over id
+      const category = active.data.current.category
+      const categoryId = active.data.current.categoryId
+      
+      // If dropped on an insertion point, insert at that position
+      if (over && over.data.current?.type === 'insertion-point' && over.id) {
         let insertionId = null
         if (over.id === 'insert-top') {
           insertionId = null // Insert at top
@@ -324,6 +488,9 @@ function Board({ data, onSave }) {
         }
         
         handleMarkerDrop(categoryId, false, insertionId, category)
+      } else {
+        // Dropped outside any insertion point - append to end of board
+        handleMarkerDrop(categoryId, false, null, category, true) // true = appendToEnd
       }
       return
     }
@@ -391,7 +558,7 @@ function Board({ data, onSave }) {
     })
   }
 
-  const handleMarkerDrop = (categoryId, isNewCategory = false, insertionId = null, categoryObj = null) => {
+  const handleMarkerDrop = (categoryId, isNewCategory = false, insertionId = null, categoryObj = null, appendToEnd = false) => {
     // If this is a new category being created, we need to add it to categories first
     if (isNewCategory && typeof categoryId === 'object') {
       // categoryId is actually the new category object
@@ -424,6 +591,8 @@ function Board({ data, onSave }) {
         } else {
           updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
         }
+      } else if (appendToEnd) {
+        updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
       } else {
         updatedBoard = [{ type: 'marker', markerId: newMarker.id }, ...boardItems]
       }
@@ -464,9 +633,13 @@ function Board({ data, onSave }) {
             { type: 'marker', markerId: newMarker.id },
             ...boardItems.slice(insertIndex + 1)
           ]
-        } else {
+        } else if (appendToEnd) {
           updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
+        } else {
+          updatedBoard = [{ type: 'marker', markerId: newMarker.id }, ...boardItems]
         }
+      } else if (appendToEnd) {
+        updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
       } else {
         updatedBoard = [{ type: 'marker', markerId: newMarker.id }, ...boardItems]
       }
@@ -504,9 +677,13 @@ function Board({ data, onSave }) {
           { type: 'marker', markerId: newMarker.id },
           ...boardItems.slice(insertIndex + 1)
         ]
+      } else if (appendToEnd) {
+        updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
       } else {
         updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
       }
+    } else if (appendToEnd) {
+      updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
     } else {
       updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
     }
@@ -673,6 +850,15 @@ function Board({ data, onSave }) {
           <CategorySidebar 
             categories={categories}
             onCreateCategory={(newCategory) => onSave({ ...data, categories: [...categories, newCategory], meta: { ...data.meta, updatedAt: new Date().toISOString() } })}
+            onUpdateCategory={(updatedCategory) => {
+              const updatedCategories = categories.map(c => 
+                c.id === updatedCategory.id ? updatedCategory : c
+              )
+              onSave({ ...data, categories: updatedCategories, meta: { ...data.meta, updatedAt: new Date().toISOString() } })
+            }}
+            onReorderCategories={(reorderedCategories) => {
+              onSave({ ...data, categories: reorderedCategories, meta: { ...data.meta, updatedAt: new Date().toISOString() } })
+            }}
           />
         </div>
       </div>
