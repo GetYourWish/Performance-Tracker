@@ -169,12 +169,25 @@ ipcMain.handle('load-data', async () => {
     return JSON.parse(data);
   } catch (error) {
     if (error.code === 'ENOENT') {
-      // File doesn't exist, return default structure
+      // File doesn't exist, return default structure matching the app's expected schema
       return {
-        entries: {},
-        categories: [],
+        schemaVersion: 1,
+        meta: {
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        settings: {
+          theme: 'system',
+          weekStartsOn: 1,
+          heatmapMode: 'score',
+          fatigueIncrement: 0.10,
+          fatigueCap: 3.0
+        },
         difficulties: [],
-        settings: {}
+        categories: [],
+        markers: [],
+        board: [],
+        tasks: []
       };
     }
     throw error;

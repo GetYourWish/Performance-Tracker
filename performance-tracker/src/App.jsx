@@ -3,7 +3,7 @@ import Board from './components/Board'
 import Reviews from './components/Reviews'
 import Settings from './components/Settings'
 import SetupScreen from './components/SetupScreen'
-import { validateAndHealData } from './utils/helpers'
+import { validateAndHealData, generateId } from './utils/helpers'
 import './App.css'
 
 function App() {
@@ -13,6 +13,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState(false)
   const [conflicts, setConflicts] = useState([])
+  const [selectedDate, setSelectedDate] = useState(new Date())
   
   // Debounce save to avoid constant disk writes
   const saveTimeoutRef = useRef(null)
@@ -186,10 +187,28 @@ function App() {
       if (!existingData) {
         // Create default data if file doesn't exist
         const defaultData = {
-          entries: {},
+          schemaVersion: 1,
+          meta: {
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          },
+          settings: {
+            theme: 'system',
+            weekStartsOn: 1,
+            heatmapMode: 'score',
+            fatigueIncrement: 0.10,
+            fatigueCap: 3.0
+          },
+          difficulties: [
+            { id: generateId(), label: 'Easy', score: 1, color: '#4ade80', order: 0, active: true },
+            { id: generateId(), label: 'Medium', score: 2, color: '#fbbf24', order: 1, active: true },
+            { id: generateId(), label: 'Hard', score: 3, color: '#f87171', order: 2, active: true },
+            { id: generateId(), label: 'Very Hard', score: 5, color: '#dc2626', order: 3, active: true }
+          ],
           categories: [],
-          difficulties: [],
-          settings: {}
+          markers: [],
+          board: [],
+          tasks: []
         }
         await window.api.saveData(defaultData)
       }
@@ -254,10 +273,14 @@ function App() {
           <Board data={data} onSave={saveData} />
         )}
         {currentView === 'reviews' && (
-          <Reviews data={data} onDayClick={(date) => {
-            setSelectedDate(date)
-            setCurrentView('daily')
-          }} />
+          <Reviews 
+            data={data} 
+            selectedDate={selectedDate}
+            onDayClick={(date) => {
+              setSelectedDate(date)
+              setCurrentView('daily')
+            }} 
+          />
         )}
         {currentView === 'settings' && (
           <Settings 
