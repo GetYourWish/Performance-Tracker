@@ -7,8 +7,7 @@ import {
   useSensor,
   useSensors,
   DragOverlay,
-  useDroppable,
-  useDraggable
+  useDroppable
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -19,154 +18,19 @@ import CompletionPopup from './CompletionPopup'
 import BoardRow from './BoardRow'
 import { generateId, getCurrentDate, getTaskCategory } from '../utils/helpers'
 
-// Draggable and droppable category chip for sidebar with inline editing
-function DraggableCategoryChip({ category, onUpdateCategory, index }) {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
-    id: `sidebar-category-${category.id}`,
-    data: {
-      type: 'sidebar-category',
-      categoryId: category.id,
-      category
-    }
-  })
-  
-  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
-    id: `sidebar-drop-${category.id}`,
-    data: {
-      type: 'sidebar-category-drop',
-      categoryId: category.id,
-      index
-    }
-  })
-  
-  const [isEditing, setIsEditing] = useState(false)
-  const [editName, setEditName] = useState(category.name)
-  const [showColorPicker, setShowColorPicker] = useState(false)
-  
-  const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`
-  } : undefined
-  
-  const handleSave = () => {
-    if (editName.trim()) {
-      onUpdateCategory({ ...category, name: editName.trim() })
-    } else {
-      setEditName(category.name)
-    }
-    setIsEditing(false)
-  }
-  
-  const handleColorChange = (newColor) => {
-    onUpdateCategory({ ...category, color: newColor })
-    setShowColorPicker(false)
-  }
-  
-  const handleDeactivate = () => {
-    onUpdateCategory({ ...category, active: false })
-  }
-  
+// Simple category chip with + button to add marker
+function CategoryChip({ category, onAddMarker }) {
   return (
-    <div
-      ref={(node) => {
-        setNodeRef(node)
-        setDroppableRef(node)
-      }}
-      className={`category-chip ${isOver ? 'drop-over' : ''} ${!category.active ? 'inactive' : ''}`}
-      style={{ 
-        backgroundColor: category.color,
-        opacity: category.active ? 0.8 : 0.5,
-        textDecoration: category.active ? 'none' : 'line-through',
-        ...style
-      }}
-      {...listeners}
-      {...attributes}
-    >
-      {isEditing ? (
-        <>
-          <input
-            type="text"
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
-            onBlur={handleSave}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSave()
-              if (e.key === 'Escape') {
-                setEditName(category.name)
-                setIsEditing(false)
-              }
-            }}
-            autoFocus
-            onClick={(e) => e.stopPropagation()}
-            className="category-edit-input"
-          />
-          <button 
-            className="category-color-btn"
-            onClick={(e) => {
-              e.stopPropagation()
-              setShowColorPicker(!showColorPicker)
-            }}
-          >
-            🎨
-          </button>
-          <button 
-            className="category-delete-btn"
-            onClick={(e) => {
-              e.stopPropagation()
-              handleDeactivate()
-            }}
-          >
-            ✕
-          </button>
-          {showColorPicker && (
-            <div 
-              className="color-picker-dropdown"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <input
-                type="color"
-                value={category.color}
-                onChange={(e) => handleColorChange(e.target.value)}
-              />
-            </div>
-          )}
-        </>
-      ) : (
-        <>
-          <span onClick={() => setIsEditing(true)}>{category.name}</span>
-          <div className="chip-actions">
-            <button 
-              className="category-color-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowColorPicker(!showColorPicker)
-              }}
-            >
-              🎨
-            </button>
-            <button 
-              className="category-delete-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                handleDeactivate()
-              }}
-            >
-              ✕
-            </button>
-            {showColorPicker && (
-              <div 
-                className="color-picker-dropdown"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <input
-                  type="color"
-                  value={category.color}
-                  onChange={(e) => handleColorChange(e.target.value)}
-                />
-              </div>
-            )}
-          </div>
-        </>
-      )}
+    <div className="category-chip" style={{ backgroundColor: category.color }}>
+      <span className="category-chip-name">{category.name}</span>
+      <button
+        className="chip-add-marker-btn"
+        title="Add marker to board"
+        aria-label={`Add ${category.name} marker to the board`}
+        onClick={onAddMarker}
+      >
+        +
+      </button>
     </div>
   )
 }
@@ -190,19 +54,12 @@ function InsertionPoint({ id, onDrop }) {
   )
 }
 
-// Sidebar component for categories - collapsible per spec with DndContext for reordering
-function CategorySidebar({ categories, onCreateCategory, onUpdateCategory, onReorderCategories }) {
+// Sidebar component for categories - simple list with + button on chips
+function CategorySidebar({ categories, onCreateCategory, onAddMarker }) {
   const [isCreating, setIsCreating] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#60a5fa')
   const [isCollapsed, setIsCollapsed] = useState(false)
-  
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates
-    })
-  )
   
   const handleCreateCategory = () => {
     if (!newCategoryName.trim()) return
@@ -221,35 +78,6 @@ function CategorySidebar({ categories, onCreateCategory, onUpdateCategory, onReo
     setIsCreating(false)
   }
   
-  const handleDragEnd = (event) => {
-    const { active, over } = event
-    
-    if (!over || !onReorderCategories) return
-    
-    const activeData = active.data.current
-    const overData = over.data.current
-    
-    if (activeData?.type !== 'sidebar-category' || overData?.type !== 'sidebar-category-drop') return
-    
-    const fromIndex = activeData.index
-    const toIndex = overData.index
-    
-    if (fromIndex === toIndex) return
-    
-    // Reorder categories array
-    const newCategories = [...categories]
-    const [removed] = newCategories.splice(fromIndex, 1)
-    newCategories.splice(toIndex, 0, removed)
-    
-    // Update order field for all categories
-    const updatedCategories = newCategories.map((cat, idx) => ({
-      ...cat,
-      order: idx
-    }))
-    
-    onReorderCategories(updatedCategories)
-  }
-  
   if (isCollapsed) {
     return (
       <div className="category-grabber collapsed">
@@ -264,62 +92,55 @@ function CategorySidebar({ categories, onCreateCategory, onUpdateCategory, onReo
   }
   
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="category-grabber">
-        <div className="category-grabber-header">
-          <h4>Categories</h4>
-          <button 
-            className="collapse-btn"
-            onClick={() => setIsCollapsed(true)}
-            aria-label="Collapse categories"
-          >
-            −
-          </button>
-        </div>
-        <p className="drag-hint">Drag a category to the board to add a marker</p>
-        
-        <div className="categories-list">
-          {categories.filter(c => c.active !== false).map((category, index) => (
-            <DraggableCategoryChip
-              key={category.id}
-              category={category}
-              onUpdateCategory={onUpdateCategory}
-              index={index}
-            />
-          ))}
-
-          {isCreating ? (
-            <div className="new-category-form">
-              <input
-                type="text"
-                placeholder="Category name"
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                autoFocus
-              />
-              <input
-                type="color"
-                value={newCategoryColor}
-                onChange={(e) => setNewCategoryColor(e.target.value)}
-              />
-              <button onClick={handleCreateCategory}>Add</button>
-              <button onClick={() => setIsCreating(false)}>Cancel</button>
-            </div>
-          ) : (
-            <button 
-              className="add-category-btn"
-              onClick={() => setIsCreating(true)}
-            >
-              + Add Category
-            </button>
-          )}
-        </div>
+    <div className="category-grabber">
+      <div className="category-grabber-header">
+        <h4>Categories</h4>
+        <button 
+          className="collapse-btn"
+          onClick={() => setIsCollapsed(true)}
+          aria-label="Collapse categories"
+        >
+          −
+        </button>
       </div>
-    </DndContext>
+      <p className="drag-hint">Click + on a category to add a marker to the board</p>
+      
+      <div className="categories-list">
+        {categories.filter(c => c.active !== false).map((category) => (
+          <CategoryChip
+            key={category.id}
+            category={category}
+            onAddMarker={() => onAddMarker(category)}
+          />
+        ))}
+
+        {isCreating ? (
+          <div className="new-category-form">
+            <input
+              type="text"
+              placeholder="Category name"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              autoFocus
+            />
+            <input
+              type="color"
+              value={newCategoryColor}
+              onChange={(e) => setNewCategoryColor(e.target.value)}
+            />
+            <button onClick={handleCreateCategory}>Add</button>
+            <button onClick={() => setIsCreating(false)}>Cancel</button>
+          </div>
+        ) : (
+          <button 
+            className="add-category-btn"
+            onClick={() => setIsCreating(true)}
+          >
+            + Add Category
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -469,31 +290,24 @@ function Board({ data, onSave }) {
     setDraggingItem(event.active)
   }
 
+  const handleAddMarker = useCallback((category) => {
+    const newMarker = {
+      id: generateId(),
+      categoryId: category.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    onSave({
+      ...data,
+      markers: [...markers, newMarker],
+      board: [...boardItems, { type: 'marker', markerId: newMarker.id }],
+      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+    })
+  }, [data, markers, boardItems, onSave])
+
   const handleDragEnd = (event) => {
     const { active, over } = event
     setDraggingItem(null)
-
-    // Handle sidebar category being dropped
-    if (active.data.current?.type === 'sidebar-category') {
-      const category = active.data.current.category
-      const categoryId = active.data.current.categoryId
-      
-      // If dropped on an insertion point, insert at that position
-      if (over && over.data.current?.type === 'insertion-point' && over.id) {
-        let insertionId = null
-        if (over.id === 'insert-top') {
-          insertionId = null // Insert at top
-        } else {
-          insertionId = over.id // Insert after this item
-        }
-        
-        handleMarkerDrop(categoryId, false, insertionId, category)
-      } else {
-        // Dropped outside any insertion point - append to end of board
-        handleMarkerDrop(categoryId, false, null, category, true) // true = appendToEnd
-      }
-      return
-    }
 
     // Handle reordering of tasks and markers within the board with proper gap-drop support
     if (!over) return
@@ -836,9 +650,7 @@ function Board({ data, onSave }) {
                 <div className="drag-overlay">
                   {draggingItem.data.current?.type === 'task' 
                     ? tasks.find(t => t.id === draggingItem.id)?.text
-                    : draggingItem.data.current?.type === 'sidebar-category'
-                      ? draggingItem.data.current.category?.name
-                      : 'Category Marker'
+                    : 'Category Marker'
                   }
                 </div>
               ) : null}
@@ -850,15 +662,7 @@ function Board({ data, onSave }) {
           <CategorySidebar 
             categories={categories}
             onCreateCategory={(newCategory) => onSave({ ...data, categories: [...categories, newCategory], meta: { ...data.meta, updatedAt: new Date().toISOString() } })}
-            onUpdateCategory={(updatedCategory) => {
-              const updatedCategories = categories.map(c => 
-                c.id === updatedCategory.id ? updatedCategory : c
-              )
-              onSave({ ...data, categories: updatedCategories, meta: { ...data.meta, updatedAt: new Date().toISOString() } })
-            }}
-            onReorderCategories={(reorderedCategories) => {
-              onSave({ ...data, categories: reorderedCategories, meta: { ...data.meta, updatedAt: new Date().toISOString() } })
-            }}
+            onAddMarker={handleAddMarker}
           />
         </div>
       </div>
