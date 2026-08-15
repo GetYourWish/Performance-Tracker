@@ -3,6 +3,151 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, getYear, startOfYear, endOfYear } from 'date-fns'
 import { calculateDayScore, parseDate, formatDate, groupTasksByDate } from '../utils/helpers'
 
+// Task Detail Popup Component
+function TaskDetailPopup({ task, difficulty, category, onClose }) {
+  const completion = task.completion
+  
+  if (!completion) return null
+  
+  const completedDate = new Date(completion.completedDate)
+  const completedTime = new Date(completion.completedAt)
+  
+  return (
+    <div 
+      className="popup-overlay" 
+      onClick={onClose}
+      onKeyDown={(e) => e.key === 'Escape' && onClose()}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="task-detail-title"
+    >
+      <div className="completion-popup" onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 id="task-detail-title">Task Details</h3>
+          <button 
+            className="action-btn" 
+            onClick={onClose}
+            aria-label="Close"
+            style={{ background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer' }}
+          >
+            ✕
+          </button>
+        </div>
+        
+        <div className="task-text" style={{ marginBottom: '16px' }}>{task.text}</div>
+        
+        <div className="form-group">
+          <label>Completion Date</label>
+          <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}>
+            {format(completedDate, 'EEEE, MMMM d, yyyy')}
+          </div>
+        </div>
+        
+        <div className="form-group">
+          <label>Completion Time</label>
+          <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}>
+            {format(completedTime, 'h:mm a')}
+          </div>
+        </div>
+        
+        {difficulty && (
+          <div className="form-group">
+            <label>Difficulty</label>
+            <div 
+              className="difficulty-badge"
+              style={{ 
+                backgroundColor: difficulty.color, 
+                display: 'inline-block',
+                padding: '8px 16px',
+                borderRadius: '12px',
+                color: '#fff',
+                fontWeight: 500
+              }}
+            >
+              {difficulty.label} ({difficulty.score})
+            </div>
+          </div>
+        )}
+        
+        <div className="form-group">
+          <label>Category</label>
+          {category ? (
+            <div 
+              className="category-badge"
+              style={{ 
+                backgroundColor: category.color, 
+                display: 'inline-block',
+                padding: '8px 16px',
+                borderRadius: '12px',
+                color: '#fff',
+                fontWeight: 500
+              }}
+            >
+              {category.name}
+            </div>
+          ) : (
+            <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)' }}>
+              No category
+            </div>
+          )}
+        </div>
+        
+        <div className="form-group">
+          <label>Note</label>
+          {completion.note ? (
+            <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
+              {completion.note}
+            </div>
+          ) : (
+            <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)' }}>
+              No note
+            </div>
+          )}
+        </div>
+        
+        <div className="popup-actions">
+          <button className="btn-cancel" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Delete Confirmation Popup Component
+function DeleteConfirmPopup({ task, onConfirm, onCancel }) {
+  return (
+    <div 
+      className="popup-overlay" 
+      onClick={onCancel}
+      onKeyDown={(e) => e.key === 'Escape' && onCancel()}
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="delete-confirm-title"
+    >
+      <div className="completion-popup" onClick={(e) => e.stopPropagation()}>
+        <h3 id="delete-confirm-title">Delete task?</h3>
+        
+        <div className="task-text" style={{ marginBottom: '16px' }}>{task.text}</div>
+        
+        <p style={{ color: '#ef4444', marginBottom: '24px', fontWeight: 500 }}>
+          This cannot be undone.
+        </p>
+        
+        <div className="popup-actions">
+          <button className="btn-cancel" onClick={onCancel}>Cancel</button>
+          <button 
+            className="btn-confirm" 
+            onClick={onConfirm}
+            style={{ backgroundColor: '#ef4444' }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Reviews({ data, onDayClick }) {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [reviewType, setReviewType] = useState('daily')
@@ -120,6 +265,9 @@ function Reviews({ data, onDayClick }) {
   }
 
   const maxHeatmapValue = Math.max(...heatmapData.map(d => d.value), 1)
+  
+  // State for task detail popup
+  const [selectedTask, setSelectedTask] = useState(null)
 
   return (
     <div className="reviews-container">
@@ -178,7 +326,14 @@ function Reviews({ data, onDayClick }) {
                   const category = categories.find(c => c.id === task.completion.categoryId)
                   
                   return (
-                    <div key={task.id} className="completed-task-item">
+                    <div 
+                      key={task.id} 
+                      className="completed-task-item"
+                      style={{ cursor: 'pointer', transition: 'all var(--transition-fast)' }}
+                      onClick={() => setSelectedTask(task)}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-tertiary)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                    >
                       <div className="task-info">
                         <div className="task-text">{task.text}</div>
                         <div className="task-meta">
@@ -302,6 +457,16 @@ function Reviews({ data, onDayClick }) {
           </div>
         )}
       </div>
+
+      {/* Task Detail Popup */}
+      {selectedTask && (
+        <TaskDetailPopup
+          task={selectedTask}
+          difficulty={difficulties.find(d => d.id === selectedTask.completion.difficultyId)}
+          category={categories.find(c => c.id === selectedTask.completion.categoryId)}
+          onClose={() => setSelectedTask(null)}
+        />
+      )}
     </div>
   )
 }

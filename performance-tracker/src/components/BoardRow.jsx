@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing, onEdit, onUpdate, onCancelEdit, onDelete, onComplete }) {
+const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing, onEdit, onUpdate, onCancelEdit, onDelete, onComplete, onConfirmDelete }) {
   const {
     attributes,
     listeners,
@@ -137,7 +137,7 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
         </button>
         <button 
           className="action-btn delete-btn"
-          onClick={onDelete}
+          onClick={() => onConfirmDelete(task)}
           aria-label={`Delete task: ${task.text}`}
           title="Delete"
         >
