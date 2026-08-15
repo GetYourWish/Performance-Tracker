@@ -328,12 +328,12 @@ function Board({ data, onSave }) {
       return
     }
 
-    // Handle reordering of tasks and markers within the board
-    // Ignore drops on insertion points for task/marker reordering
-    if (!over || active.id === over.id) return
-    if (over.data.current?.type === 'insertion-point') return
+    // Handle reordering of tasks and markers within the board with proper gap-drop support
+    if (!over) return
+    if (active.id === over.id) return
 
-    const oldIndex = boardItems.findIndex(item => {
+    // Compute draggedIndex
+    const draggedIndex = boardItems.findIndex(item => {
       if (active.data.current?.type === 'task') {
         return item.type === 'task' && item.taskId === active.id
       }
@@ -343,21 +343,46 @@ function Board({ data, onSave }) {
       return false
     })
 
-    const newIndex = boardItems.findIndex(item => {
-      if (over.data.current?.type === 'task') {
-        return item.type === 'task' && item.taskId === over.id
-      }
-      if (over.data.current?.type === 'marker') {
-        return item.type === 'marker' && item.markerId === over.id
-      }
-      return false
-    })
+    if (draggedIndex === -1) return
 
-    if (oldIndex === -1 || newIndex === -1) return
+    // Compute targetIndex based on drop target
+    let targetIndex
+    if (over.data.current?.type === 'insertion-point') {
+      // Gap drop: compute index based on insertion point position
+      if (over.id === 'insert-top') {
+        targetIndex = 0
+      } else {
+        // Find the index of the item before this insertion point
+        const itemId = over.id // insertion point id is the item id it follows
+        targetIndex = boardItems.findIndex(item => {
+          if (item.type === 'task') return item.taskId === itemId
+          if (item.type === 'marker') return item.markerId === itemId
+        }) + 1
+      }
+    } else {
+      // Drop on item: use indexOf(over.id)
+      targetIndex = boardItems.findIndex(item => {
+        if (over.data.current?.type === 'task') {
+          return item.type === 'task' && item.taskId === over.id
+        }
+        if (over.data.current?.type === 'marker') {
+          return item.type === 'marker' && item.markerId === over.id
+        }
+        return false
+      })
+    }
 
+    if (targetIndex === -1) return
+
+    // Splice out the dragged item
     const newBoard = [...boardItems]
-    const [removed] = newBoard.splice(oldIndex, 1)
-    newBoard.splice(newIndex, 0, removed)
+    const [removed] = newBoard.splice(draggedIndex, 1)
+    
+    // Decrement targetIndex if it's after draggedIndex (since we removed an item before it)
+    const adjustedTargetIndex = targetIndex > draggedIndex ? targetIndex - 1 : targetIndex
+    
+    // Splice in at the adjusted position
+    newBoard.splice(adjustedTargetIndex, 0, removed)
 
     onSave({
       ...data,
@@ -392,9 +417,9 @@ function Board({ data, onSave }) {
         })
         if (insertIndex >= 0) {
           updatedBoard = [
-            ...boardItems.slice(0, insertIndex),
+            ...boardItems.slice(0, insertIndex + 1),
             { type: 'marker', markerId: newMarker.id },
-            ...boardItems.slice(insertIndex)
+            ...boardItems.slice(insertIndex + 1)
           ]
         } else {
           updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
@@ -435,9 +460,9 @@ function Board({ data, onSave }) {
         })
         if (insertIndex >= 0) {
           updatedBoard = [
-            ...boardItems.slice(0, insertIndex),
+            ...boardItems.slice(0, insertIndex + 1),
             { type: 'marker', markerId: newMarker.id },
-            ...boardItems.slice(insertIndex)
+            ...boardItems.slice(insertIndex + 1)
           ]
         } else {
           updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
@@ -475,9 +500,9 @@ function Board({ data, onSave }) {
       })
       if (insertIndex >= 0) {
         updatedBoard = [
-          ...boardItems.slice(0, insertIndex),
+          ...boardItems.slice(0, insertIndex + 1),
           { type: 'marker', markerId: newMarker.id },
-          ...boardItems.slice(insertIndex)
+          ...boardItems.slice(insertIndex + 1)
         ]
       } else {
         updatedBoard = [...boardItems, { type: 'marker', markerId: newMarker.id }]
@@ -647,7 +672,7 @@ function Board({ data, onSave }) {
         <div className="board-sidebar">
           <CategorySidebar 
             categories={categories}
-            onCreateCategory={(newCategory) => handleMarkerDrop(newCategory, true, null)}
+            onCreateCategory={(newCategory) => onSave({ ...data, categories: [...categories, newCategory], meta: { ...data.meta, updatedAt: new Date().toISOString() } })}
           />
         </div>
       </div>
