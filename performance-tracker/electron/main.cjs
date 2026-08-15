@@ -14,7 +14,7 @@ let isExternalWrite = false;
 // App state file path
 const appStatePath = path.join(app.getPath('userData'), 'app-state.json');
 
-// Load saved data path or set default
+// Load saved data path or set default - uses SyncThis folder next to executable per spec
 async function initializeDataPath() {
   try {
     const stateExists = await fs.access(appStatePath).then(() => true).catch(() => false);
@@ -29,18 +29,23 @@ async function initializeDataPath() {
     console.log('Could not load app state, will use default:', e.message);
   }
 
-  // Default location: next to executable or Documents folder
+  // Default location: SyncThis folder next to executable (per spec)
   const exeDir = path.dirname(process.execPath);
-  const defaultPath = path.join(exeDir, 'tracker.json');
+  const syncThisDir = path.join(exeDir, 'SyncThis');
+  const defaultPath = path.join(syncThisDir, 'tracker.json');
   
   // Check if we can write to executable directory
   try {
     await fs.access(exeDir, fs.constants.W_OK);
+    // Create SyncThis folder if it doesn't exist
+    await fs.mkdir(syncThisDir, { recursive: true });
     dataFilePath = defaultPath;
   } catch (e) {
-    // Fallback to Documents folder
+    // Fallback to Documents folder with SyncThis subfolder
     const documentsPath = app.getPath('documents');
-    dataFilePath = path.join(documentsPath, 'tracker.json');
+    const fallbackDir = path.join(documentsPath, 'SyncThis');
+    await fs.mkdir(fallbackDir, { recursive: true }).catch(() => {});
+    dataFilePath = path.join(fallbackDir, 'tracker.json');
   }
 }
 
@@ -74,14 +79,22 @@ function debouncedSave(data) {
     } catch (error) {
       console.error('Error during auto-save:', error);
     }
-  }, 1000); // 1 second debounce
+  }, 100); // 100ms debounce - fast enough to feel responsive, slow enough to batch writes
 }
 
-// Create backups
+// Create backups - handles non-existent file gracefully
 async function createBackup() {
   if (!dataFilePath) return null;
   
   try {
+    // Check if file exists before backing up
+    try {
+      await fs.access(dataFilePath);
+    } catch (e) {
+      // File doesn't exist yet, nothing to backup
+      return null;
+    }
+    
     const backupDir = path.join(path.dirname(dataFilePath), '.backups');
     await fs.mkdir(backupDir, { recursive: true });
     
@@ -169,27 +182,10 @@ ipcMain.handle('load-data', async () => {
     return JSON.parse(data);
   } catch (error) {
     if (error.code === 'ENOENT') {
-      // File doesn't exist, return default structure matching the app's expected schema
-      return {
-        schemaVersion: 1,
-        meta: {
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        settings: {
-          theme: 'system',
-          weekStartsOn: 1,
-          heatmapMode: 'score',
-          fatigueIncrement: 0.10,
-          fatigueCap: 3.0
-        },
-        difficulties: [],
-        categories: [],
-        markers: [],
-        board: [],
-        tasks: []
-      };
+      // File doesn't exist - return null to signal caller to create default data
+      return null;
     }
+    // Corrupt JSON or other error - throw to signal problem
     throw error;
   }
 });
@@ -254,16 +250,21 @@ ipcMain.handle('set-app-state', async (event, newState) => {
   }
 });
 
+// Get default path - returns SyncThis folder next to executable per spec
 ipcMain.handle('get-default-path', async () => {
   const exeDir = path.dirname(process.execPath);
-  const defaultPath = path.join(exeDir, 'tracker.json');
+  const syncThisDir = path.join(exeDir, 'SyncThis');
+  const defaultPath = path.join(syncThisDir, 'tracker.json');
   
   try {
     await fs.access(exeDir, fs.constants.W_OK);
+    await fs.mkdir(syncThisDir, { recursive: true });
     return defaultPath;
   } catch (e) {
     const documentsPath = app.getPath('documents');
-    return path.join(documentsPath, 'tracker.json');
+    const fallbackDir = path.join(documentsPath, 'SyncThis');
+    await fs.mkdir(fallbackDir, { recursive: true }).catch(() => {});
+    return path.join(fallbackDir, 'tracker.json');
   }
 });
 

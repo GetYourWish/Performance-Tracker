@@ -85,107 +85,132 @@ function App() {
 
   const loadData = async (filePath = dataFile, isExternalChange = false) => {
     if (!filePath) {
-      setLoading(false)
-      return
+      setLoading(false);
+      return;
     }
     
     try {
-      const loadedData = await window.api.loadData()
+      const loadedData = await window.api.loadData();
+      
+      // Handle null (file doesn't exist) - shouldn't happen after setup, but be safe
+      if (!loadedData) {
+        console.warn('Loaded data is null, using default');
+        const healedData = validateAndHealData(null);
+        setData(healedData);
+        setLoading(false);
+        return;
+      }
       
       // Validate and heal data on load
-      const healedData = validateAndHealData(loadedData)
+      const healedData = validateAndHealData(loadedData);
       
       // Only update state if data actually changed (for external changes)
       if (isExternalChange && data) {
         // For external changes, we could preserve more state here if needed
-        setData(healedData)
+        setData(healedData);
       } else {
-        setData(healedData)
+        setData(healedData);
       }
     } catch (error) {
-      console.error('Failed to load data:', error)
-      if (error.message.includes('not found') || error.message.includes('corrupt')) {
-        setSetupRequired(true)
-      }
+      console.error('Failed to load data:', error);
+      // Corrupt file or other error - trigger setup to let user choose a new location
+      setSetupRequired(true);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  // Debounced save function
+  // Debounced save function - does NOT await backup, saves immediately for responsive UI
   const debouncedSave = useCallback((newData) => {
     // Clear any pending save
     if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
+      clearTimeout(saveTimeoutRef.current);
     }
     
     // Store the pending save data
-    pendingSaveRef.current = newData
+    pendingSaveRef.current = newData;
     
-    // Schedule save after 300ms debounce
+    // Schedule save after 100ms debounce for responsive feel
     saveTimeoutRef.current = setTimeout(async () => {
       if (pendingSaveRef.current && dataFile) {
         try {
-          // Create backup before saving
-          await window.api.backupNow()
+          // Save first without awaiting backup - backup is non-critical
+          window.api.saveData(pendingSaveRef.current).catch(err => {
+            console.error('Failed to save data:', err);
+          });
           
-          await window.api.saveData(pendingSaveRef.current)
-          setData(pendingSaveRef.current)
-          pendingSaveRef.current = null
+          // Create backup in background (non-blocking, non-critical)
+          window.api.backupNow().catch(err => {
+            console.warn('Backup failed (non-critical):', err);
+          });
+          
+          // Update UI state immediately for responsive feel
+          setData(pendingSaveRef.current);
+          pendingSaveRef.current = null;
         } catch (error) {
-          console.error('Failed to save data:', error)
-          throw error
+          console.error('Failed to save data:', error);
+          throw error;
         }
       }
-    }, 300)
-  }, [dataFile])
+    }, 100);
+  }, [dataFile]);
 
   const saveData = useCallback(async (newData) => {
-    if (!dataFile) return
+    if (!dataFile) return;
     
     // Use debounced save instead of immediate save
-    debouncedSave(newData)
-  }, [debouncedSave])
+    debouncedSave(newData);
+  }, [debouncedSave]);
   
   // Flush pending saves immediately (for when switching views or closing)
   const flushSave = useCallback(async () => {
     if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-      saveTimeoutRef.current = null
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
     }
     
     if (pendingSaveRef.current && dataFile) {
       try {
-        await window.api.backupNow()
-        await window.api.saveData(pendingSaveRef.current)
-        setData(pendingSaveRef.current)
-        pendingSaveRef.current = null
+        // Save immediately
+        await window.api.saveData(pendingSaveRef.current);
+        
+        // Backup in background (non-blocking)
+        window.api.backupNow().catch(err => {
+          console.warn('Backup failed (non-critical):', err);
+        });
+        
+        setData(pendingSaveRef.current);
+        pendingSaveRef.current = null;
       } catch (error) {
-        console.error('Failed to flush save:', error)
-        throw error
+        console.error('Failed to flush save:', error);
+        throw error;
       }
     }
-  }, [dataFile])
+  }, [dataFile]);
 
   const handleSetupComplete = async (filePath) => {
     try {
       // Get default path from backend if no specific path selected
-      let finalPath = filePath
+      let finalPath = filePath;
       if (!filePath || filePath === 'default') {
-        finalPath = await window.api.getDefaultPath()
+        finalPath = await window.api.getDefaultPath();
       }
       
-      // Check if file exists - if not, create default data
-      let existingData = null
+      // Set app state FIRST with the new path - this ensures loadData uses the correct path
+      await window.api.setAppState({ dataPath: finalPath });
+      setDataFile(finalPath);
+      
+      // Check if file exists at the NEW path - if not, create default data
+      let existingData = null;
       try {
-        existingData = await window.api.loadData()
+        existingData = await window.api.loadData();
       } catch (e) {
         // File doesn't exist or is invalid, will create new
-        existingData = null
+        existingData = null;
       }
       
       if (!existingData) {
-        // Create default data if file doesn't exist
+        // Create default data with difficulties if file doesn't exist
         const defaultData = {
           schemaVersion: 1,
           meta: {
@@ -209,19 +234,18 @@ function App() {
           markers: [],
           board: [],
           tasks: []
-        }
-        await window.api.saveData(defaultData)
+        };
+        await window.api.saveData(defaultData);
       }
       
-      await window.api.setAppState({ dataPath: finalPath })
-      setDataFile(finalPath)
-      await loadData(finalPath)
-      setSetupRequired(false)
+      // Now load the data from the correct path
+      await loadData(finalPath);
+      setSetupRequired(false);
     } catch (error) {
-      console.error('Setup failed:', error)
-      throw error
+      console.error('Setup failed:', error);
+      throw error;
     }
-  }
+  };
 
   if (loading) {
     return (
@@ -277,8 +301,8 @@ function App() {
             data={data} 
             selectedDate={selectedDate}
             onDayClick={(date) => {
-              setSelectedDate(date)
-              setCurrentView('daily')
+              setSelectedDate(date);
+              setCurrentView('board'); // Navigate to board view instead of non-existent daily view
             }} 
           />
         )}
