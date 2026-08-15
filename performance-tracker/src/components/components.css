@@ -784,6 +784,8 @@
   font-weight: 500;
   transition: all var(--transition-fast);
   white-space: nowrap;
+  width: auto; /* Override global .action-btn width */
+  height: auto; /* Override global .action-btn height */
 }
 
 .data-actions .action-btn:hover {
