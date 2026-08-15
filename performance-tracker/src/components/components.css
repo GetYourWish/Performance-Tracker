@@ -189,6 +189,12 @@
   opacity: 1;
 }
 
+/* Override global .action-btn fixed dimensions for task action buttons */
+.task-actions .action-btn {
+  width: 32px;
+  height: 32px;
+}
+
 .action-btn {
   width: 32px;
   height: 32px;
@@ -841,22 +847,23 @@
 
 /* Insertion point for dropping category markers */
 .insertion-point {
-  height: 4px;
+  height: 8px;
   margin: 2px 0;
   border-radius: 2px;
   transition: all 0.15s ease;
   background: transparent;
+  pointer-events: auto; /* Ensure it can receive drop events */
 }
 
 .insertion-point.is-over {
   background: #3b82f6;
-  height: 6px;
+  height: 8px;
   margin: 0;
 }
 
 /* Make insertion points visible on hover when dragging a category */
 .board-list:has(.category-chip[draggable]) .insertion-point {
-  background: rgba(59, 130, 246, 0.1);
+  background: rgba(59, 130, 246, 0.2);
 }
 
 /* Empty state for board */
