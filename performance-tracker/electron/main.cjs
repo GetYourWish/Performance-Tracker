@@ -248,8 +248,8 @@ ipcMain.handle('get-app-state', async () => {
 ipcMain.handle('set-app-state', async (event, newState) => {
   const appState = { ...newState };
   await fs.writeFile(appStatePath, JSON.stringify(appState, null, 2));
-  if (newState.dataFilePath) {
-    dataFilePath = newState.dataFilePath;
+  if (newState.dataPath) {
+    dataFilePath = newState.dataPath;
     await setupWatcher();
   }
 });
