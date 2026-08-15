@@ -30,7 +30,7 @@ async function initializeDataPath() {
   }
 
   // Default location: SyncThis folder next to executable (per spec)
-  const exeDir = path.dirname(process.execPath);
+  const exeDir = app.isPackaged ? path.dirname(process.execPath) : app.getAppPath();
   const syncThisDir = path.join(exeDir, 'SyncThis');
   const defaultPath = path.join(syncThisDir, 'tracker.json');
   
@@ -252,7 +252,7 @@ ipcMain.handle('set-app-state', async (event, newState) => {
 
 // Get default path - returns SyncThis folder next to executable per spec
 ipcMain.handle('get-default-path', async () => {
-  const exeDir = path.dirname(process.execPath);
+  const exeDir = app.isPackaged ? path.dirname(process.execPath) : app.getAppPath();
   const syncThisDir = path.join(exeDir, 'SyncThis');
   const defaultPath = path.join(syncThisDir, 'tracker.json');
   

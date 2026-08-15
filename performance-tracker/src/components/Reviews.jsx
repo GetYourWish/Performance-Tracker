@@ -249,8 +249,11 @@ function Reviews({ data, onDayClick }) {
                     <Cell 
                       key={index} 
                       fill={entry.score > 0 ? '#60a5fa' : 'var(--bg-tertiary)'}
-                      onClick={() => onDayClick && onDayClick(parseDate(entry.date))}
-                      style={{ cursor: onDayClick ? 'pointer' : 'default' }}
+                      onClick={() => {
+                        setSelectedDate(parseDate(entry.date));
+                        setReviewType('daily');
+                      }}
+                      style={{ cursor: 'pointer' }}
                     />
                   ))}
                   <Bar dataKey="score" radius={[4, 4, 0, 0]} />
@@ -278,12 +281,8 @@ function Reviews({ data, onDayClick }) {
                   }}
                   title={`${cell.date}: Score ${cell.value.toFixed(1)}`}
                   onClick={() => {
-                    if (onDayClick) {
-                      onDayClick(parseDate(cell.date))
-                    } else {
-                      setSelectedDate(parseDate(cell.date))
-                      setReviewType('daily')
-                    }
+                    setSelectedDate(parseDate(cell.date));
+                    setReviewType('daily');
                   }}
                 />
               ))}

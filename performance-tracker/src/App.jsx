@@ -300,10 +300,7 @@ function App() {
           <Reviews 
             data={data} 
             selectedDate={selectedDate}
-            onDayClick={(date) => {
-              setSelectedDate(date);
-              setCurrentView('board'); // Navigate to board view instead of non-existent daily view
-            }} 
+            onDayClick={(date) => setSelectedDate(date)} 
           />
         )}
         {currentView === 'settings' && (
