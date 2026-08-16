@@ -20,6 +20,25 @@
   --radius-lg: 12px;
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
+  /* Aurora colors - light theme */
+  --aurora-1: rgba(59,130,246,0.18);
+  --aurora-2: rgba(168,85,247,0.16);
+  --aurora-3: rgba(34,197,94,0.14);
+  /* Glass effect */
+  --glass-bg: rgba(255,255,255,0.55);
+  --glass-border: rgba(255,255,255,0.6);
+  --glass-blur: 16px;
+  --glass-shadow: 0 24px 60px -20px rgba(15,23,42,0.25);
+  /* Row backgrounds */
+  --row-fill: rgba(15,23,42,0.04);
+  --row-fill-hover: rgba(15,23,42,0.08);
+  /* Canvas gradient */
+  --canvas-from: #EEF2FF;
+  --canvas-to: #E0E7FF;
+  /* Momentum colors */
+  --momentum-streak: #10B981;
+  --momentum-neutral: #3B82F6;
+  --momentum-stalled: #F59E0B;
 }
 
 [data-theme="dark"] {
@@ -33,6 +52,25 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+  /* Aurora colors - dark theme */
+  --aurora-1: rgba(59,130,246,0.22);
+  --aurora-2: rgba(168,85,247,0.20);
+  --aurora-3: rgba(34,197,94,0.16);
+  /* Glass effect */
+  --glass-bg: rgba(17,20,28,0.55);
+  --glass-border: rgba(255,255,255,0.08);
+  --glass-blur: 16px;
+  --glass-shadow: 0 24px 60px -20px rgba(0,0,0,0.6);
+  /* Row backgrounds */
+  --row-fill: rgba(255,255,255,0.04);
+  --row-fill-hover: rgba(255,255,255,0.08);
+  /* Canvas gradient */
+  --canvas-from: #0B0D12;
+  --canvas-to: #11141C;
+  /* Momentum colors */
+  --momentum-streak: #34D399;
+  --momentum-neutral: #60A5FA;
+  --momentum-stalled: #F59E0B;
 }
 
 body {
