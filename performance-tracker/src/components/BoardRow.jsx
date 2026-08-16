@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { motion } from 'framer-motion'
 
 const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing, onEdit, onUpdate, onCancelEdit, onDelete, onComplete, onConfirmDelete, onMoveUp, onMoveDown }) {
   const {
@@ -25,8 +26,12 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
 
   if (marker) {
     return (
-      <div 
+      <motion.div 
         ref={setNodeRef}
+        layout
+        initial={{ opacity: 0, scaleY: 0 }}
+        animate={{ opacity: 1, scaleY: 1 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 24 }}
         style={style}
         className="board-row marker-row"
         role="listitem"
@@ -79,13 +84,18 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
         >
           ✕
         </button>
-      </div>
+      </motion.div>
     )
   }
 
   return (
-    <div 
+    <motion.div 
       ref={setNodeRef}
+      layout
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.96, rotateX: 90 }}
+      transition={{ type: 'spring', stiffness: 170, damping: 26 }}
       style={style}
       className={`board-row task-row ${isEditing ? 'editing' : ''}`}
       role="listitem"
@@ -180,7 +190,7 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
           🗑
         </button>
       </div>
-    </div>
+    </motion.div>
   )
 })
 
