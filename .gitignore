@@ -1,37 +1,93 @@
-```gitignore
+```
 # Dependencies
 node_modules/
-
-# Build artifacts
-dist/
-build/
-*.js.map
-
-# Logs and temp files
-*.log
-*.tmp
 
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
 
-# Editors
-.vscode/
-.idea/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# Logs
+*.log
 
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# OS
+# Build outputs
+dist/
+build/
+target/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage*
+.nox/
+.pytest_cache/
+.mypy_cache/
+
+# Compiled and binary files
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.out
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# System files
 .DS_Store
 Thumbs.db
+
+# Gradle
+.gradle/
+
+# MyPy
+.mypy_cache/
+
+# PyTest
+.pytest_cache/
 ```
