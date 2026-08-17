@@ -289,7 +289,7 @@ function Reviews({ data, onDayClick }) {
             className={`tab ${reviewType === 'weekly' ? 'active' : ''}`}
             onClick={() => setReviewType('weekly')}
           >
-            Weekly
+            Flow State
           </button>
           <button 
             className={`tab ${reviewType === 'heatmap' ? 'active' : ''}`}
@@ -425,6 +425,7 @@ function Reviews({ data, onDayClick }) {
               categories={categories}
               difficulties={difficulties}
               range={streamRange}
+              flowStateColor={settings.flowStateColor}
             />
           </div>
         )}
