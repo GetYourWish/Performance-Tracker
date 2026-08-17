@@ -1,11 +1,16 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { stack, stackOffsetWiggle, stackOrderInsideOut, area, curveCatmullRom } from 'd3-shape'
+import { scaleLinear } from 'd3-scale'
 import { format, eachDayOfInterval, startOfDay, endOfDay, subDays } from 'date-fns'
 import { formatDate } from '../utils/helpers'
 
 export default function ChronoStream({ tasks, categories, difficulties, range }) {
   const [hoveredX, setHoveredX] = useState(null)
+  
+  // SVG dimensions
+  const SVG_WIDTH = 800
+  const SVG_HEIGHT = 300
   
   // Determine date range based on prop
   const dateRange = useMemo(() => {
@@ -69,15 +74,37 @@ export default function ChronoStream({ tasks, categories, difficulties, range })
     
     const stackedData = stackGen(binnedData)
     
-    // X scale: map day index to 0-100 SVG coordinate space
+    // Find min and max of stacked data for Y scale domain
+    let minStack = 0
+    let maxStack = 0
+    stackedData.forEach(layer => {
+      layer.forEach(d => {
+        if (d[0] < minStack) minStack = d[0]
+        if (d[1] > maxStack) maxStack = d[1]
+      })
+    })
+    
+    // Add some padding to the Y domain
+    const yPadding = (maxStack - minStack) * 0.1 || 1
+    minStack -= yPadding
+    maxStack += yPadding
+    
+    // X scale: map day index to SVG width
     const numDays = binnedData.length
-    const xScaleFn = (dayIndex) => (dayIndex / Math.max(numDays - 1, 1)) * 100
+    const xScaleFn = scaleLinear()
+      .domain([0, numDays - 1])
+      .range([0, SVG_WIDTH])
+    
+    // Y scale: map stack values to SVG height (inverted because SVG Y goes down)
+    const yScaleFn = scaleLinear()
+      .domain([minStack, maxStack])
+      .range([SVG_HEIGHT, 0])
     
     // Area generator with smooth curves
     const areaGen = area()
       .x((d, i) => xScaleFn(i))
-      .y0(d => d[0])
-      .y1(d => d[1])
+      .y0(d => yScaleFn(d[0]))
+      .y1(d => yScaleFn(d[1]))
       .curve(curveCatmullRom.alpha(0.5))
     
     // Generate path strings for each category layer
@@ -145,7 +172,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range })
         textAlign: 'center',
         color: 'var(--text-muted)'
       }}>
-        No completed tasks in this time range
+        No data for this range
       </div>
     )
   }
@@ -153,14 +180,14 @@ export default function ChronoStream({ tasks, categories, difficulties, range })
   return (
     <div className="chrono-stream-container" style={{ position: 'relative' }}>
       <svg
-        viewBox="0 0 100 100"
+        viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
         preserveAspectRatio="none"
         className="chrono-stream"
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         style={{
           width: '100%',
-          height: '200px',
+          height: '300px',
           background: 'var(--bg-secondary)',
           borderRadius: 'var(--radius-lg)',
           cursor: 'crosshair'
@@ -169,7 +196,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range })
         {paths.map((pathData) => (
           <motion.path
             key={pathData.key}
-            d={pathData.pathD}
+            d={pathData.pathD || ''}
             fill={pathData.color}
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.7 }}

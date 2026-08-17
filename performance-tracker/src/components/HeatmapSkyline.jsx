@@ -37,9 +37,6 @@ export default function HeatmapSkyline({ heatmapData, categories }) {
     })
   }, [heatmapData, categories])
   
-  // Calculate max value for height scaling
-  const maxValue = Math.max(...heatmapData.map(d => d.value), 1)
-  
   // Group days into weeks for grid layout
   const weeks = useMemo(() => {
     const result = []
@@ -83,29 +80,32 @@ export default function HeatmapSkyline({ heatmapData, categories }) {
       <div
         className="skyline-3d-container"
         style={{
-          perspective: '1000px',
+          transform: 'perspective(1200px) rotateX(55deg) rotateZ(45deg)',
           transformStyle: 'preserve-3d',
-          padding: '40px 20px 20px',
+          width: '100%',
+          height: '400px',
+          overflow: 'visible',
+          position: 'relative',
+          margin: '40px 0',
+          padding: '20px',
           background: 'var(--bg-secondary)',
-          borderRadius: 'var(--radius-lg)',
-          overflow: 'visible'
+          borderRadius: 'var(--radius-lg)'
         }}
       >
         <div
           className="skyline-grid"
           style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${weeks[0]?.length || 7}, 1fr)`,
+            display: 'flex',
+            flexWrap: 'wrap',
             gap: '4px',
-            transform: 'perspective(1000px) rotateX(55deg) rotateZ(-45deg)',
             transformStyle: 'preserve-3d',
             maxWidth: '100%',
             margin: '0 auto'
           }}
         >
           {heatmapWithColors.map((cell, index) => {
-            const height = cell.value > 0 ? Math.max(cell.value * 8, 4) : 2
-            const barHeight = `${height}px`
+            // Clamp bar height: 1 point = 10px, max 150px, fallback 4px if value is 0
+            const barHeight = cell.value === 0 ? 4 : Math.min((cell.value * 10), 150)
             
             return (
               <div
@@ -116,28 +116,56 @@ export default function HeatmapSkyline({ heatmapData, categories }) {
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'flex-end',
-                  height: '60px',
+                  width: '12px',
+                  height: '160px',
                   position: 'relative'
                 }}
                 onMouseEnter={(e) => handleCellHover(cell, e)}
                 onMouseLeave={handleCellLeave}
               >
-                {/* 3D Bar */}
+                {/* 3D Bar with extrusion effect */}
                 <div
                   className="skyline-bar"
                   style={{
                     width: '100%',
-                    height: barHeight,
+                    height: `${barHeight}px`,
                     backgroundColor: cell.dominantColor,
                     borderRadius: '2px 2px 0 0',
                     transition: 'height 0.5s ease, background-color 0.5s ease',
-                    boxShadow: cell.value > 0 
-                      ? `0 0 10px ${cell.dominantColor}40, inset 0 1px 0 rgba(255,255,255,0.2)`
-                      : 'none',
+                    transformStyle: 'preserve-3d',
                     transform: 'translateZ(0)',
-                    transformStyle: 'preserve-3d'
+                    boxShadow: cell.value > 0 
+                      ? `0 0 8px ${cell.dominantColor}50, inset 0 1px 0 rgba(255,255,255,0.3), 
+                         2px 2px 4px rgba(0,0,0,0.3)`
+                      : 'none',
+                    position: 'relative'
                   }}
-                />
+                >
+                  {/* Front face highlight for 3D effect */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: '3px',
+                      background: 'rgba(0,0,0,0.2)',
+                      borderRadius: '0 0 2px 2px'
+                    }}
+                  />
+                  {/* Top face highlight */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: '2px',
+                      background: 'rgba(255,255,255,0.3)',
+                      borderRadius: '2px 2px 0 0'
+                    }}
+                  />
+                </div>
               </div>
             )
           })}
