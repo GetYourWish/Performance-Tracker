@@ -3,7 +3,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { format, eachDayOfInterval, subDays } from 'date-fns'
 import { formatDate } from '../utils/helpers'
 
-export default function ChronoStream({ tasks, categories, difficulties, range }) {
+export default function ChronoStream({ tasks, categories, difficulties, range, flowStateColor = '#8b5cf6' }) {
   // Determine date range based on prop
   const dateRange = useMemo(() => {
     const today = new Date()
@@ -19,45 +19,52 @@ export default function ChronoStream({ tasks, categories, difficulties, range })
     return { start: subDays(today, 6), end: today }
   }, [range, tasks])
   
-  // Transform data for Recharts stacked area chart
+  // Transform data for Recharts area chart - single score per day
   const chartData = useMemo(() => {
     const days = eachDayOfInterval({ start: dateRange.start, end: dateRange.end })
-    const activeCategories = categories.filter(c => c.active !== false)
-    const categoryIds = activeCategories.map(c => c.id)
     
     return days.map(day => {
       const dayStr = formatDate(day)
-      const entry = {
-        date: dayStr,
-        dayName: format(day, 'EEE'),
-        fullDate: format(day, 'MMM d')
-      }
+      const daysTasks = tasks.filter(t => t.completion?.completedDate === dayStr)
       
-      // Count tasks per category for this day
-      activeCategories.forEach(cat => {
-        const count = tasks.filter(t => 
-          t.completion?.completedDate === dayStr && 
-          t.completion?.categoryId === cat.id
-        ).length
-        entry[cat.name] = count
+      // Calculate total score for the day using the same logic as calculateDayScore
+      let score = 0
+      let fatigueMultiplier = 1
+      const sortedTasks = [...daysTasks].sort((a, b) => {
+        const aDiff = difficulties.find(d => d.id === a.completion?.difficultyId)?.score || 0
+        const bDiff = difficulties.find(d => d.id === b.completion?.difficultyId)?.score || 0
+        return bDiff - aDiff
       })
       
-      return entry
+      sortedTasks.forEach((task, index) => {
+        const difficulty = difficulties.find(d => d.id === task.completion?.difficultyId)
+        const baseScore = difficulty?.score || 0
+        score += baseScore * fatigueMultiplier
+        fatigueMultiplier += 0.10 // Default fatigue increment
+        if (fatigueMultiplier > 3.0) fatigueMultiplier = 3.0 // Default fatigue cap
+      })
+      
+      return {
+        date: dayStr,
+        dayName: format(day, 'EEE'),
+        fullDate: format(day, 'MMM d'),
+        score,
+        count: daysTasks.length
+      }
     })
-  }, [tasks, categories, dateRange])
+  }, [tasks, difficulties, dateRange])
   
-  const activeCategories = useMemo(() => 
-    categories.filter(c => c.active !== false), 
-    [categories]
-  )
+  // Filter out future dates and ensure we stop at today
+  const filteredData = useMemo(() => {
+    const today = new Date()
+    today.setHours(23, 59, 59, 999)
+    return chartData.filter(d => new Date(d.date) <= today)
+  }, [chartData])
   
   // Custom tooltip for dark theme
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
-      const dayData = chartData.find(d => d.date === label || d.dayName === label)
-      const totalTasks = activeCategories.reduce((sum, cat) => {
-        return sum + (dayData?.[cat.name] || 0)
-      }, 0)
+      const dayData = filteredData.find(d => d.date === label || d.dayName === label)
       
       return (
         <div style={{
@@ -82,37 +89,23 @@ export default function ChronoStream({ tasks, categories, difficulties, range })
             color: 'var(--text-secondary)',
             marginBottom: '4px'
           }}>
-            {totalTasks} task{totalTasks !== 1 ? 's' : ''} completed
+            Total Score: {dayData?.score.toFixed(1) || 0}
           </div>
-          {activeCategories.map(cat => {
-            const count = dayData?.[cat.name] || 0
-            if (count === 0) return null
-            return (
-              <div key={cat.id} style={{
-                fontSize: '11px',
-                color: 'var(--text-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                marginTop: '4px'
-              }}>
-                <span style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: cat.color
-                }} />
-                {cat.name}: {count}
-              </div>
-            )
-          })}
+          <div style={{ 
+            fontSize: '11px', 
+            color: 'var(--text-primary)'
+          }}>
+            Tasks Completed: {dayData?.count || 0}
+          </div>
         </div>
       )
     }
     return null
   }
   
-  if (chartData.length === 0 || activeCategories.length === 0) {
+  const chartColor = flowStateColor || '#8b5cf6'
+  
+  if (filteredData.length === 0) {
     return (
       <div className="chrono-stream" style={{ 
         background: 'var(--bg-secondary)', 
@@ -129,37 +122,28 @@ export default function ChronoStream({ tasks, categories, difficulties, range })
   return (
     <div className="chrono-stream-container" style={{ position: 'relative' }}>
       <ResponsiveContainer width="100%" height={300}>
-        <AreaChart data={chartData}>
-          <defs>
-            {activeCategories.map(cat => (
-              <linearGradient key={cat.id} id={`color-${cat.id}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={cat.color} stopOpacity={0.8}/>
-                <stop offset="95%" stopColor={cat.color} stopOpacity={0.3}/>
-              </linearGradient>
-            ))}
-          </defs>
+        <AreaChart data={filteredData}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
           <XAxis 
             dataKey="dayName" 
             tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
             axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
             tickLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+            type="category"
           />
           <YAxis 
             hide
           />
           <Tooltip content={<CustomTooltip />} />
-          {activeCategories.map(cat => (
-            <Area
-              key={cat.id}
-              type="monotone"
-              dataKey={cat.name}
-              stackId="1"
-              stroke={cat.color}
-              fill={cat.color}
-              fillOpacity={0.6}
-            />
-          ))}
+          <Area
+            type="monotone"
+            dataKey="score"
+            stroke={chartColor}
+            fill={chartColor}
+            fillOpacity={0.4}
+            dot={{ fill: chartColor, r: 3 }}
+            activeDot={{ r: 5 }}
+          />
         </AreaChart>
       </ResponsiveContainer>
     </div>

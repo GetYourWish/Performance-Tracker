@@ -582,6 +582,22 @@
   transform: scale(1.2);
 }
 
+/* Rigid GitHub-style heatmap grid */
+.heatmap-flat-grid {
+  overflow-x: auto !important;
+}
+
+.heatmap-flat-grid .heatmap-cell {
+  width: 12px !important;
+  height: 12px !important;
+  min-width: 12px !important;
+  max-width: 12px !important;
+  min-height: 12px !important;
+  max-height: 12px !important;
+  flex-shrink: 0 !important;
+  border-radius: 2px !important;
+}
+
 .heatmap-legend {
   display: flex;
   align-items: center;

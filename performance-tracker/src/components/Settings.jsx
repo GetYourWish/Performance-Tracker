@@ -329,6 +329,19 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
                 <option value="dark">Dark</option>
               </select>
             </div>
+            
+            <div className="setting-item">
+              <label>Flow State Chart Color</label>
+              <input
+                type="color"
+                value={settings.flowStateColor || '#8b5cf6'}
+                onChange={(e) => handleSettingChange('flowStateColor', e.target.value)}
+                style={{ width: '60px', height: '40px', padding: '2px' }}
+              />
+              <p className="setting-note">
+                Choose the color for the Flow State chart
+              </p>
+            </div>
           </div>
         )}
 

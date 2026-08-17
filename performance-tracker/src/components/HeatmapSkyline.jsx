@@ -13,30 +13,6 @@ export default function HeatmapGrid({ heatmapData, categories }) {
     return '#39d353'                   // High
   }
   
-  // Group days into weeks for grid layout (7 rows x ~52 columns)
-  const weeks = useMemo(() => {
-    const result = []
-    let currentWeek = []
-    
-    heatmapData.forEach((cell, index) => {
-      const dayOfWeek = cell.day.getDay()
-      // Adjust for week starting on Monday (1) vs Sunday (0)
-      const adjustedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-      
-      if (adjustedDay === 0 && currentWeek.length > 0) {
-        result.push(currentWeek)
-        currentWeek = []
-      }
-      currentWeek.push(cell)
-      
-      if (index === heatmapData.length - 1) {
-        result.push(currentWeek)
-      }
-    })
-    
-    return result
-  }, [heatmapData])
-  
   const handleCellHover = (cell, event) => {
     const rect = event.currentTarget.getBoundingClientRect()
     setHoveredCell({
@@ -52,19 +28,21 @@ export default function HeatmapGrid({ heatmapData, categories }) {
   
   return (
     <div className="heatmap-grid-container" style={{ position: 'relative' }}>
-      {/* Flat GitHub-style heatmap */}
+      {/* Flat GitHub-style heatmap - Rigid grid */}
       <div
         className="heatmap-flat-grid"
         style={{
           display: 'grid',
-          gridTemplateRows: 'repeat(7, 1fr)',
+          gridTemplateRows: 'repeat(7, 12px)',
           gridAutoFlow: 'column',
           gap: '3px',
           padding: '16px',
           background: 'var(--bg-secondary)',
           borderRadius: 'var(--radius-lg)',
           width: 'fit-content',
-          maxWidth: '100%'
+          maxWidth: '100%',
+          overflowX: 'auto',
+          flexShrink: 0
         }}
       >
         {heatmapData.map((cell, index) => {
@@ -77,10 +55,15 @@ export default function HeatmapGrid({ heatmapData, categories }) {
               style={{
                 width: '12px',
                 height: '12px',
+                minWidth: '12px',
+                maxWidth: '12px',
+                minHeight: '12px',
+                maxHeight: '12px',
                 borderRadius: '2px',
                 backgroundColor: bgColor,
                 cursor: 'pointer',
-                transition: 'transform 0.1s ease'
+                transition: 'transform 0.1s ease',
+                flexShrink: 0
               }}
               onMouseEnter={(e) => handleCellHover(cell, e)}
               onMouseLeave={handleCellLeave}
