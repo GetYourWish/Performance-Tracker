@@ -1,17 +1,9 @@
 import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
-import { stack, stackOffsetWiggle, stackOrderInsideOut, area, curveCatmullRom } from 'd3-shape'
-import { scaleLinear } from 'd3-scale'
-import { format, eachDayOfInterval, startOfDay, endOfDay, subDays } from 'date-fns'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { format, eachDayOfInterval, subDays } from 'date-fns'
 import { formatDate } from '../utils/helpers'
 
 export default function ChronoStream({ tasks, categories, difficulties, range }) {
-  const [hoveredX, setHoveredX] = useState(null)
-  
-  // SVG dimensions
-  const SVG_WIDTH = 800
-  const SVG_HEIGHT = 300
-  
   // Determine date range based on prop
   const dateRange = useMemo(() => {
     const today = new Date()
@@ -20,7 +12,6 @@ export default function ChronoStream({ tasks, categories, difficulties, range })
     } else if (range === 'month') {
       return { start: subDays(today, 29), end: today }
     } else if (range === 'all') {
-      // Find the earliest task date
       const dates = tasks.map(t => t.completion?.completedDate).filter(Boolean).sort()
       if (dates.length === 0) return { start: today, end: today }
       return { start: new Date(dates[0]), end: today }
@@ -28,142 +19,100 @@ export default function ChronoStream({ tasks, categories, difficulties, range })
     return { start: subDays(today, 6), end: today }
   }, [range, tasks])
   
-  // Bin tasks by day and category
-  const binnedData = useMemo(() => {
+  // Transform data for Recharts stacked area chart
+  const chartData = useMemo(() => {
     const days = eachDayOfInterval({ start: dateRange.start, end: dateRange.end })
-    const categoryIds = categories.filter(c => c.active !== false).map(c => c.id)
+    const activeCategories = categories.filter(c => c.active !== false)
+    const categoryIds = activeCategories.map(c => c.id)
     
-    // Initialize data structure for each day
-    const dataByDay = days.map(day => {
+    return days.map(day => {
       const dayStr = formatDate(day)
-      const entry = { date: dayStr, day }
-      categoryIds.forEach(catId => { entry[catId] = 0 })
+      const entry = {
+        date: dayStr,
+        dayName: format(day, 'EEE'),
+        fullDate: format(day, 'MMM d')
+      }
+      
+      // Count tasks per category for this day
+      activeCategories.forEach(cat => {
+        const count = tasks.filter(t => 
+          t.completion?.completedDate === dayStr && 
+          t.completion?.categoryId === cat.id
+        ).length
+        entry[cat.name] = count
+      })
+      
       return entry
     })
-    
-    // Count tasks per day per category
-    tasks.forEach(task => {
-      if (!task.completion || !task.completion.completedDate) return
-      const taskDate = task.completion.completedDate
-      const catId = task.completion.categoryId
-      if (!catId || !categoryIds.includes(catId)) return
-      
-      const dayEntry = dataByDay.find(d => d.date === taskDate)
-      if (dayEntry) {
-        dayEntry[catId] += 1
-      }
-    })
-    
-    return dataByDay
   }, [tasks, categories, dateRange])
   
-  // Generate streamgraph using D3
-  const { series, xScale, paths } = useMemo(() => {
-    const categoryIds = categories.filter(c => c.active !== false).map(c => c.id)
-    const categoryMap = new Map(categories.map(c => [c.id, c]))
-    
-    if (binnedData.length === 0 || categoryIds.length === 0) {
-      return { series: [], xScale: () => 0, paths: [] }
-    }
-    
-    // Create stack generator with wiggle offset for flowing effect
-    const stackGen = stack()
-      .keys(categoryIds)
-      .offset(stackOffsetWiggle)
-      .order(stackOrderInsideOut)
-    
-    const stackedData = stackGen(binnedData)
-    
-    // Find min and max of stacked data for Y scale domain
-    let minStack = 0
-    let maxStack = 0
-    stackedData.forEach(layer => {
-      layer.forEach(d => {
-        if (d[0] < minStack) minStack = d[0]
-        if (d[1] > maxStack) maxStack = d[1]
-      })
-    })
-    
-    // Add some padding to the Y domain
-    const yPadding = (maxStack - minStack) * 0.1 || 1
-    minStack -= yPadding
-    maxStack += yPadding
-    
-    // X scale: map day index to SVG width
-    const numDays = binnedData.length
-    const xScaleFn = scaleLinear()
-      .domain([0, numDays - 1])
-      .range([0, SVG_WIDTH])
-    
-    // Y scale: map stack values to SVG height (inverted because SVG Y goes down)
-    const yScaleFn = scaleLinear()
-      .domain([minStack, maxStack])
-      .range([SVG_HEIGHT, 0])
-    
-    // Area generator with smooth curves
-    const areaGen = area()
-      .x((d, i) => xScaleFn(i))
-      .y0(d => yScaleFn(d[0]))
-      .y1(d => yScaleFn(d[1]))
-      .curve(curveCatmullRom.alpha(0.5))
-    
-    // Generate path strings for each category layer
-    const pathData = stackedData.map((layer, idx) => {
-      const catId = layer.key
-      const category = categoryMap.get(catId)
-      const pathD = areaGen(layer)
-      return {
-        key: catId,
-        color: category?.color || '#888',
-        name: category?.name || 'Unknown',
-        pathD,
-        values: layer.map(d => ({ y0: d[0], y1: d[1] }))
-      }
-    })
-    
-    return { series: stackedData, xScale: xScaleFn, paths: pathData }
-  }, [binnedData, categories])
+  const activeCategories = useMemo(() => 
+    categories.filter(c => c.active !== false), 
+    [categories]
+  )
   
-  // Handle mouse movement for tooltip
-  const handleMouseMove = (e) => {
-    const svg = e.currentTarget
-    const rect = svg.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const normalizedX = x / rect.width
-    setHoveredX(normalizedX)
+  // Custom tooltip for dark theme
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const dayData = chartData.find(d => d.date === label || d.dayName === label)
+      const totalTasks = activeCategories.reduce((sum, cat) => {
+        return sum + (dayData?.[cat.name] || 0)
+      }, 0)
+      
+      return (
+        <div style={{
+          background: 'var(--glass-bg)',
+          backdropFilter: 'blur(var(--glass-blur)) saturate(1.2)',
+          border: '1px solid var(--glass-border)',
+          borderRadius: 'var(--radius-md)',
+          padding: '12px',
+          minWidth: '150px',
+          boxShadow: 'var(--shadow-lg)'
+        }}>
+          <div style={{ 
+            fontWeight: 600, 
+            marginBottom: '8px',
+            color: 'var(--text-primary)',
+            fontSize: '13px'
+          }}>
+            {dayData?.fullDate || label}
+          </div>
+          <div style={{ 
+            fontSize: '12px', 
+            color: 'var(--text-secondary)',
+            marginBottom: '4px'
+          }}>
+            {totalTasks} task{totalTasks !== 1 ? 's' : ''} completed
+          </div>
+          {activeCategories.map(cat => {
+            const count = dayData?.[cat.name] || 0
+            if (count === 0) return null
+            return (
+              <div key={cat.id} style={{
+                fontSize: '11px',
+                color: 'var(--text-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginTop: '4px'
+              }}>
+                <span style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: cat.color
+                }} />
+                {cat.name}: {count}
+              </div>
+            )
+          })}
+        </div>
+      )
+    }
+    return null
   }
   
-  const handleMouseLeave = () => {
-    setHoveredX(null)
-  }
-  
-  // Calculate tooltip data
-  const tooltipData = useMemo(() => {
-    if (hoveredX === null || binnedData.length === 0) return null
-    
-    const numDays = binnedData.length
-    const dayIndex = Math.min(
-      Math.max(Math.round(hoveredX * (numDays - 1)), 0),
-      numDays - 1
-    )
-    const dayData = binnedData[dayIndex]
-    if (!dayData) return null
-    
-    // Get tasks for this day
-    const dayStr = dayData.date
-    const daysTasks = tasks.filter(t => 
-      t.completion?.completedDate === dayStr
-    )
-    
-    return {
-      date: dayData.day,
-      dateStr: dayStr,
-      tasks: daysTasks,
-      xPercent: hoveredX * 100
-    }
-  }, [hoveredX, binnedData, tasks])
-  
-  if (paths.length === 0) {
+  if (chartData.length === 0 || activeCategories.length === 0) {
     return (
       <div className="chrono-stream" style={{ 
         background: 'var(--bg-secondary)', 
@@ -179,113 +128,40 @@ export default function ChronoStream({ tasks, categories, difficulties, range })
   
   return (
     <div className="chrono-stream-container" style={{ position: 'relative' }}>
-      <svg
-        viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
-        preserveAspectRatio="none"
-        className="chrono-stream"
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-        style={{
-          width: '100%',
-          height: '300px',
-          background: 'var(--bg-secondary)',
-          borderRadius: 'var(--radius-lg)',
-          cursor: 'crosshair'
-        }}
-      >
-        {paths.map((pathData) => (
-          <motion.path
-            key={pathData.key}
-            d={pathData.pathD || ''}
-            fill={pathData.color}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.7 }}
-            transition={{ duration: 0.5 }}
-            style={{
-              mixBlendMode: 'screen'
-            }}
+      <ResponsiveContainer width="100%" height={300}>
+        <AreaChart data={chartData}>
+          <defs>
+            {activeCategories.map(cat => (
+              <linearGradient key={cat.id} id={`color-${cat.id}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={cat.color} stopOpacity={0.8}/>
+                <stop offset="95%" stopColor={cat.color} stopOpacity={0.3}/>
+              </linearGradient>
+            ))}
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+          <XAxis 
+            dataKey="dayName" 
+            tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+            axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+            tickLine={{ stroke: 'rgba(255,255,255,0.1)' }}
           />
-        ))}
-      </svg>
-      
-      {/* Tooltip */}
-      {tooltipData && (
-        <div
-          className="chrono-stream-tooltip"
-          style={{
-            position: 'absolute',
-            left: `${tooltipData.xPercent}%`,
-            top: '10px',
-            transform: 'translateX(-50%)',
-            background: 'var(--glass-bg)',
-            backdropFilter: 'blur(var(--glass-blur)) saturate(1.2)',
-            border: '1px solid var(--glass-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: '12px',
-            minWidth: '180px',
-            maxWidth: '250px',
-            boxShadow: 'var(--shadow-lg)',
-            zIndex: 100,
-            pointerEvents: 'none'
-          }}
-        >
-          <div style={{ 
-            fontWeight: 600, 
-            marginBottom: '8px',
-            color: 'var(--text-primary)',
-            fontSize: '13px'
-          }}>
-            {format(tooltipData.date, 'EEE, MMM d')}
-          </div>
-          <div style={{ 
-            fontSize: '12px', 
-            color: 'var(--text-secondary)',
-            marginBottom: '4px'
-          }}>
-            {tooltipData.tasks.length} task{tooltipData.tasks.length !== 1 ? 's' : ''} completed
-          </div>
-          {tooltipData.tasks.slice(0, 3).map(task => {
-            const category = categories.find(c => c.id === task.completion?.categoryId)
-            return (
-              <div 
-                key={task.id}
-                style={{
-                  fontSize: '11px',
-                  color: 'var(--text-primary)',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                {category && (
-                  <span
-                    style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      backgroundColor: category.color,
-                      flexShrink: 0
-                    }}
-                  />
-                )}
-                {task.text}
-              </div>
-            )
-          })}
-          {tooltipData.tasks.length > 3 && (
-            <div style={{
-              fontSize: '11px',
-              color: 'var(--text-muted)',
-              marginTop: '4px'
-            }}>
-              +{tooltipData.tasks.length - 3} more
-            </div>
-          )}
-        </div>
-      )}
+          <YAxis 
+            hide
+          />
+          <Tooltip content={<CustomTooltip />} />
+          {activeCategories.map(cat => (
+            <Area
+              key={cat.id}
+              type="monotone"
+              dataKey={cat.name}
+              stackId="1"
+              stroke={cat.color}
+              fill={cat.color}
+              fillOpacity={0.6}
+            />
+          ))}
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, getYear, startOfYear, endOfYear } from 'date-fns'
 import { calculateDayScore, parseDate, formatDate, groupTasksByDate } from '../utils/helpers'
 import ChronoStream from './ChronoStream'
-import HeatmapSkyline from './HeatmapSkyline'
+import HeatmapGrid from './HeatmapSkyline'
 
 // Task Detail Popup Component
 function TaskDetailPopup({ task, difficulty, category, onClose }) {
@@ -437,8 +437,8 @@ function Reviews({ data, onDayClick }) {
               <button onClick={() => setHeatmapYear(heatmapYear + 1)}>→</button>
             </div>
 
-            {/* 3D Heatmap Skyline */}
-            <HeatmapSkyline heatmapData={heatmapData} categories={categories} />
+            {/* GitHub-style Flat Heatmap */}
+            <HeatmapGrid heatmapData={heatmapData} categories={categories} />
           </div>
         )}
       </div>
