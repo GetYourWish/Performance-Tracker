@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, getYear, startOfYear, endOfYear } from 'date-fns'
 import { calculateDayScore, parseDate, formatDate, groupTasksByDate } from '../utils/helpers'
+import ChronoStream from './ChronoStream'
+import HeatmapSkyline from './HeatmapSkyline'
 
 // Task Detail Popup Component
 function TaskDetailPopup({ task, difficulty, category, onClose }) {
@@ -250,7 +251,8 @@ function Reviews({ data, onDayClick }) {
       return {
         date: dateStr,
         day,
-        value
+        value,
+        tasks: daysTasks  // Include tasks for dominant color calculation
       }
     })
   }, [heatmapYear, tasksByDate, difficulties, settings])
@@ -268,6 +270,9 @@ function Reviews({ data, onDayClick }) {
   
   // State for task detail popup
   const [selectedTask, setSelectedTask] = useState(null)
+  
+  // State for streamgraph range toggle
+  const [streamRange, setStreamRange] = useState('week')
 
   return (
     <div className="reviews-container">
@@ -391,30 +396,36 @@ function Reviews({ data, onDayClick }) {
               </div>
             </div>
 
-            <div className="weekly-chart">
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={weeklyData.chartData}>
-                  <XAxis dataKey="dayName" />
-                  <YAxis />
-                  <Tooltip 
-                    formatter={(value) => [`${value.toFixed(1)}`, 'Score']}
-                    labelFormatter={(label) => `Day: ${label}`}
-                  />
-                  {weeklyData.chartData.map((entry, index) => (
-                    <Cell 
-                      key={index} 
-                      fill={entry.score > 0 ? '#60a5fa' : 'var(--bg-tertiary)'}
-                      onClick={() => {
-                        setSelectedDate(parseDate(entry.date));
-                        setReviewType('daily');
-                      }}
-                      style={{ cursor: 'pointer' }}
-                    />
-                  ))}
-                  <Bar dataKey="score" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            {/* Streamgraph Range Toggle */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              {['week', 'month', 'all'].map(r => (
+                <button
+                  key={r}
+                  className={`tab ${streamRange === r ? 'active' : ''}`}
+                  onClick={() => setStreamRange(r)}
+                  style={{
+                    padding: '6px 12px',
+                    background: streamRange === r ? 'var(--bg-primary)' : 'var(--bg-secondary)',
+                    borderRadius: 'var(--radius-md)',
+                    color: streamRange === r ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontSize: '13px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all var(--transition-fast)'
+                  }}
+                >
+                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                </button>
+              ))}
             </div>
+
+            {/* Chrono-Stream River Chart */}
+            <ChronoStream
+              tasks={completedTasks}
+              categories={categories}
+              difficulties={difficulties}
+              range={streamRange}
+            />
           </div>
         )}
 
@@ -426,34 +437,8 @@ function Reviews({ data, onDayClick }) {
               <button onClick={() => setHeatmapYear(heatmapYear + 1)}>→</button>
             </div>
 
-            <div className="heatmap-grid">
-              {heatmapData.map((cell, index) => (
-                <div
-                  key={index}
-                  className="heatmap-cell"
-                  style={{
-                    backgroundColor: getColorIntensity(cell.value, maxHeatmapValue)
-                  }}
-                  title={`${cell.date}: Score ${cell.value.toFixed(1)}`}
-                  onClick={() => {
-                    setSelectedDate(parseDate(cell.date));
-                    setReviewType('daily');
-                  }}
-                />
-              ))}
-            </div>
-
-            <div className="heatmap-legend">
-              <span>Less</span>
-              <div className="legend-gradient">
-                <div style={{ backgroundColor: 'var(--bg-tertiary)' }}></div>
-                <div style={{ backgroundColor: '#bbf7d0' }}></div>
-                <div style={{ backgroundColor: '#86efac' }}></div>
-                <div style={{ backgroundColor: '#4ade80' }}></div>
-                <div style={{ backgroundColor: '#22c55e' }}></div>
-              </div>
-              <span>More</span>
-            </div>
+            {/* 3D Heatmap Skyline */}
+            <HeatmapSkyline heatmapData={heatmapData} categories={categories} />
           </div>
         )}
       </div>
