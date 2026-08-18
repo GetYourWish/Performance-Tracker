@@ -4,6 +4,8 @@ import { format, eachDayOfInterval, subDays } from 'date-fns'
 import { formatDate, parseDate } from '../utils/helpers'
 
 export default function ChronoStream({ tasks, categories, difficulties, range, flowStateColor = '#8b5cf6', onDayClick }) {
+  const [hoverDay, setHoverDay] = useState(null)
+  
   // Determine date range based on prop
   const dateRange = useMemo(() => {
     const today = new Date()
@@ -120,9 +122,25 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
   }
   
   return (
-    <div className="chrono-stream-container" style={{ position: 'relative' }}>
+    <div className="chrono-stream-container" style={{ position: 'relative', cursor: hoverDay ? 'pointer' : 'default' }}>
       <ResponsiveContainer width="100%" height={300}>
-        <AreaChart data={filteredData}>
+        <AreaChart 
+          data={filteredData}
+          onMouseMove={(state) => {
+            const point = state?.activePayload?.[0]?.payload
+            setHoverDay(point && point.count > 0 ? point : null)
+          }}
+          onMouseLeave={() => setHoverDay(null)}
+          onClick={(state) => {
+            const point = state?.activePayload?.[0]?.payload
+            if (point && point.count > 0 && onDayClick) {
+              onDayClick(
+                parseDate(point.date),
+                tasks.filter(t => t.completion?.completedDate === point.date)
+              )
+            }
+          }}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
           <XAxis 
             dataKey="dayName" 
@@ -141,38 +159,8 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
             stroke={chartColor}
             fill={chartColor}
             fillOpacity={0.4}
-            dot={(props) => {
-              const { cx, cy, payload } = props;
-              return (
-                <circle
-                  cx={cx}
-                  cy={cy}
-                  r={payload.count > 0 ? 4 : 2}
-                  fill={chartColor}
-                  stroke="rgba(255,255,255,0.2)"
-                  strokeWidth={1}
-                  style={{ cursor: payload.count > 0 ? 'pointer' : 'default' }}
-                  onClick={() => {
-                    if (payload.count > 0 && onDayClick) {
-                      const clickedDate = parseDate(payload.date);
-                      const dayTasks = tasks.filter(t => t.completion?.completedDate === payload.date);
-                      onDayClick(clickedDate, dayTasks);
-                    }
-                  }}
-                />
-              );
-            }}
-            activeDot={{ 
-              r: 6,
-              onClick: (e) => {
-                const payload = e.payload;
-                if (payload.count > 0 && onDayClick) {
-                  const clickedDate = parseDate(payload.date);
-                  const dayTasks = tasks.filter(t => t.completion?.completedDate === payload.date);
-                  onDayClick(clickedDate, dayTasks);
-                }
-              }
-            }}
+            dot={{ fill: chartColor, r: 3, strokeWidth: 0 }}
+            activeDot={{ r: 5 }}
           />
         </AreaChart>
       </ResponsiveContainer>
