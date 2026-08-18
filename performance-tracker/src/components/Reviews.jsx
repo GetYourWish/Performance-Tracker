@@ -114,6 +114,139 @@ function TaskDetailPopup({ task, difficulty, category, onClose }) {
   )
 }
 
+// Day Detail Popup Component
+function DayDetailPopup({ date, tasks, difficulties, categories, onClose }) {
+  const completedDate = new Date(date)
+  const dateStr = formatDate(date)
+  const dayTasks = tasks.filter(t => t.completion?.completedDate === dateStr)
+  
+  return (
+    <div 
+      className="popup-overlay" 
+      onClick={onClose}
+      onKeyDown={(e) => e.key === 'Escape' && onClose()}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="day-detail-title"
+    >
+      <div className="completion-popup" onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 id="day-detail-title">
+            {format(completedDate, 'EEEE, MMMM d, yyyy')}
+          </h3>
+          <button 
+            className="action-btn" 
+            onClick={onClose}
+            aria-label="Close"
+            style={{ background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer' }}
+          >
+            ✕
+          </button>
+        </div>
+        
+        <div style={{ marginBottom: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+          {dayTasks.length} task{dayTasks.length !== 1 ? 's' : ''} completed
+        </div>
+        
+        <div style={{ 
+          maxHeight: '400px', 
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px'
+        }}>
+          {dayTasks.length === 0 ? (
+            <p className="empty-state">No tasks completed on this date</p>
+          ) : (
+            dayTasks.map(task => {
+              const difficulty = difficulties.find(d => d.id === task.completion.difficultyId)
+              const category = categories.find(c => c.id === task.completion.categoryId)
+              const completedTime = task.completion.completedAt 
+                ? format(new Date(task.completion.completedAt), 'h:mm a')
+                : null
+              
+              return (
+                <div 
+                  key={task.id}
+                  style={{
+                    padding: '16px',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-color)'
+                  }}
+                >
+                  <div style={{ marginBottom: '8px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {task.text}
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                    {difficulty && (
+                      <span 
+                        className="difficulty-badge"
+                        style={{ 
+                          backgroundColor: difficulty.color,
+                          padding: '4px 12px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          color: '#fff'
+                        }}
+                      >
+                        {difficulty.label} ({difficulty.score})
+                      </span>
+                    )}
+                    {category && (
+                      <span 
+                        className="category-badge"
+                        style={{ 
+                          backgroundColor: category.color,
+                          padding: '4px 12px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          color: '#fff'
+                        }}
+                      >
+                        {category.name}
+                      </span>
+                    )}
+                    {completedTime && (
+                      <span style={{ 
+                        padding: '4px 12px',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        background: 'var(--bg-tertiary)',
+                        color: 'var(--text-secondary)'
+                      }}>
+                        {completedTime}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {task.completion.note && (
+                    <div style={{ 
+                      padding: '8px 12px',
+                      background: 'var(--bg-tertiary)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '13px',
+                      color: 'var(--text-secondary)',
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      {task.completion.note}
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+        
+        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+          <button className="btn-cancel" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Delete Confirmation Popup Component
 function DeleteConfirmPopup({ task, onConfirm, onCancel }) {
   return (
@@ -153,6 +286,7 @@ function Reviews({ data, onDayClick }) {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [reviewType, setReviewType] = useState('daily')
   const [heatmapYear, setHeatmapYear] = useState(getYear(new Date()))
+  const [selectedDay, setSelectedDay] = useState(null)
 
   const tasks = data?.tasks || []
   const difficulties = data?.difficulties || []
@@ -170,6 +304,11 @@ function Reviews({ data, onDayClick }) {
   const difficultyMap = useMemo(() => {
     return new Map(difficulties.map(d => [d.id, d]))
   }, [difficulties])
+
+  // Handler for day click from heatmap or flow chart
+  const handleDayClick = (date, dayTasks) => {
+    setSelectedDay({ date, tasks: dayTasks })
+  }
 
   // Daily Review Data - OPTIMIZED: Use pre-grouped tasks
   const dailyData = useMemo(() => {
@@ -426,6 +565,7 @@ function Reviews({ data, onDayClick }) {
               difficulties={difficulties}
               range={streamRange}
               flowStateColor={settings.flowStateColor}
+              onDayClick={handleDayClick}
             />
           </div>
         )}
@@ -439,7 +579,7 @@ function Reviews({ data, onDayClick }) {
             </div>
 
             {/* GitHub-style Flat Heatmap */}
-            <HeatmapGrid heatmapData={heatmapData} categories={categories} />
+            <HeatmapGrid heatmapData={heatmapData} categories={categories} onDayClick={handleDayClick} />
           </div>
         )}
       </div>
@@ -451,6 +591,17 @@ function Reviews({ data, onDayClick }) {
           difficulty={difficulties.find(d => d.id === selectedTask.completion.difficultyId)}
           category={categories.find(c => c.id === selectedTask.completion.categoryId)}
           onClose={() => setSelectedTask(null)}
+        />
+      )}
+
+      {/* Day Detail Popup */}
+      {selectedDay && (
+        <DayDetailPopup
+          date={selectedDay.date}
+          tasks={tasks}
+          difficulties={difficulties}
+          categories={categories}
+          onClose={() => setSelectedDay(null)}
         />
       )}
     </div>

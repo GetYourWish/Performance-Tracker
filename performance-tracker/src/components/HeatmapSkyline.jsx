@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { format } from 'date-fns'
 
-export default function HeatmapGrid({ heatmapData, categories }) {
+export default function HeatmapGrid({ heatmapData, categories, onDayClick }) {
   const [hoveredCell, setHoveredCell] = useState(null)
   
   // GitHub-style color scale
@@ -114,11 +114,22 @@ export default function HeatmapGrid({ heatmapData, categories }) {
                   aspectRatio: '1 / 1',
                   borderRadius: '2px',
                   backgroundColor: bgColor,
-                  cursor: 'pointer',
-                  transition: 'transform 0.1s ease'
+                  cursor: cell.value > 0 ? 'pointer' : 'default',
+                  transition: 'all 0.15s ease'
                 }}
-                onMouseEnter={(e) => handleCellHover(cell, e)}
-                onMouseLeave={handleCellLeave}
+                onMouseEnter={(e) => {
+                  handleCellHover(cell, e);
+                  if (cell.value > 0) {
+                    e.currentTarget.style.transform = 'scale(1.3)';
+                    e.currentTarget.style.boxShadow = '0 0 8px rgba(57, 211, 83, 0.6)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  handleCellLeave();
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+                onClick={() => onDayClick && onDayClick(cell.day, cell.tasks)}
               />
             )
           })}
