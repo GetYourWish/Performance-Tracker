@@ -1,25 +1,25 @@
-import { useMemo, useState } from 'react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { format, eachDayOfInterval, subDays } from 'date-fns'
+import { useMemo, useState, useRef } from 'react'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList } from 'recharts'
+import { format, eachDayOfInterval, subDays, startOfWeek, startOfMonth } from 'date-fns'
 import { formatDate, parseDate } from '../utils/helpers'
 
-export default function ChronoStream({ tasks, categories, difficulties, range, flowStateColor = '#8b5cf6', onDayClick }) {
+export default function ChronoStream({ tasks, categories, difficulties, range, flowStateColor = '#8b5cf6', onDayClick, weekStartsOn = 1, isExporting = false, chartRef }) {
   const [hoverDay, setHoverDay] = useState(null)
   
   // Determine date range based on prop
   const dateRange = useMemo(() => {
     const today = new Date()
     if (range === 'week') {
-      return { start: subDays(today, 6), end: today }
+      return { start: startOfWeek(today, { weekStartsOn: weekStartsOn || 1 }), end: today }
     } else if (range === 'month') {
-      return { start: subDays(today, 29), end: today }
+      return { start: startOfMonth(today), end: today }
     } else if (range === 'all') {
       const dates = tasks.map(t => t.completion?.completedDate).filter(Boolean).sort()
       if (dates.length === 0) return { start: today, end: today }
       return { start: new Date(dates[0]), end: today }
     }
     return { start: subDays(today, 6), end: today }
-  }, [range, tasks])
+  }, [range, tasks, weekStartsOn])
   
   // Transform data for Recharts area chart - single score per day
   const chartData = useMemo(() => {
@@ -138,25 +138,113 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
     )
   }
   
-  if (filteredData.length === 0) {
-    return (
-      <div className="chrono-stream" style={{ 
-        background: 'var(--bg-secondary)', 
-        borderRadius: 'var(--radius-lg)',
-        padding: '40px',
-        textAlign: 'center',
-        color: 'var(--text-muted)'
+  // Export layout component
+  const renderExportLayout = () => (
+    <div ref={chartRef} style={{
+      background: '#1a1a2e',
+      padding: '30px',
+      borderRadius: '16px',
+      fontFamily: 'system-ui, -apple-system, sans-serif'
+    }}>
+      <h3 style={{ 
+        color: '#fff', 
+        margin: '0 0 20px 0', 
+        fontSize: '20px',
+        fontWeight: 600
       }}>
-        No data for this range
+        Weekly Flow State Overview
+      </h3>
+      
+      {/* Chart with labels */}
+      <ResponsiveContainer width="100%" height={300}>
+        <AreaChart 
+          data={filteredData}
+          margin={{ top: 10, right: 40, left: 0, bottom: 10 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+          <XAxis 
+            dataKey="dayName" 
+            tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+            axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+            tickLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+            type="category"
+          />
+          <YAxis hide />
+          <Area
+            type="monotone"
+            dataKey="score"
+            stroke={chartColor}
+            fill={chartColor}
+            fillOpacity={0.4}
+          >
+            <LabelList 
+              dataKey="score" 
+              position="top" 
+              fill="#fff" 
+              fontSize={12}
+              formatter={(value) => value.toFixed(1)}
+            />
+          </Area>
+        </AreaChart>
+      </ResponsiveContainer>
+      
+      {/* Summary Grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(7, 1fr)',
+        gap: '12px',
+        marginTop: '24px'
+      }}>
+        {filteredData.map((day) => (
+          <div key={day.date} style={{
+            background: 'rgba(255,255,255,0.05)',
+            borderRadius: '8px',
+            padding: '12px 8px',
+            textAlign: 'center',
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <div style={{
+              fontSize: '11px',
+              color: 'rgba(255,255,255,0.6)',
+              marginBottom: '4px'
+            }}>
+              {day.dayName}
+            </div>
+            <div style={{
+              fontSize: '12px',
+              color: '#fff',
+              fontWeight: 500,
+              marginBottom: '4px'
+            }}>
+              {day.fullDate}
+            </div>
+            <div style={{
+              fontSize: '18px',
+              color: chartColor,
+              fontWeight: 700,
+              marginBottom: '4px'
+            }}>
+              {day.score.toFixed(1)}
+            </div>
+            <div style={{
+              fontSize: '10px',
+              color: 'rgba(255,255,255,0.5)'
+            }}>
+              {day.count} task{day.count !== 1 ? 's' : ''}
+            </div>
+          </div>
+        ))}
       </div>
-    )
-  }
-  
-  return (
+    </div>
+  )
+
+  // Normal view layout
+  const renderNormalView = () => (
     <div className="chrono-stream-container" style={{ position: 'relative', cursor: hoverDay ? 'pointer' : 'default' }}>
       <ResponsiveContainer width="100%" height={300}>
         <AreaChart 
           data={filteredData}
+          margin={{ top: 10, right: 40, left: 0, bottom: 10 }}
           onMouseMove={(state) => {
             const point = state?.activePayload?.[0]?.payload
             setHoverDay(point && point.count > 0 ? point : null)
@@ -180,9 +268,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
             tickLine={{ stroke: 'rgba(255,255,255,0.1)' }}
             type="category"
           />
-          <YAxis 
-            hide
-          />
+          <YAxis hide />
           <Tooltip content={<CustomTooltip />} />
           <Area
             type="monotone"
@@ -197,4 +283,20 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
       </ResponsiveContainer>
     </div>
   )
+
+  if (filteredData.length === 0) {
+    return (
+      <div className="chrono-stream" style={{ 
+        background: 'var(--bg-secondary)', 
+        borderRadius: 'var(--radius-lg)',
+        padding: '40px',
+        textAlign: 'center',
+        color: 'var(--text-muted)'
+      }}>
+        No data for this range
+      </div>
+    )
+  }
+
+  return isExporting ? renderExportLayout() : renderNormalView()
 }

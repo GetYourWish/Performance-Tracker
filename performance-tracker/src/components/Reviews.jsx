@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, getYear, startOfYear, endOfYear } from 'date-fns'
 import { calculateDayScore, parseDate, formatDate, groupTasksByDate } from '../utils/helpers'
 import ChronoStream from './ChronoStream'
 import HeatmapGrid from './HeatmapSkyline'
+import { toPng } from 'html-to-image'
 
 // Task Detail Popup Component
 function TaskDetailPopup({ task, difficulty, category, onClose }) {
@@ -287,6 +288,8 @@ function Reviews({ data, onDayClick }) {
   const [reviewType, setReviewType] = useState('daily')
   const [heatmapYear, setHeatmapYear] = useState(getYear(new Date()))
   const [selectedDay, setSelectedDay] = useState(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const chartRef = useRef(null)
 
   const tasks = data?.tasks || []
   const difficulties = data?.difficulties || []
@@ -413,6 +416,33 @@ function Reviews({ data, onDayClick }) {
   // State for streamgraph range toggle
   const [streamRange, setStreamRange] = useState('week')
 
+  // Export week as image handler
+  const handleExportWeek = async () => {
+    setIsExporting(true)
+    
+    // Wait for the export layout to render
+    setTimeout(async () => {
+      try {
+        if (chartRef.current) {
+          const dataUrl = await toPng(chartRef.current, {
+            backgroundColor: '#1a1a2e',
+            quality: 1.0
+          })
+          
+          // Trigger download
+          const link = document.createElement('a')
+          link.download = `weekly-flow-state-${format(new Date(), 'yyyy-MM-dd')}.png`
+          link.href = dataUrl
+          link.click()
+        }
+      } catch (error) {
+        console.error('Failed to export chart:', error)
+      } finally {
+        setIsExporting(false)
+      }
+    }, 100)
+  }
+
   return (
     <div className="reviews-container">
       <div className="reviews-header">
@@ -536,26 +566,46 @@ function Reviews({ data, onDayClick }) {
             </div>
 
             {/* Streamgraph Range Toggle */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-              {['week', 'month', 'all'].map(r => (
-                <button
-                  key={r}
-                  className={`tab ${streamRange === r ? 'active' : ''}`}
-                  onClick={() => setStreamRange(r)}
-                  style={{
-                    padding: '6px 12px',
-                    background: streamRange === r ? 'var(--bg-primary)' : 'var(--bg-secondary)',
-                    borderRadius: 'var(--radius-md)',
-                    color: streamRange === r ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    fontSize: '13px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    transition: 'all var(--transition-fast)'
-                  }}
-                >
-                  {r.charAt(0).toUpperCase() + r.slice(1)}
-                </button>
-              ))}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {['week', 'month', 'all'].map(r => (
+                  <button
+                    key={r}
+                    className={`tab ${streamRange === r ? 'active' : ''}`}
+                    onClick={() => setStreamRange(r)}
+                    style={{
+                      padding: '6px 12px',
+                      background: streamRange === r ? 'var(--bg-primary)' : 'var(--bg-secondary)',
+                      borderRadius: 'var(--radius-md)',
+                      color: streamRange === r ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      fontSize: '13px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                  >
+                    {r.charAt(0).toUpperCase() + r.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleExportWeek}
+                disabled={isExporting}
+                style={{
+                  background: isExporting ? 'var(--bg-tertiary)' : 'var(--accent-color, #8b5cf6)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  cursor: isExporting ? 'not-allowed' : 'pointer',
+                  opacity: isExporting ? 0.7 : 1,
+                  transition: 'all var(--transition-fast)'
+                }}
+              >
+                {isExporting ? 'Exporting...' : 'Export Week'}
+              </button>
             </div>
 
             {/* Chrono-Stream River Chart */}
@@ -565,7 +615,10 @@ function Reviews({ data, onDayClick }) {
               difficulties={difficulties}
               range={streamRange}
               flowStateColor={settings.flowStateColor}
+              weekStartsOn={settings.weekStartsOn}
               onDayClick={handleDayClick}
+              isExporting={isExporting}
+              chartRef={chartRef}
             />
           </div>
         )}
