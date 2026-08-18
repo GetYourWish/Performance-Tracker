@@ -13,20 +13,27 @@ export default function HeatmapGrid({ heatmapData, categories }) {
     return '#39d353'                   // High
   }
   
-  // Calculate grid position for each cell
-  const getGridPosition = (cellDay) => {
-    const dayOfWeek = cellDay.getDay() // 0-6, where 0 is Sunday
-    const heatmapYear = cellDay.getFullYear()
-    const startOfYear = new Date(heatmapYear, 0, 1)
-    const diffTime = cellDay - startOfYear
-    const dayOfYear = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-    const weekNumber = Math.floor(dayOfYear / 7)
-    
-    return {
-      gridRow: dayOfWeek + 1,      // CSS Grid is 1-indexed
-      gridColumn: weekNumber + 1   // CSS Grid is 1-indexed
-    }
+  // Calculate year and offset from first data point
+  const year = heatmapData.length > 0 ? heatmapData[0].day.getFullYear() : new Date().getFullYear()
+  const startOfYear = new Date(year, 0, 1)
+  const offset = startOfYear.getDay() // 0-6, weekday of Jan 1
+  
+  // Helper to calculate week index for a given date
+  const getWeekIndex = (date) => {
+    const diffTime = date - startOfYear
+    const dayOfYear = Math.round(diffTime / 86400000) // milliseconds in a day
+    return Math.floor((dayOfYear + offset) / 7)
   }
+  
+  // Calculate numWeeks from last cell
+  const numWeeks = useMemo(() => {
+    if (heatmapData.length === 0) return 53
+    const lastCell = heatmapData[heatmapData.length - 1]
+    return getWeekIndex(lastCell.day) + 1
+  }, [heatmapData])
+  
+  // Month names
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   
   const handleCellHover = (cell, event) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -43,96 +50,107 @@ export default function HeatmapGrid({ heatmapData, categories }) {
   
   return (
     <div className="heatmap-grid-container" style={{ position: 'relative' }}>
-      {/* Flat GitHub-style heatmap - Rigid grid */}
+      {/* Outer wrapper card */}
       <div
-        className="heatmap-flat-grid"
         style={{
-          display: 'grid',
-          gridTemplateRows: 'repeat(7, 12px)',
-          gap: '3px',
+          width: '100%',
+          maxWidth: '1000px',
+          margin: '0 auto',
           padding: '16px',
+          boxSizing: 'border-box',
           background: 'var(--bg-secondary)',
-          borderRadius: 'var(--radius-lg)',
-          width: 'fit-content',
-          maxWidth: '100%',
-          overflowX: 'auto',
-          flexShrink: 0
+          borderRadius: 'var(--radius-lg)'
         }}
       >
-        {heatmapData.map((cell, index) => {
-          const bgColor = getCellColor(cell.value)
-          const { gridRow, gridColumn } = getGridPosition(cell.day)
-          
-          return (
+        {/* Month label row - aligned with grid columns */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${numWeeks}, 1fr)`,
+            columnGap: '3px',
+            marginBottom: '4px',
+            fontSize: '11px',
+            color: 'var(--text-muted)'
+          }}
+        >
+          {monthNames.map((month, m) => {
+            const monthDate = new Date(year, m, 1)
+            const weekIndex = getWeekIndex(monthDate)
+            return (
+              <span
+                key={month}
+                style={{ gridColumnStart: weekIndex + 1 }}
+              >
+                {month}
+              </span>
+            )
+          })}
+        </div>
+        
+        {/* Day grid */}
+        <div
+          className="heatmap-flat-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${numWeeks}, 1fr)`,
+            gridTemplateRows: 'repeat(7, auto)',
+            gap: '3px'
+          }}
+        >
+          {heatmapData.map((cell, index) => {
+            const bgColor = getCellColor(cell.value)
+            const dayOfYear = Math.round((cell.day - startOfYear) / 86400000)
+            const weekIndex = Math.floor((dayOfYear + offset) / 7)
+            const rowIndex = cell.day.getDay()
+            
+            return (
+              <div
+                key={index}
+                className="heatmap-cell"
+                style={{
+                  gridColumnStart: weekIndex + 1,
+                  gridRowStart: rowIndex + 1,
+                  width: '100%',
+                  aspectRatio: '1 / 1',
+                  borderRadius: '2px',
+                  backgroundColor: bgColor,
+                  cursor: 'pointer',
+                  transition: 'transform 0.1s ease'
+                }}
+                onMouseEnter={(e) => handleCellHover(cell, e)}
+                onMouseLeave={handleCellLeave}
+              />
+            )
+          })}
+        </div>
+        
+        {/* Legend */}
+        <div
+          className="heatmap-legend"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: '4px',
+            marginTop: '8px',
+            fontSize: '11px',
+            color: 'var(--text-muted)'
+          }}
+        >
+          <span>Less</span>
+          {[0, 0.5, 1.5, 2.5].map((threshold, i) => (
             <div
-              key={index}
-              className="heatmap-cell"
+              key={i}
               style={{
-                gridRow,
-                gridColumn,
                 width: '12px',
                 height: '12px',
-                minWidth: '12px',
-                maxWidth: '12px',
-                minHeight: '12px',
-                maxHeight: '12px',
                 borderRadius: '2px',
-                backgroundColor: bgColor,
-                cursor: 'pointer',
-                transition: 'transform 0.1s ease',
-                flexShrink: 0
+                backgroundColor: getCellColor(threshold)
               }}
-              onMouseEnter={(e) => handleCellHover(cell, e)}
-              onMouseLeave={handleCellLeave}
             />
-          )
-        })}
-      </div>
-      
-      {/* Month labels */}
-      <div
-        className="heatmap-months"
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          padding: '0 16px',
-          marginTop: '8px',
-          fontSize: '11px',
-          color: 'var(--text-muted)'
-        }}
-      >
-        {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(month => (
-          <span key={month}>{month}</span>
-        ))}
-      </div>
-      
-      {/* Legend */}
-      <div
-        className="heatmap-legend"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: '4px',
-          padding: '0 16px',
-          marginTop: '8px',
-          fontSize: '11px',
-          color: 'var(--text-muted)'
-        }}
-      >
-        <span>Less</span>
-        {[0, 0.5, 1.5, 2.5].map((threshold, i) => (
-          <div
-            key={i}
-            style={{
-              width: '12px',
-              height: '12px',
-              borderRadius: '2px',
-              backgroundColor: getCellColor(threshold)
-            }}
-          />
-        ))}
-        <span>More</span>
+          ))}
+          <span>More</span>
+        </div>
       </div>
       
       {/* Tooltip */}
