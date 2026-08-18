@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { format, eachDayOfInterval, subDays } from 'date-fns'
-import { formatDate } from '../utils/helpers'
+import { formatDate, parseDate } from '../utils/helpers'
 
-export default function ChronoStream({ tasks, categories, difficulties, range, flowStateColor = '#8b5cf6' }) {
+export default function ChronoStream({ tasks, categories, difficulties, range, flowStateColor = '#8b5cf6', onDayClick }) {
   // Determine date range based on prop
   const dateRange = useMemo(() => {
     const today = new Date()
@@ -141,8 +141,38 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
             stroke={chartColor}
             fill={chartColor}
             fillOpacity={0.4}
-            dot={{ fill: chartColor, r: 3 }}
-            activeDot={{ r: 5 }}
+            dot={(props) => {
+              const { cx, cy, payload } = props;
+              return (
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={payload.count > 0 ? 4 : 2}
+                  fill={chartColor}
+                  stroke="rgba(255,255,255,0.2)"
+                  strokeWidth={1}
+                  style={{ cursor: payload.count > 0 ? 'pointer' : 'default' }}
+                  onClick={() => {
+                    if (payload.count > 0 && onDayClick) {
+                      const clickedDate = parseDate(payload.date);
+                      const dayTasks = tasks.filter(t => t.completion?.completedDate === payload.date);
+                      onDayClick(clickedDate, dayTasks);
+                    }
+                  }}
+                />
+              );
+            }}
+            activeDot={{ 
+              r: 6,
+              onClick: (e) => {
+                const payload = e.payload;
+                if (payload.count > 0 && onDayClick) {
+                  const clickedDate = parseDate(payload.date);
+                  const dayTasks = tasks.filter(t => t.completion?.completedDate === payload.date);
+                  onDayClick(clickedDate, dayTasks);
+                }
+              }
+            }}
           />
         </AreaChart>
       </ResponsiveContainer>
