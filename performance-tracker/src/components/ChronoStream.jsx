@@ -107,6 +107,37 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
   
   const chartColor = flowStateColor || '#8b5cf6'
   
+  // Custom dot renderer for reliable click handling
+  const renderDot = (props) => {
+    const { cx, cy, payload, isActive } = props
+    
+    // Don't render dot if no tasks completed this day
+    if (!payload || payload.count === 0) {
+      return null
+    }
+    
+    const radius = isActive ? 8 : 6
+    
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={radius}
+        fill={chartColor}
+        style={{ cursor: 'pointer' }}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (onDayClick && payload) {
+            onDayClick(
+              parseDate(payload.date),
+              tasks.filter(t => t.completion?.completedDate === payload.date)
+            )
+          }
+        }}
+      />
+    )
+  }
+  
   if (filteredData.length === 0) {
     return (
       <div className="chrono-stream" style={{ 
@@ -159,8 +190,8 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
             stroke={chartColor}
             fill={chartColor}
             fillOpacity={0.4}
-            dot={{ fill: chartColor, r: 3, strokeWidth: 0 }}
-            activeDot={{ r: 5 }}
+            dot={renderDot}
+            activeDot={renderDot}
           />
         </AreaChart>
       </ResponsiveContainer>
