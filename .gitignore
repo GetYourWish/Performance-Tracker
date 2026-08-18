@@ -1,26 +1,22 @@
 ```
 # Dependencies
 node_modules/
-
-# Environment
-.env
-.env.local
-.env.*
-
-# Logs
-*.log
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Build outputs
-dist/
-build/
+.julia/
+zig*/
 target/
 
-# Python
+# Build artifacts
+dist/
+build/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.out
+
+# Python specific
 __pycache__/
 *.pyc
 *.pyo
@@ -31,31 +27,105 @@ venv/
 .venv/
 .venv.bak/
 pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage*
-.nox/
-.pytest_cache/
+pip-selfcheck.json
+*.egg-info/
+.eggs/
 .mypy_cache/
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
 
-# Compiled and binary files
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+*.bak
+*.cache
+*.pid
+*.seed
+*.prof
 
-# Compressed files
+# Environment variables
+.env
+.env.local
+.env.*
+!.env.example
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Icon?
+.directory
+.folders~
+metadata.json
+
+# Editor related
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+*.pyc
+*.pyo
+*.pyd
+.CVS
+.hg
+.svn
+.git
+
+# Testing
+.coverage
+coverage/
+nosetests.xml
+.rej
+
+# Distribution / packaging
+.Python
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.eggs/
+MANIFEST
+
+# IDE
+.vscode/
+.idea/
+.settings/
+*.tmproj
+nbproject/
+
+# Compression
 *.zip
+*.tar.gz
+*.tar.bz2
+*.tar.xz
 *.gz
-*.tar
-*.tgz
+*.rar
+*.7z
 *.bz2
 *.xz
-*.7z
-*.rar
 *.zst
 *.lz4
 *.lzh
@@ -66,28 +136,28 @@ pip-delete-this-directory.txt
 *.Z
 *.lz
 *.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
 
-# Editor/IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
+# Generated documentation
+docs/_build/
 
-# System files
-.DS_Store
-Thumbs.db
+# Jupyter Notebook
+.ipynb_checkpoints
 
-# Gradle
-.gradle/
+# Coverage reports
+coverage/
+*.cover
+.hypothesis/
 
-# MyPy
-.mypy_cache/
+# Bazaar
+.bzr
 
-# PyTest
-.pytest_cache/
+# Mercurial
+.hg/
+
+# Subversion
+.svn/
+
+# Temporary folders
+tmp/
+temp/
 ```
