@@ -1,33 +1,79 @@
 import { useMemo, useState, useRef } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList } from 'recharts'
-import { format, eachDayOfInterval, subDays, startOfWeek, startOfMonth } from 'date-fns'
+import { format, eachDayOfInterval, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addDays, isAfter, isBefore, isEqual } from 'date-fns'
 import { formatDate, parseDate } from '../utils/helpers'
 
 export default function ChronoStream({ tasks, categories, difficulties, range, flowStateColor = '#8b5cf6', onDayClick, weekStartsOn = 1, isExporting = false, chartRef }) {
   const [hoverDay, setHoverDay] = useState(null)
   
+  // Helper to check if a date is in the future
+  const isFutureDate = (date) => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return isAfter(date, today)
+  }
+  
+  // Get today's date at midnight for comparisons
+  const getTodayMidnight = () => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return today
+  }
+  
   // Determine date range based on prop
   const dateRange = useMemo(() => {
-    const today = new Date()
+    const today = getTodayMidnight()
+    
     if (range === 'week') {
-      return { start: startOfWeek(today, { weekStartsOn: weekStartsOn || 1 }), end: today }
+      // Weekly: Monday to Sunday of current week
+      const start = startOfWeek(today, { weekStartsOn: weekStartsOn || 1 })
+      const end = endOfWeek(today, { weekStartsOn: weekStartsOn || 1 })
+      return { start, end, type: 'week' }
     } else if (range === 'month') {
-      return { start: startOfMonth(today), end: today }
+      // Monthly: First to last day of current month
+      const start = startOfMonth(today)
+      const end = endOfMonth(today)
+      return { start, end, type: 'month' }
     } else if (range === 'all') {
+      // All: From first logged task to last logged task only
       const dates = tasks.map(t => t.completion?.completedDate).filter(Boolean).sort()
-      if (dates.length === 0) return { start: today, end: today }
-      return { start: new Date(dates[0]), end: today }
+      if (dates.length === 0) {
+        return { start: today, end: today, type: 'all' }
+      }
+      const startDate = parseDate(dates[0])
+      const endDate = parseDate(dates[dates.length - 1])
+      return { start: startDate, end: endDate, type: 'all' }
     }
-    return { start: subDays(today, 6), end: today }
+    // Default: last 7 days
+    return { start: subDays(today, 6), end: today, type: 'default' }
   }, [range, tasks, weekStartsOn])
   
   // Transform data for Recharts area chart - single score per day
   const chartData = useMemo(() => {
     const days = eachDayOfInterval({ start: dateRange.start, end: dateRange.end })
+    const today = getTodayMidnight()
     
     return days.map(day => {
       const dayStr = formatDate(day)
       const daysTasks = tasks.filter(t => t.completion?.completedDate === dayStr)
+      
+      // Check if this day is in the future
+      const dayMidnight = new Date(day)
+      dayMidnight.setHours(0, 0, 0, 0)
+      const isFuture = isAfter(dayMidnight, today)
+      
+      // For 'week' and 'month' views: future days get null score
+      // For 'all' view: we don't have future days since range ends at last logged task
+      if ((dateRange.type === 'week' || dateRange.type === 'month') && isFuture) {
+        return {
+          date: dayStr,
+          dayName: format(day, 'EEE'),
+          fullDate: format(day, 'MMM d'),
+          score: null,
+          count: 0,
+          isFuture: true
+        }
+      }
       
       // Calculate total score for the day using the same logic as calculateDayScore
       let score = 0
@@ -46,27 +92,31 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
         if (fatigueMultiplier > 3.0) fatigueMultiplier = 3.0 // Default fatigue cap
       })
       
+      // For past/current days with no data, score stays 0 (already initialized)
+      
       return {
         date: dayStr,
         dayName: format(day, 'EEE'),
         fullDate: format(day, 'MMM d'),
         score,
-        count: daysTasks.length
+        count: daysTasks.length,
+        isFuture: false
       }
     })
   }, [tasks, difficulties, dateRange])
   
-  // Filter out future dates and ensure we stop at today
-  const filteredData = useMemo(() => {
-    const today = new Date()
-    today.setHours(23, 59, 59, 999)
-    return chartData.filter(d => new Date(d.date) <= today)
-  }, [chartData])
+  // Use chartData directly - it already handles future dates with null scores
+  const filteredData = chartData
   
   // Custom tooltip for dark theme
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       const dayData = filteredData.find(d => d.date === label || d.dayName === label)
+      
+      // Don't show tooltip for future days with null score
+      if (dayData?.score === null) {
+        return null
+      }
       
       return (
         <div style={{
@@ -91,7 +141,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
             color: 'var(--text-secondary)',
             marginBottom: '4px'
           }}>
-            Total Score: {dayData?.score.toFixed(1) || 0}
+            Total Score: {(dayData?.score ?? 0).toFixed(1)}
           </div>
           <div style={{ 
             fontSize: '11px', 
@@ -111,8 +161,8 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
   const renderDot = (props) => {
     const { cx, cy, payload, isActive } = props
     
-    // Don't render dot if no tasks completed this day
-    if (!payload || payload.count === 0) {
+    // Don't render dot if no tasks completed this day or if it's a future day
+    if (!payload || payload.count === 0 || payload.isFuture) {
       return null
     }
     
@@ -169,20 +219,21 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
             tickLine={{ stroke: 'rgba(255,255,255,0.1)' }}
             type="category"
           />
-          <YAxis hide />
+          <YAxis hide domain={[0, 'auto']} />
           <Area
             type="monotone"
             dataKey="score"
             stroke={chartColor}
             fill={chartColor}
             fillOpacity={0.4}
+            connectNulls={false}
           >
             <LabelList 
               dataKey="score" 
               position="top" 
               fill="#fff" 
               fontSize={12}
-              formatter={(value) => value.toFixed(1)}
+              formatter={(value) => value != null ? value.toFixed(1) : ''}
             />
           </Area>
         </AreaChart>
@@ -224,7 +275,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
               fontWeight: 700,
               marginBottom: '4px'
             }}>
-              {day.score.toFixed(1)}
+              {day.score != null ? day.score.toFixed(1) : '--'}
             </div>
             <div style={{
               fontSize: '10px',
@@ -247,12 +298,12 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
           margin={{ top: 10, right: 40, left: 0, bottom: 10 }}
           onMouseMove={(state) => {
             const point = state?.activePayload?.[0]?.payload
-            setHoverDay(point && point.count > 0 ? point : null)
+            setHoverDay(point && point.count > 0 && !point.isFuture ? point : null)
           }}
           onMouseLeave={() => setHoverDay(null)}
           onClick={(state) => {
             const point = state?.activePayload?.[0]?.payload
-            if (point && point.count > 0 && onDayClick) {
+            if (point && point.count > 0 && !point.isFuture && onDayClick) {
               onDayClick(
                 parseDate(point.date),
                 tasks.filter(t => t.completion?.completedDate === point.date)
@@ -268,7 +319,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
             tickLine={{ stroke: 'rgba(255,255,255,0.1)' }}
             type="category"
           />
-          <YAxis hide />
+          <YAxis hide domain={[0, 'auto']} />
           <Tooltip content={<CustomTooltip />} />
           <Area
             type="monotone"
@@ -278,6 +329,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
             fillOpacity={0.4}
             dot={renderDot}
             activeDot={renderDot}
+            connectNulls={false}
           />
         </AreaChart>
       </ResponsiveContainer>
