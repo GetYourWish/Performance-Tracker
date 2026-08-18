@@ -13,6 +13,21 @@ export default function HeatmapGrid({ heatmapData, categories }) {
     return '#39d353'                   // High
   }
   
+  // Calculate grid position for each cell
+  const getGridPosition = (cellDay) => {
+    const dayOfWeek = cellDay.getDay() // 0-6, where 0 is Sunday
+    const heatmapYear = cellDay.getFullYear()
+    const startOfYear = new Date(heatmapYear, 0, 1)
+    const diffTime = cellDay - startOfYear
+    const dayOfYear = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+    const weekNumber = Math.floor(dayOfYear / 7)
+    
+    return {
+      gridRow: dayOfWeek + 1,      // CSS Grid is 1-indexed
+      gridColumn: weekNumber + 1   // CSS Grid is 1-indexed
+    }
+  }
+  
   const handleCellHover = (cell, event) => {
     const rect = event.currentTarget.getBoundingClientRect()
     setHoveredCell({
@@ -34,7 +49,6 @@ export default function HeatmapGrid({ heatmapData, categories }) {
         style={{
           display: 'grid',
           gridTemplateRows: 'repeat(7, 12px)',
-          gridAutoFlow: 'column',
           gap: '3px',
           padding: '16px',
           background: 'var(--bg-secondary)',
@@ -47,12 +61,15 @@ export default function HeatmapGrid({ heatmapData, categories }) {
       >
         {heatmapData.map((cell, index) => {
           const bgColor = getCellColor(cell.value)
+          const { gridRow, gridColumn } = getGridPosition(cell.day)
           
           return (
             <div
               key={index}
               className="heatmap-cell"
               style={{
+                gridRow,
+                gridColumn,
                 width: '12px',
                 height: '12px',
                 minWidth: '12px',
