@@ -21,20 +21,14 @@
 
 .board-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--bg-primary);
+  gap: 16px;
   padding: 8px 0;
+  background: transparent;
 }
 
 .header-input {
   flex: 1;
-  max-width: 400px;
-  margin-left: 16px;
 }
 
 .categories-toggle {
@@ -140,8 +134,20 @@
 }
 
 .board-row.selected {
-  background: var(--bg-tertiary);
-  border: 2px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+  box-shadow: inset 0 0 0 2px #3b82f6;
+  position: relative;
+}
+
+.board-row.selected::before {
+  content: '✓';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #3b82f6;
+  font-weight: bold;
+  font-size: 16px;
 }
 
 .board-row.working-on {

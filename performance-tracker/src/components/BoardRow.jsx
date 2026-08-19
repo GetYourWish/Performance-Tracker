@@ -20,7 +20,8 @@ const BoardRow = memo(function BoardRow({
   isSelected,
   onSelect,
   isWorkingOn,
-  onToggleWorkingOn
+  onToggleWorkingOn,
+  selectionSize = 1
 }) {
   const [editText, setEditText] = useState(task?.text || '')
   
@@ -44,6 +45,13 @@ const BoardRow = memo(function BoardRow({
     opacity: isDragging ? 0.5 : 1
   }
 
+  // Determine if we should enable drag on the row body (for multi-select)
+  // Only when this item is selected AND there are multiple items selected
+  const enableRowDrag = isSelected && selectionSize > 1
+  
+  // Merge listeners for row-body drag when in multi-select mode
+  const rowListeners = enableRowDrag ? listeners : {}
+
   // Sync local editText when task changes
   useEffect(() => {
     if (task?.text) {
@@ -64,10 +72,28 @@ const BoardRow = memo(function BoardRow({
         role="listitem"
         aria-label={`Category marker: ${category.name}`}
         onClick={(e) => {
+          // Check for modifier key click on marker row - should toggle selection
+          const multiSelectModifier = window.__multiSelectModifier || 'ctrl'
+          let isMultiSelect = false
+          if (multiSelectModifier === 'ctrl') {
+            isMultiSelect = e.ctrlKey || e.metaKey
+          } else if (multiSelectModifier === 'shift') {
+            isMultiSelect = e.shiftKey
+          } else if (multiSelectModifier === 'alt') {
+            isMultiSelect = e.altKey
+          }
+          
           if (onSelect && !e.target.closest('.drag-handle') && !e.target.closest('button')) {
-            onSelect(id, e.ctrlKey || e.metaKey)
+            e.stopPropagation()
+            onSelect(id, { 
+              ctrl: e.ctrlKey, 
+              meta: e.metaKey, 
+              shift: e.shiftKey, 
+              alt: e.altKey 
+            })
           }
         }}
+        {...rowListeners}
       >
         <div 
           className="drag-handle"
@@ -157,10 +183,61 @@ const BoardRow = memo(function BoardRow({
       role="listitem"
       aria-label={`Task: ${task.text}`}
       onClick={(e) => {
-        if (onSelect && !e.target.closest('.drag-handle') && !e.target.closest('button') && !e.target.closest('.task-text-display') && !e.target.closest('.task-input')) {
-          onSelect(id, e.ctrlKey || e.metaKey)
+        // Check if clicking on the task text with modifier key - should toggle selection, not edit
+        if (e.target.closest('.task-text-display')) {
+          const multiSelectModifier = window.__multiSelectModifier || 'ctrl'
+          let isMultiSelect = false
+          if (multiSelectModifier === 'ctrl') {
+            isMultiSelect = e.ctrlKey || e.metaKey
+          } else if (multiSelectModifier === 'shift') {
+            isMultiSelect = e.shiftKey
+          } else if (multiSelectModifier === 'alt') {
+            isMultiSelect = e.altKey
+          }
+          
+          if (isMultiSelect && onSelect) {
+            e.stopPropagation()
+            onSelect(id, { 
+              ctrl: e.ctrlKey, 
+              meta: e.metaKey, 
+              shift: e.shiftKey, 
+              alt: e.altKey 
+            })
+            return
+          }
+          // No modifier - proceed with edit
+          onEdit()
+          return
+        }
+        
+        // Clicking elsewhere on the row (not handle, buttons, or task text)
+        if (onSelect && !e.target.closest('.drag-handle') && !e.target.closest('button') && !e.target.closest('.task-input')) {
+          const multiSelectModifier = window.__multiSelectModifier || 'ctrl'
+          let isMultiSelect = false
+          if (multiSelectModifier === 'ctrl') {
+            isMultiSelect = e.ctrlKey || e.metaKey
+          } else if (multiSelectModifier === 'shift') {
+            isMultiSelect = e.shiftKey
+          } else if (multiSelectModifier === 'alt') {
+            isMultiSelect = e.altKey
+          }
+          
+          if (isMultiSelect) {
+            e.stopPropagation()
+            onSelect(id, { 
+              ctrl: e.ctrlKey, 
+              meta: e.metaKey, 
+              shift: e.shiftKey, 
+              alt: e.altKey 
+            })
+          } else {
+            // Plain click - select only this item
+            e.stopPropagation()
+            onSelect(id, { ctrl: false, meta: false, shift: false, alt: false })
+          }
         }
       }}
+      {...rowListeners}
     >
       <div 
         className="drag-handle"
@@ -203,7 +280,6 @@ const BoardRow = memo(function BoardRow({
       ) : (
         <div 
           className="task-text-display"
-          onClick={onEdit}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {

@@ -331,6 +331,21 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
             </div>
             
             <div className="setting-item">
+              <label>Multi-Select Modifier</label>
+              <select
+                value={settings.multiSelectModifier || 'ctrl'}
+                onChange={(e) => handleSettingChange('multiSelectModifier', e.target.value)}
+              >
+                <option value="ctrl">Ctrl (Cmd on macOS)</option>
+                <option value="shift">Shift</option>
+                <option value="alt">Alt</option>
+              </select>
+              <p className="setting-note">
+                Hold this key while clicking to select multiple items
+              </p>
+            </div>
+            
+            <div className="setting-item">
               <label>Flow State Chart Color</label>
               <input
                 type="color"

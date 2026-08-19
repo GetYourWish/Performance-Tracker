@@ -185,10 +185,15 @@ function Board({ data, onSave }) {
         root.setAttribute('data-theme', 'dark')
       }
     }
-  }, [settings.theme])
+    
+    // Store multi-select modifier for BoardRow to access
+    window.__multiSelectModifier = settings.multiSelectModifier || 'ctrl'
+  }, [settings.theme, settings.multiSelectModifier])
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 }
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates
     })
@@ -223,10 +228,23 @@ function Board({ data, onSave }) {
       e.preventDefault()
       handleCreateTask()
     } else if (e.key === 'Escape') {
-      // Cancel new task input
+      // Cancel new task input and clear selection
       setNewTaskText('')
+      handleClearSelection()
     }
   }
+
+  // Handle Escape key for clearing selection at document level
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        handleClearSelection()
+      }
+    }
+    
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [])
 
   const handleUpdateTask = useCallback((taskId, newText) => {
     const updatedTasks = data.tasks.map(t => {
@@ -360,10 +378,23 @@ function Board({ data, onSave }) {
     setWorkingOnId(prev => prev === itemId ? null : itemId)
   }, [])
 
-  const handleSelectItem = useCallback((itemId, isMultiSelect) => {
+  const handleSelectItem = useCallback((itemId, modifierKey) => {
+    // Determine which modifier is configured in settings
+    const multiSelectModifier = settings.multiSelectModifier || 'ctrl'
+    
+    // Check if the correct modifier key is pressed based on settings
+    let isMultiSelect = false
+    if (multiSelectModifier === 'ctrl') {
+      isMultiSelect = modifierKey.ctrl || modifierKey.meta
+    } else if (multiSelectModifier === 'shift') {
+      isMultiSelect = modifierKey.shift
+    } else if (multiSelectModifier === 'alt') {
+      isMultiSelect = modifierKey.alt
+    }
+    
     setSelectedItems(prev => {
       if (isMultiSelect) {
-        // Toggle selection with Ctrl/Cmd click
+        // Toggle selection with modifier click
         if (prev.includes(itemId)) {
           return prev.filter(id => id !== itemId)
         } else {
@@ -374,6 +405,10 @@ function Board({ data, onSave }) {
         return [itemId]
       }
     })
+  }, [settings.multiSelectModifier])
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedItems([])
   }, [])
 
   const handleDragStart = (event) => {
@@ -467,15 +502,37 @@ function Board({ data, onSave }) {
         }
       })
       
-      // Insert selected items at the target position
-      const insertIndex = Math.min(targetIndex, remainingBoardItems.length)
-      remainingBoardItems.splice(insertIndex, 0, ...selectedBoardItems)
+      // Adjust target index: count how many selected items were BEFORE the target
+      // This ensures correct insertion after removing selected items
+      let adjustedTargetIndex = targetIndex
+      const selectedBeforeTarget = remainingBoardItems.slice(0, targetIndex).filter((item, idx) => {
+        const itemId = item.type === 'task' ? item.taskId : item.markerId
+        // We need to check against original positions
+        return false // We'll recalculate below
+      }).length
+      
+      // Count selected items that were originally before targetIndex
+      let selectedCountBeforeTarget = 0
+      for (let i = 0; i < targetIndex && i < boardItems.length; i++) {
+        const item = boardItems[i]
+        const itemId = item.type === 'task' ? item.taskId : item.markerId
+        if (selectedItems.includes(itemId)) {
+          selectedCountBeforeTarget++
+        }
+      }
+      
+      // Adjust target index by subtracting selected items that were removed before it
+      adjustedTargetIndex = targetIndex - selectedCountBeforeTarget
+      adjustedTargetIndex = Math.max(0, Math.min(adjustedTargetIndex, remainingBoardItems.length))
+      
+      remainingBoardItems.splice(adjustedTargetIndex, 0, ...selectedBoardItems)
       
       onSave({
         ...data,
         board: remainingBoardItems,
         meta: { ...data.meta, updatedAt: new Date().toISOString() }
       })
+      // Keep selection active after group drag - don't clear it
     } else {
       // Single item drag (original behavior)
       const [removed] = newBoard.splice(draggedIndex, 1)
@@ -491,10 +548,10 @@ function Board({ data, onSave }) {
         board: newBoard,
         meta: { ...data.meta, updatedAt: new Date().toISOString() }
       })
+      
+      // Clear selection after single-item drag
+      setSelectedItems([])
     }
-    
-    // Clear selection after drag
-    setSelectedItems([])
   }
 
   const handleMarkerDrop = (categoryId, isNewCategory = false, insertionId = null, categoryObj = null, appendToEnd = false) => {
@@ -693,6 +750,7 @@ function Board({ data, onSave }) {
             onSelect={handleSelectItem}
             isWorkingOn={workingOnId === item.taskId}
             onToggleWorkingOn={handleToggleWorkingOn}
+            selectionSize={selectedItems.length}
           />
         )
         
@@ -722,6 +780,7 @@ function Board({ data, onSave }) {
             onMoveDown={() => handleMoveItem(item.markerId, 'down')}
             isSelected={selectedItems.includes(item.markerId)}
             onSelect={handleSelectItem}
+            selectionSize={selectedItems.length}
           />
         )
         
@@ -741,21 +800,28 @@ function Board({ data, onSave }) {
 
   return (
     <div className="board-container">
-      <div className="board-content-wrapper">
+      <div className="board-header">
+        <h2>Board</h2>
+        <input
+          type="text"
+          className="new-task-input header-input"
+          placeholder="Type a task and press Enter..."
+          value={newTaskText}
+          onChange={(e) => setNewTaskText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          autoFocus
+        />
+      </div>
+      <div 
+        className="board-content-wrapper"
+        onClick={(e) => {
+          // Clear selection when clicking on empty board area
+          if (e.target === e.currentTarget) {
+            handleClearSelection()
+          }
+        }}
+      >
         <div className="board-main">
-          <div className="board-header">
-            <h2>Board</h2>
-            <input
-              type="text"
-              className="new-task-input header-input"
-              placeholder="Type a task and press Enter..."
-              value={newTaskText}
-              onChange={(e) => setNewTaskText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              autoFocus
-            />
-          </div>
-
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
