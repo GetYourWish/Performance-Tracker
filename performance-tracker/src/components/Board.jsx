@@ -166,6 +166,8 @@ function Board({ data, onSave }) {
   const [showCategoryGrabber, setShowCategoryGrabber] = useState(false)
   const [draggingItem, setDraggingItem] = useState(null)
   const [deleteTask, setDeleteTask] = useState(null)
+  const [selectedItems, setSelectedItems] = useState([])
+  const [workingOnId, setWorkingOnId] = useState(null)
   
   // Apply theme from settings
   useEffect(() => {
@@ -354,6 +356,26 @@ function Board({ data, onSave }) {
     setCompletionTask(null)
   }, [boardItems, markers, categories, data, onSave])
 
+  const handleToggleWorkingOn = useCallback((itemId) => {
+    setWorkingOnId(prev => prev === itemId ? null : itemId)
+  }, [])
+
+  const handleSelectItem = useCallback((itemId, isMultiSelect) => {
+    setSelectedItems(prev => {
+      if (isMultiSelect) {
+        // Toggle selection with Ctrl/Cmd click
+        if (prev.includes(itemId)) {
+          return prev.filter(id => id !== itemId)
+        } else {
+          return [...prev, itemId]
+        }
+      } else {
+        // Single click - select only this item
+        return [itemId]
+      }
+    })
+  }, [])
+
   const handleDragStart = (event) => {
     setDraggingItem(event.active)
   }
@@ -380,6 +402,10 @@ function Board({ data, onSave }) {
     // Handle reordering of tasks and markers within the board with proper gap-drop support
     if (!over) return
     if (active.id === over.id) return
+
+    // Check if we're dragging multiple selected items
+    const isDraggingSelected = selectedItems.includes(active.id)
+    const itemsToMove = isDraggingSelected ? selectedItems : [active.id]
 
     // Compute draggedIndex
     const draggedIndex = boardItems.findIndex(item => {
@@ -423,21 +449,52 @@ function Board({ data, onSave }) {
 
     if (targetIndex === -1) return
 
-    // Splice out the dragged item
+    // Splice out the dragged items
     const newBoard = [...boardItems]
-    const [removed] = newBoard.splice(draggedIndex, 1)
     
-    // Decrement targetIndex if it's after draggedIndex (since we removed an item before it)
-    const adjustedTargetIndex = targetIndex > draggedIndex ? targetIndex - 1 : targetIndex
-    
-    // Splice in at the adjusted position
-    newBoard.splice(adjustedTargetIndex, 0, removed)
+    if (isDraggingSelected && selectedItems.length > 1) {
+      // Multi-select drag: move all selected items together
+      // First, collect all selected items in their original order
+      const selectedBoardItems = []
+      const remainingBoardItems = []
+      
+      newBoard.forEach(item => {
+        const itemId = item.type === 'task' ? item.taskId : item.markerId
+        if (selectedItems.includes(itemId)) {
+          selectedBoardItems.push(item)
+        } else {
+          remainingBoardItems.push(item)
+        }
+      })
+      
+      // Insert selected items at the target position
+      const insertIndex = Math.min(targetIndex, remainingBoardItems.length)
+      remainingBoardItems.splice(insertIndex, 0, ...selectedBoardItems)
+      
+      onSave({
+        ...data,
+        board: remainingBoardItems,
+        meta: { ...data.meta, updatedAt: new Date().toISOString() }
+      })
+    } else {
+      // Single item drag (original behavior)
+      const [removed] = newBoard.splice(draggedIndex, 1)
+      
+      // Decrement targetIndex if it's after draggedIndex (since we removed an item before it)
+      const adjustedTargetIndex = targetIndex > draggedIndex ? targetIndex - 1 : targetIndex
+      
+      // Splice in at the adjusted position
+      newBoard.splice(adjustedTargetIndex, 0, removed)
 
-    onSave({
-      ...data,
-      board: newBoard,
-      meta: { ...data.meta, updatedAt: new Date().toISOString() }
-    })
+      onSave({
+        ...data,
+        board: newBoard,
+        meta: { ...data.meta, updatedAt: new Date().toISOString() }
+      })
+    }
+    
+    // Clear selection after drag
+    setSelectedItems([])
   }
 
   const handleMarkerDrop = (categoryId, isNewCategory = false, insertionId = null, categoryObj = null, appendToEnd = false) => {
@@ -632,6 +689,10 @@ function Board({ data, onSave }) {
             onConfirmDelete={(t) => setDeleteTask(t)}
             onMoveUp={() => handleMoveItem(item.taskId, 'up')}
             onMoveDown={() => handleMoveItem(item.taskId, 'down')}
+            isSelected={selectedItems.includes(item.taskId)}
+            onSelect={handleSelectItem}
+            isWorkingOn={workingOnId === item.taskId}
+            onToggleWorkingOn={handleToggleWorkingOn}
           />
         )
         
@@ -659,6 +720,8 @@ function Board({ data, onSave }) {
             onDelete={() => handleDeleteMarker(item.markerId)}
             onMoveUp={() => handleMoveItem(item.markerId, 'up')}
             onMoveDown={() => handleMoveItem(item.markerId, 'down')}
+            isSelected={selectedItems.includes(item.markerId)}
+            onSelect={handleSelectItem}
           />
         )
         
@@ -682,6 +745,15 @@ function Board({ data, onSave }) {
         <div className="board-main">
           <div className="board-header">
             <h2>Board</h2>
+            <input
+              type="text"
+              className="new-task-input header-input"
+              placeholder="Type a task and press Enter..."
+              value={newTaskText}
+              onChange={(e) => setNewTaskText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              autoFocus
+            />
           </div>
 
           <DndContext
@@ -695,19 +767,6 @@ function Board({ data, onSave }) {
               strategy={verticalListSortingStrategy}
             >
               <div className="board-list">
-                {/* New task input at the TOP */}
-                <div className="new-task-row">
-                  <input
-                    type="text"
-                    className="new-task-input"
-                    placeholder="Type a task and press Enter..."
-                    value={newTaskText}
-                    onChange={(e) => setNewTaskText(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    autoFocus
-                  />
-                </div>
-                
                 <AnimatePresence mode="popLayout">
                   {renderBoardRows()}
                 </AnimatePresence>
@@ -724,9 +783,11 @@ function Board({ data, onSave }) {
             <DragOverlay>
               {draggingItem ? (
                 <div className="drag-overlay">
-                  {draggingItem.data.current?.type === 'task' 
-                    ? tasks.find(t => t.id === draggingItem.id)?.text
-                    : 'Category Marker'
+                  {selectedItems.length > 1 
+                    ? `Dragging ${selectedItems.length} items`
+                    : draggingItem.data.current?.type === 'task' 
+                      ? tasks.find(t => t.id === draggingItem.id)?.text
+                      : 'Category Marker'
                   }
                 </div>
               ) : null}
