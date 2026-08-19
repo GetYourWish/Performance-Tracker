@@ -1,9 +1,29 @@
-import { memo } from 'react'
+import { memo, useState, useEffect } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { motion } from 'framer-motion'
 
-const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing, onEdit, onUpdate, onCancelEdit, onDelete, onComplete, onConfirmDelete, onMoveUp, onMoveDown }) {
+const BoardRow = memo(function BoardRow({ 
+  id, 
+  task, 
+  marker, 
+  category, 
+  isEditing, 
+  onEdit, 
+  onUpdate, 
+  onCancelEdit, 
+  onDelete, 
+  onComplete, 
+  onConfirmDelete, 
+  onMoveUp, 
+  onMoveDown,
+  isSelected,
+  onSelect,
+  isWorkingOn,
+  onToggleWorkingOn
+}) {
+  const [editText, setEditText] = useState(task?.text || '')
+  
   const {
     attributes,
     listeners,
@@ -24,6 +44,13 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
     opacity: isDragging ? 0.5 : 1
   }
 
+  // Sync local editText when task changes
+  useEffect(() => {
+    if (task?.text) {
+      setEditText(task.text)
+    }
+  }, [task?.text])
+
   if (marker) {
     return (
       <motion.div 
@@ -33,9 +60,14 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
         animate={{ opacity: 1, scaleY: 1 }}
         transition={{ type: 'spring', stiffness: 280, damping: 24 }}
         style={style}
-        className="board-row marker-row"
+        className={`board-row marker-row ${isSelected ? 'selected' : ''}`}
         role="listitem"
         aria-label={`Category marker: ${category.name}`}
+        onClick={(e) => {
+          if (onSelect && !e.target.closest('.drag-handle') && !e.target.closest('button')) {
+            onSelect(id, e.ctrlKey || e.metaKey)
+          }
+        }}
       >
         <div 
           className="drag-handle"
@@ -88,6 +120,30 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
     )
   }
 
+  const handleEditChange = (e) => {
+    setEditText(e.target.value)
+  }
+
+  const handleEditBlur = () => {
+    if (editText.trim() !== task.text) {
+      onUpdate(editText.trim() || task.text)
+    }
+    onCancelEdit()
+  }
+
+  const handleEditKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (editText.trim() !== task.text) {
+        onUpdate(editText.trim() || task.text)
+      }
+      onCancelEdit()
+    } else if (e.key === 'Escape') {
+      setEditText(task.text)
+      onCancelEdit()
+    }
+  }
+
   return (
     <motion.div 
       ref={setNodeRef}
@@ -97,9 +153,14 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
       exit={{ opacity: 0, scale: 0.96, rotateX: 90 }}
       transition={{ type: 'spring', stiffness: 170, damping: 26 }}
       style={style}
-      className={`board-row task-row ${isEditing ? 'editing' : ''}`}
+      className={`board-row task-row ${isEditing ? 'editing' : ''} ${isSelected ? 'selected' : ''} ${isWorkingOn ? 'working-on' : ''}`}
       role="listitem"
       aria-label={`Task: ${task.text}`}
+      onClick={(e) => {
+        if (onSelect && !e.target.closest('.drag-handle') && !e.target.closest('button') && !e.target.closest('.task-text-display') && !e.target.closest('.task-input')) {
+          onSelect(id, e.ctrlKey || e.metaKey)
+        }
+      }}
     >
       <div 
         className="drag-handle"
@@ -131,11 +192,13 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
         <input
           type="text"
           className="task-input editing"
-          value={task.text}
-          onChange={(e) => onUpdate(e.target.value)}
-          onBlur={onCancelEdit}
+          value={editText}
+          onChange={handleEditChange}
+          onBlur={handleEditBlur}
+          onKeyDown={handleEditKeyDown}
           autoFocus
           aria-label="Edit task"
+          onClick={(e) => e.stopPropagation()}
         />
       ) : (
         <div 
@@ -155,6 +218,17 @@ const BoardRow = memo(function BoardRow({ id, task, marker, category, isEditing,
       )}
 
       <div className="task-actions">
+        <button 
+          className={`action-btn working-on-toggle ${isWorkingOn ? 'active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleWorkingOn(id)
+          }}
+          aria-label={isWorkingOn ? 'Remove working on highlight' : 'Mark as working on'}
+          title={isWorkingOn ? 'Stop working on' : 'Mark as working on'}
+        >
+          {isWorkingOn ? '★' : '☆'}
+        </button>
         <button 
           className="action-btn complete-btn"
           onClick={onComplete}
