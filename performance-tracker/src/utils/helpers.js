@@ -229,5 +229,14 @@ export function validateAndHealData(data) {
     return true
   })
 
+  // Initialize workingOn array if missing
+  if (!healed.workingOn) healed.workingOn = []
+
+  // Heal workingOn: remove IDs of tasks that no longer exist or are completed
+  healed.workingOn = healed.workingOn.filter(taskId => {
+    const task = healed.tasks.find(t => t.id === taskId)
+    return task && !task.completion
+  })
+
   return healed
 }

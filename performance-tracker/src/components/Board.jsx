@@ -167,7 +167,9 @@ function Board({ data, onSave }) {
   const [draggingItem, setDraggingItem] = useState(null)
   const [deleteTask, setDeleteTask] = useState(null)
   const [selectedItems, setSelectedItems] = useState([])
-  const [workingOnId, setWorkingOnId] = useState(null)
+  
+  // Derived memoized array for working on tasks (persisted in data.workingOn)
+  const workingOnTasks = useMemo(() => data?.workingOn || [], [data?.workingOn])
   
   // Apply theme from settings
   useEffect(() => {
@@ -266,14 +268,17 @@ function Board({ data, onSave }) {
     const updatedBoard = boardItems.filter(item => 
       !(item.type === 'task' && item.taskId === taskId)
     )
+    // Remove from workingOn if present
+    const updatedWorkingOn = (data.workingOn || []).filter(id => id !== taskId)
 
     onSave({
       ...data,
       tasks: updatedTasks,
       board: updatedBoard,
+      workingOn: updatedWorkingOn,
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
-  }, [data.tasks, boardItems, data, onSave])
+  }, [data.tasks, boardItems, data.workingOn, data, onSave])
 
   const handleMoveItem = useCallback((itemId, direction) => {
     const itemIndex = boardItems.findIndex(item => {
@@ -363,20 +368,36 @@ function Board({ data, onSave }) {
     const updatedBoard = boardItems.filter(item => 
       !(item.type === 'task' && item.taskId === completionData.taskId)
     )
+    
+    // Remove from workingOn if present
+    const updatedWorkingOn = (data.workingOn || []).filter(id => id !== completionData.taskId)
 
     onSave({
       ...data,
       tasks: updatedTasks,
       board: updatedBoard,
+      workingOn: updatedWorkingOn,
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
 
     setCompletionTask(null)
-  }, [boardItems, markers, categories, data, onSave])
+  }, [boardItems, markers, categories, data.workingOn, data, onSave])
 
   const handleToggleWorkingOn = useCallback((itemId) => {
-    setWorkingOnId(prev => prev === itemId ? null : itemId)
-  }, [])
+    const currentWorkingOn = data.workingOn || []
+    let newWorkingOn
+    if (currentWorkingOn.includes(itemId)) {
+      newWorkingOn = currentWorkingOn.filter(id => id !== itemId)
+    } else {
+      newWorkingOn = [...currentWorkingOn, itemId]
+    }
+    
+    onSave({
+      ...data,
+      workingOn: newWorkingOn,
+      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+    })
+  }, [data, onSave])
 
   const handleSelectItem = useCallback((itemId, modifierKey) => {
     // Determine which modifier is configured in settings
@@ -429,6 +450,35 @@ function Board({ data, onSave }) {
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
   }, [data, markers, boardItems, onSave])
+
+  const handleAddTaskBelowMarker = useCallback((markerId) => {
+    const newTask = {
+      id: generateId(),
+      text: '', // Empty string so it enters edit mode
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      completion: null
+    }
+
+    const insertIndex = boardItems.findIndex(item => item.type === 'marker' && item.markerId === markerId)
+    if (insertIndex === -1) return
+
+    const updatedBoard = [
+      ...boardItems.slice(0, insertIndex + 1),
+      { type: 'task', taskId: newTask.id },
+      ...boardItems.slice(insertIndex + 1)
+    ]
+
+    onSave({
+      ...data,
+      tasks: [...data.tasks, newTask],
+      board: updatedBoard,
+      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+    })
+
+    // Enter edit mode immediately so the user can start typing
+    setEditingTask(newTask.id)
+  }, [boardItems, data, onSave])
 
   const handleDragEnd = (event) => {
     const { active, over } = event
@@ -748,7 +798,7 @@ function Board({ data, onSave }) {
             onMoveDown={() => handleMoveItem(item.taskId, 'down')}
             isSelected={selectedItems.includes(item.taskId)}
             onSelect={handleSelectItem}
-            isWorkingOn={workingOnId === item.taskId}
+            isWorkingOn={workingOnTasks.includes(item.taskId)}
             onToggleWorkingOn={handleToggleWorkingOn}
             selectionSize={selectedItems.length}
           />
@@ -781,6 +831,7 @@ function Board({ data, onSave }) {
             isSelected={selectedItems.includes(item.markerId)}
             onSelect={handleSelectItem}
             selectionSize={selectedItems.length}
+            onAddTaskBelow={() => handleAddTaskBelowMarker(item.markerId)}
           />
         )
         

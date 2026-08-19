@@ -21,7 +21,8 @@ const BoardRow = memo(function BoardRow({
   onSelect,
   isWorkingOn,
   onToggleWorkingOn,
-  selectionSize = 1
+  selectionSize = 1,
+  onAddTaskBelow
 }) {
   const [editText, setEditText] = useState(task?.text || '')
   
@@ -52,9 +53,9 @@ const BoardRow = memo(function BoardRow({
   // Merge listeners for row-body drag when in multi-select mode
   const rowListeners = enableRowDrag ? listeners : {}
 
-  // Sync local editText when task changes
+  // Sync local editText when task changes - crucial fix for empty text tasks
   useEffect(() => {
-    if (task?.text) {
+    if (task?.text !== undefined) {
       setEditText(task.text)
     }
   }, [task?.text])
@@ -113,9 +114,20 @@ const BoardRow = memo(function BoardRow({
         </div>
         <div 
           className="category-marker"
-          style={{ backgroundColor: category.color + '4D', color: 'var(--text-primary)' }}
+          style={{ backgroundColor: category.color + '4D', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}
         >
-          /{category.name}
+          <span>/{category.name}</span>
+          <button 
+            className="add-task-marker-btn"
+            onClick={(e) => {
+              e.stopPropagation() // Prevent row selection
+              onAddTaskBelow && onAddTaskBelow()
+            }}
+            title={`Add task below ${category.name}`}
+            aria-label={`Add task below ${category.name}`}
+          >
+            +
+          </button>
         </div>
         <div className="move-buttons">
           <button 
