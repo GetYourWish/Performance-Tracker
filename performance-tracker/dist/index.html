@@ -5,8 +5,23 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Performance Tracker</title>
-    <script type="module" crossorigin src="./assets/index-gSCo52Ye.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DSbCKrSV.css">
+    <script>
+      // Bootstrap theme before React mounts to prevent flash of wrong theme
+      (function() {
+        const storedTheme = localStorage.getItem('pt-theme');
+        let theme = storedTheme;
+        if (!theme) {
+          theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        if (theme === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        } else {
+          document.documentElement.removeAttribute('data-theme');
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-B9vPty7C.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Boyn98OL.css">
   </head>
   <body>
     <div id="root"></div>
