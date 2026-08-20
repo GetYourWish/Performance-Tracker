@@ -1,20 +1,13 @@
 ```
-# Build artifacts
-dist/
-build/
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.pyc
-__pycache__/
-
 # Dependencies
 node_modules/
-venv/
-.venv/
+
+# Build artifacts
+build/
+dist/
+*.js.map
+
+# Environment
 .env
 .env.local
 *.env.*
@@ -24,7 +17,6 @@ venv/
 .idea/
 *.swp
 *.swo
-*.tmp
 
 # Logs
 *.log
@@ -34,7 +26,32 @@ coverage/
 htmlcov/
 .coverage
 
-# OS
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage*
+.nocoverage*
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 ```

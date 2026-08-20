@@ -39,6 +39,7 @@
   --momentum-streak: #10B981;
   --momentum-neutral: #3B82F6;
   --momentum-stalled: #F59E0B;
+  color-scheme: light;
 }
 
 [data-theme="dark"] {
@@ -71,6 +72,7 @@
   --momentum-streak: #34D399;
   --momentum-neutral: #60A5FA;
   --momentum-stalled: #F59E0B;
+  color-scheme: dark;
 }
 
 body {
@@ -121,4 +123,30 @@ input, textarea {
 
 .scrollable::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
+}
+
+/* Global scrollbar styling for all scrollable elements */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Firefox scrollbar support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) var(--bg-secondary);
 }
