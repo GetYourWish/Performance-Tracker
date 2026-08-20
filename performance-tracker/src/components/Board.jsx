@@ -37,7 +37,7 @@ function CategoryChip({ category, onAddMarker }) {
 }
 
 // Insertion point component for precise drop locations
-function InsertionPoint({ id, onDrop }) {
+function InsertionPoint({ id, onDrop, active }) {
   const { setNodeRef, isOver } = useDroppable({ 
     id,
     data: {
@@ -49,7 +49,7 @@ function InsertionPoint({ id, onDrop }) {
   return (
     <div
       ref={setNodeRef}
-      className={`insertion-point ${isOver ? 'is-over' : ''}`}
+      className={`insertion-point ${isOver || active ? 'is-over' : ''} ${active ? 'is-active' : ''}`}
       data-insertion-id={id}
     />
   )
@@ -167,14 +167,16 @@ function Board({ data, onSave }) {
   const [draggingItem, setDraggingItem] = useState(null)
   const [deleteTask, setDeleteTask] = useState(null)
   const [selectedItems, setSelectedItems] = useState([])
+  const [activeInsertionPoint, setActiveInsertionPoint] = useState(null)
   
   // Derived memoized array for working on tasks (persisted in data.workingOn)
   const workingOnTasks = useMemo(() => data?.workingOn || [], [data?.workingOn])
   
-  // Apply theme from settings
+  // Apply theme from settings and persist resolved value
   useEffect(() => {
     const theme = settings.theme || 'system'
     const root = document.documentElement
+    let resolvedTheme = theme
     
     if (theme === 'dark') {
       root.setAttribute('data-theme', 'dark')
@@ -185,8 +187,14 @@ function Board({ data, onSave }) {
       root.removeAttribute('data-theme')
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         root.setAttribute('data-theme', 'dark')
+        resolvedTheme = 'dark'
+      } else {
+        resolvedTheme = 'light'
       }
     }
+    
+    // Persist resolved theme to localStorage for instant bootstrap on reload
+    localStorage.setItem('pt-theme', resolvedTheme)
     
     // Store multi-select modifier for BoardRow to access
     window.__multiSelectModifier = settings.multiSelectModifier || 'ctrl'
@@ -436,6 +444,77 @@ function Board({ data, onSave }) {
     setDraggingItem(event.active)
   }
 
+  const handleDragOver = (event) => {
+    const { active, over } = event
+    if (!over) {
+      setActiveInsertionPoint(null)
+      return
+    }
+    
+    // If over is an insertion point, use it directly
+    if (over.data.current?.type === 'insertion-point') {
+      setActiveInsertionPoint(over.id)
+      return
+    }
+    
+    // If over is a row, determine which gap to show based on pointer position
+    const draggedIndex = boardItems.findIndex(item => {
+      if (active.data.current?.type === 'task') {
+        return item.type === 'task' && item.taskId === active.id
+      }
+      if (active.data.current?.type === 'marker') {
+        return item.type === 'marker' && item.markerId === active.id
+      }
+      return false
+    })
+    
+    if (draggedIndex === -1) {
+      setActiveInsertionPoint(null)
+      return
+    }
+    
+    const overIndex = boardItems.findIndex(item => {
+      if (over.data.current?.type === 'task') {
+        return item.type === 'task' && item.taskId === over.id
+      }
+      if (over.data.current?.type === 'marker') {
+        return item.type === 'marker' && item.markerId === over.id
+      }
+      return false
+    })
+    
+    if (overIndex === -1) {
+      setActiveInsertionPoint(null)
+      return
+    }
+    
+    // Determine if we should show the gap above or below the over item
+    // Compare dragged item's translated rect with over item's midpoint
+    const activeRect = active.rect.current.translated
+    const overRect = over.rect
+    
+    if (activeRect && overRect) {
+      const activeBottom = activeRect.top + activeRect.height
+      const overMidpoint = overRect.top + overRect.height / 2
+      
+      if (activeBottom < overMidpoint) {
+        // Show gap above the over item
+        if (overIndex === 0) {
+          setActiveInsertionPoint('insert-top')
+        } else {
+          const prevItem = boardItems[overIndex - 1]
+          setActiveInsertionPoint(prevItem.type === 'task' ? prevItem.taskId : prevItem.markerId)
+        }
+      } else {
+        // Show gap below the over item
+        const overItem = boardItems[overIndex]
+        setActiveInsertionPoint(overItem.type === 'task' ? overItem.taskId : overItem.markerId)
+      }
+    } else {
+      setActiveInsertionPoint(null)
+    }
+  }
+
   const handleAddMarker = useCallback((category) => {
     const newMarker = {
       id: generateId(),
@@ -483,6 +562,7 @@ function Board({ data, onSave }) {
   const handleDragEnd = (event) => {
     const { active, over } = event
     setDraggingItem(null)
+    setActiveInsertionPoint(null)
 
     // Handle reordering of tasks and markers within the board with proper gap-drop support
     if (!over) return
@@ -877,6 +957,7 @@ function Board({ data, onSave }) {
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
           >
             <SortableContext
