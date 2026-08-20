@@ -86,7 +86,7 @@ function DropIndicator({ activeId }) {
 }
 
 // Insertion point component for precise drop locations
-function InsertionPoint({ id, forceActive }) {
+function InsertionPoint({ id, forceActive, onDrop }) {
   const { setNodeRef, isOver } = useDroppable({ 
     id,
     data: {
@@ -95,12 +95,21 @@ function InsertionPoint({ id, forceActive }) {
     }
   })
   
-  const show = isOver || forceActive
+  // Show as active when droppable is over OR when forceActive is true (for drop indicator)
+  const isActive = isOver || forceActive
+  
   return (
     <div
       ref={setNodeRef}
-      className={`insertion-point ${show ? 'is-over' : ''}`}
+      className={`insertion-point ${isActive ? 'is-over' : ''}`}
       data-insertion-id={id}
+      style={{
+        // Ensure insertion points are always rendered and have height
+        minHeight: '8px',
+        display: 'block',
+        // Make sure pointer events work for drop detection
+        pointerEvents: 'auto'
+      }}
     />
   )
 }
@@ -513,32 +522,51 @@ function Board({ data, onSave }) {
     const onMove = (e) => { pointerYRef.current = e.clientY }
     dragMoveListenerRef.current = onMove
     window.addEventListener('pointermove', onMove)
+    
+    // Debug logging
+    console.log('[DnD] Drag started for:', event.active.id, 'type:', event.active.data.current?.type)
   }
 
   const handleDragMove = (event) => {
-    const { over } = event
-    if (!over) { setDropIndicator(null); return }
+    const { active, over } = event
+    if (!over) { 
+      console.log('[DnD] No over target')
+      setDropIndicator(null)
+      return 
+    }
+
+    console.log('[DnD] Drag move - over:', over.id, 'type:', over.data.current?.type)
 
     if (over.data.current?.type === 'insertion-point') {
+      console.log('[DnD] Over insertion point:', over.id)
       setDropIndicator(over.id)
       return
     }
 
     // over is a row: highlight the gap ABOVE or BELOW it based on pointer Y
     const idx = boardItems.findIndex(item => (item.type === 'task' ? item.taskId : item.markerId) === over.id)
-    if (idx === -1) { setDropIndicator(null); return }
+    if (idx === -1) { 
+      console.log('[DnD] Could not find index for:', over.id)
+      setDropIndicator(null)
+      return 
+    }
 
     const el = document.querySelector(`[data-board-item-id="${over.id}"]`)
     const rect = el?.getBoundingClientRect()
     const before = rect ? pointerYRef.current < rect.top + rect.height / 2 : false
 
     if (before) {
-      if (idx === 0) setDropIndicator('insert-top')
-      else {
+      if (idx === 0) {
+        console.log('[DnD] Setting drop indicator to insert-top')
+        setDropIndicator('insert-top')
+      } else {
         const prev = boardItems[idx - 1]
-        setDropIndicator(prev.type === 'task' ? prev.taskId : prev.markerId)
+        const prevId = prev.type === 'task' ? prev.taskId : prev.markerId
+        console.log('[DnD] Setting drop indicator to previous item:', prevId)
+        setDropIndicator(prevId)
       }
     } else {
+      console.log('[DnD] Setting drop indicator to current item:', over.id)
       setDropIndicator(over.id) // gap right after the hovered row
     }
   }
@@ -946,7 +974,7 @@ function Board({ data, onSave }) {
           </div>
           <DndContext
             sensors={sensors}
-            collisionDetection={rectIntersection}
+            collisionDetection={closestCorners}
             onDragStart={handleDragStart}
             onDragMove={handleDragMove}
             onDragOver={handleDragMove}
