@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import {
   DndContext,
   closestCorners,
@@ -37,7 +37,7 @@ function CategoryChip({ category, onAddMarker }) {
 }
 
 // Insertion point component for precise drop locations
-function InsertionPoint({ id, onDrop, active }) {
+function InsertionPoint({ id, onDrop, forceActive }) {
   const { setNodeRef, isOver } = useDroppable({ 
     id,
     data: {
@@ -46,10 +46,11 @@ function InsertionPoint({ id, onDrop, active }) {
     }
   })
   
+  const show = isOver || forceActive
   return (
     <div
       ref={setNodeRef}
-      className={`insertion-point ${isOver || active ? 'is-over' : ''} ${active ? 'is-active' : ''}`}
+      className={`insertion-point ${show ? 'is-over' : ''}`}
       data-insertion-id={id}
     />
   )
@@ -169,6 +170,22 @@ function Board({ data, onSave }) {
   const [selectedItems, setSelectedItems] = useState([])
   const [activeInsertionPoint, setActiveInsertionPoint] = useState(null)
   const [workingOnId, setWorkingOnId] = useState(null)
+  const [dropIndicatorId, setDropIndicatorId] = useState(null)
+  const dropIndicatorRef = useRef(null)
+  const pointerYRef = useRef(0)
+  const dragMoveListenerRef = useRef(null)
+
+  const setDropIndicator = (id) => {
+    dropIndicatorRef.current = id
+    setDropIndicatorId(id)
+  }
+
+  const cleanupDragListeners = () => {
+    if (dragMoveListenerRef.current) {
+      window.removeEventListener('pointermove', dragMoveListenerRef.current)
+      dragMoveListenerRef.current = null
+    }
+  }
   
   // Derived memoized array for working on tasks (persisted in data.workingOn)
   const workingOnTasks = useMemo(() => data?.workingOn || [], [data?.workingOn])
@@ -443,76 +460,37 @@ function Board({ data, onSave }) {
 
   const handleDragStart = (event) => {
     setDraggingItem(event.active)
+    pointerYRef.current = event.activatorEvent?.clientY ?? 0
+    const onMove = (e) => { pointerYRef.current = e.clientY }
+    dragMoveListenerRef.current = onMove
+    window.addEventListener('pointermove', onMove)
   }
 
-  const handleDragOver = (event) => {
-    const { active, over } = event
-    if (!over) {
-      setActiveInsertionPoint(null)
-      return
-    }
-    
-    // If over is an insertion point, use it directly
+  const handleDragMove = (event) => {
+    const { over } = event
+    if (!over) { setDropIndicator(null); return }
+
     if (over.data.current?.type === 'insertion-point') {
-      setActiveInsertionPoint(over.id)
+      setDropIndicator(over.id)
       return
     }
-    
-    // If over is a row, determine which gap to show based on pointer position
-    const draggedIndex = boardItems.findIndex(item => {
-      if (active.data.current?.type === 'task') {
-        return item.type === 'task' && item.taskId === active.id
-      }
-      if (active.data.current?.type === 'marker') {
-        return item.type === 'marker' && item.markerId === active.id
-      }
-      return false
-    })
-    
-    if (draggedIndex === -1) {
-      setActiveInsertionPoint(null)
-      return
-    }
-    
-    const overIndex = boardItems.findIndex(item => {
-      if (over.data.current?.type === 'task') {
-        return item.type === 'task' && item.taskId === over.id
-      }
-      if (over.data.current?.type === 'marker') {
-        return item.type === 'marker' && item.markerId === over.id
-      }
-      return false
-    })
-    
-    if (overIndex === -1) {
-      setActiveInsertionPoint(null)
-      return
-    }
-    
-    // Determine if we should show the gap above or below the over item
-    // Compare dragged item's translated rect with over item's midpoint
-    const activeRect = active.rect.current.translated
-    const overRect = over.rect
-    
-    if (activeRect && overRect) {
-      const activeBottom = activeRect.top + activeRect.height
-      const overMidpoint = overRect.top + overRect.height / 2
-      
-      if (activeBottom < overMidpoint) {
-        // Show gap above the over item
-        if (overIndex === 0) {
-          setActiveInsertionPoint('insert-top')
-        } else {
-          const prevItem = boardItems[overIndex - 1]
-          setActiveInsertionPoint(prevItem.type === 'task' ? prevItem.taskId : prevItem.markerId)
-        }
-      } else {
-        // Show gap below the over item
-        const overItem = boardItems[overIndex]
-        setActiveInsertionPoint(overItem.type === 'task' ? overItem.taskId : overItem.markerId)
+
+    // over is a row: highlight the gap ABOVE or BELOW it based on pointer Y
+    const idx = boardItems.findIndex(item => (item.type === 'task' ? item.taskId : item.markerId) === over.id)
+    if (idx === -1) { setDropIndicator(null); return }
+
+    const el = document.querySelector(`[data-board-item-id="${over.id}"]`)
+    const rect = el?.getBoundingClientRect()
+    const before = rect ? pointerYRef.current < rect.top + rect.height / 2 : false
+
+    if (before) {
+      if (idx === 0) setDropIndicator('insert-top')
+      else {
+        const prev = boardItems[idx - 1]
+        setDropIndicator(prev.type === 'task' ? prev.taskId : prev.markerId)
       }
     } else {
-      setActiveInsertionPoint(null)
+      setDropIndicator(over.id) // gap right after the hovered row
     }
   }
 
@@ -589,128 +567,57 @@ function Board({ data, onSave }) {
   }, [boardItems, data, onSave])
 
   const handleDragEnd = (event) => {
-    const { active, over } = event
+    const { active } = event
+    const indicatorId = dropIndicatorRef.current
     setDraggingItem(null)
-    setActiveInsertionPoint(null)
+    setDropIndicator(null)
+    cleanupDragListeners()
 
-    // Handle reordering of tasks and markers within the board with proper gap-drop support
-    if (!over) return
-    if (active.id === over.id) return
+    if (!indicatorId) return
 
-    // Check if we're dragging multiple selected items
-    const isDraggingSelected = selectedItems.includes(active.id)
-    const itemsToMove = isDraggingSelected ? selectedItems : [active.id]
-
-    // Compute draggedIndex
-    const draggedIndex = boardItems.findIndex(item => {
-      if (active.data.current?.type === 'task') {
-        return item.type === 'task' && item.taskId === active.id
-      }
-      if (active.data.current?.type === 'marker') {
-        return item.type === 'marker' && item.markerId === active.id
-      }
-      return false
-    })
-
+    const draggedIndex = boardItems.findIndex(item => (item.type === 'task' ? item.taskId : item.markerId) === active.id)
     if (draggedIndex === -1) return
 
-    // Compute targetIndex based on drop target
-    let targetIndex
-    if (over.data.current?.type === 'insertion-point') {
-      // Gap drop: compute index based on insertion point position
-      if (over.id === 'insert-top') {
-        targetIndex = 0
-      } else {
-        // Find the index of the item before this insertion point
-        const itemId = over.id // insertion point id is the item id it follows
-        targetIndex = boardItems.findIndex(item => {
-          if (item.type === 'task') return item.taskId === itemId
-          if (item.type === 'marker') return item.markerId === itemId
-        }) + 1
-      }
-    } else {
-      // Drop on item: use indexOf(over.id)
-      targetIndex = boardItems.findIndex(item => {
-        if (over.data.current?.type === 'task') {
-          return item.type === 'task' && item.taskId === over.id
-        }
-        if (over.data.current?.type === 'marker') {
-          return item.type === 'marker' && item.markerId === over.id
-        }
-        return false
-      })
-    }
+    const isDraggingSelected = selectedItems.includes(active.id)
 
-    if (targetIndex === -1) return
-
-    // Splice out the dragged items
-    const newBoard = [...boardItems]
-    
     if (isDraggingSelected && selectedItems.length > 1) {
-      // Multi-select drag: move all selected items together
-      // First, collect all selected items in their original order
       const selectedBoardItems = []
       const remainingBoardItems = []
-      
-      newBoard.forEach(item => {
+      boardItems.forEach(item => {
         const itemId = item.type === 'task' ? item.taskId : item.markerId
-        if (selectedItems.includes(itemId)) {
-          selectedBoardItems.push(item)
-        } else {
-          remainingBoardItems.push(item)
-        }
+        if (selectedItems.includes(itemId)) selectedBoardItems.push(item)
+        else remainingBoardItems.push(item)
       })
-      
-      // Adjust target index: count how many selected items were BEFORE the target
-      // This ensures correct insertion after removing selected items
-      let adjustedTargetIndex = targetIndex
-      const selectedBeforeTarget = remainingBoardItems.slice(0, targetIndex).filter((item, idx) => {
-        const itemId = item.type === 'task' ? item.taskId : item.markerId
-        // We need to check against original positions
-        return false // We'll recalculate below
-      }).length
-      
-      // Count selected items that were originally before targetIndex
-      let selectedCountBeforeTarget = 0
-      for (let i = 0; i < targetIndex && i < boardItems.length; i++) {
-        const item = boardItems[i]
-        const itemId = item.type === 'task' ? item.taskId : item.markerId
-        if (selectedItems.includes(itemId)) {
-          selectedCountBeforeTarget++
-        }
+      let insertIndex
+      if (indicatorId === 'insert-top') insertIndex = 0
+      else {
+        const anchor = remainingBoardItems.findIndex(item => (item.type === 'task' ? item.taskId : item.markerId) === indicatorId)
+        insertIndex = anchor === -1 ? remainingBoardItems.length : anchor + 1
       }
-      
-      // Adjust target index by subtracting selected items that were removed before it
-      adjustedTargetIndex = targetIndex - selectedCountBeforeTarget
-      adjustedTargetIndex = Math.max(0, Math.min(adjustedTargetIndex, remainingBoardItems.length))
-      
-      remainingBoardItems.splice(adjustedTargetIndex, 0, ...selectedBoardItems)
-      
-      onSave({
-        ...data,
-        board: remainingBoardItems,
-        meta: { ...data.meta, updatedAt: new Date().toISOString() }
-      })
-      // Keep selection active after group drag - don't clear it
+      remainingBoardItems.splice(insertIndex, 0, ...selectedBoardItems)
+      onSave({ ...data, board: remainingBoardItems, meta: { ...data.meta, updatedAt: new Date().toISOString() } })
     } else {
-      // Single item drag (original behavior)
+      let targetIndex
+      if (indicatorId === 'insert-top') targetIndex = 0
+      else {
+        const idx = boardItems.findIndex(item => (item.type === 'task' ? item.taskId : item.markerId) === indicatorId)
+        if (idx === -1) return
+        targetIndex = idx + 1
+      }
+      const newBoard = [...boardItems]
       const [removed] = newBoard.splice(draggedIndex, 1)
-      
-      // Decrement targetIndex if it's after draggedIndex (since we removed an item before it)
-      const adjustedTargetIndex = targetIndex > draggedIndex ? targetIndex - 1 : targetIndex
-      
-      // Splice in at the adjusted position
-      newBoard.splice(adjustedTargetIndex, 0, removed)
-
-      onSave({
-        ...data,
-        board: newBoard,
-        meta: { ...data.meta, updatedAt: new Date().toISOString() }
-      })
-      
-      // Clear selection after single-item drag
-      setSelectedItems([])
+      const adjusted = targetIndex > draggedIndex ? targetIndex - 1 : targetIndex
+      newBoard.splice(adjusted, 0, removed)
+      onSave({ ...data, board: newBoard, meta: { ...data.meta, updatedAt: new Date().toISOString() } })
     }
+
+    setSelectedItems([])
+  }
+
+  const handleDragCancel = () => {
+    setDraggingItem(null)
+    setDropIndicator(null)
+    cleanupDragListeners()
   }
 
   const handleMarkerDrop = (categoryId, isNewCategory = false, insertionId = null, categoryObj = null, appendToEnd = false) => {
@@ -876,6 +783,7 @@ function Board({ data, onSave }) {
         key="insert-top" 
         id="insert-top" 
         onDrop={(categoryId, isNew, _) => handleMarkerDrop(categoryId, isNew, null)} 
+        forceActive={dropIndicatorId === 'insert-top'}
       />
     )
     
@@ -919,6 +827,7 @@ function Board({ data, onSave }) {
             key={`insert-${item.taskId}`} 
             id={item.taskId} 
             onDrop={(categoryId, isNew, _) => handleMarkerDrop(categoryId, isNew, item.taskId)} 
+            forceActive={dropIndicatorId === item.taskId}
           />
         )
       } else if (item.type === 'marker') {
@@ -950,6 +859,7 @@ function Board({ data, onSave }) {
             key={`insert-${item.markerId}`} 
             id={item.markerId} 
             onDrop={(categoryId, isNew, _) => handleMarkerDrop(categoryId, isNew, item.markerId)} 
+            forceActive={dropIndicatorId === item.markerId}
           />
         )
       }
@@ -960,18 +870,28 @@ function Board({ data, onSave }) {
 
   return (
     <div className="board-container">
-      <div className="board-header">
-        <h2>Board</h2>
-        <input
-          type="text"
-          className="new-task-input header-input"
-          placeholder="Type a task and press Enter..."
-          value={newTaskText}
-          onChange={(e) => setNewTaskText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          autoFocus
-        />
-      </div>
+      <div 
+        className="board-content-wrapper"
+        onClick={(e) => {
+          // Clear selection when clicking on empty board area
+          if (e.target === e.currentTarget) {
+            handleClearSelection()
+          }
+        }}
+      >
+        <div className="board-main">
+          <div className="board-header">
+            <h2>Board</h2>
+            <input
+              type="text"
+              className="new-task-input header-input"
+              placeholder="Type a task and press Enter..."
+              value={newTaskText}
+              onChange={(e) => setNewTaskText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              autoFocus
+            />
+          </div>
       <div 
         className="board-content-wrapper"
         onClick={(e) => {
@@ -984,10 +904,12 @@ function Board({ data, onSave }) {
         <div className="board-main">
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCorners}
+            collisionDetection={closestCenter}
             onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
+            onDragMove={handleDragMove}
+            onDragOver={handleDragMove}
             onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
           >
             <SortableContext
               items={boardItems.map(i => i.type === 'task' ? i.taskId : i.markerId)}

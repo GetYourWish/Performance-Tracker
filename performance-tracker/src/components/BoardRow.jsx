@@ -72,6 +72,7 @@ const BoardRow = memo(function BoardRow({
         className={`board-row marker-row ${isSelected ? 'selected' : ''}`}
         role="listitem"
         aria-label={`Category marker: ${category.name}`}
+        data-board-item-id={id}
         onClick={(e) => {
           // Check for modifier key click on marker row - should toggle selection
           const multiSelectModifier = window.__multiSelectModifier || 'ctrl'
@@ -194,6 +195,7 @@ const BoardRow = memo(function BoardRow({
       className={`board-row task-row ${isEditing ? 'editing' : ''} ${isSelected ? 'selected' : ''} ${isWorkingOn ? 'working-on' : ''}`}
       role="listitem"
       aria-label={`Task: ${task.text}`}
+      data-board-item-id={id}
       onClick={(e) => {
         // Check if clicking on the task text with modifier key - should toggle selection, not edit
         if (e.target.closest('.task-text-display')) {
