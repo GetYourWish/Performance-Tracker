@@ -36,7 +36,8 @@ const BoardRow = memo(function BoardRow({
   } = useSortable({ 
     id,
     data: { 
-      type: task ? 'task' : 'marker' 
+      type: task ? 'task' : 'marker',
+      boardItem: true
     }
   })
   
