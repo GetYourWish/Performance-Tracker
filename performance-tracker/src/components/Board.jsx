@@ -511,31 +511,34 @@ function Board({ data, onSave }) {
 
   const handleRandomizeTask = useCallback(() => {
     const availableTaskIds = boardItems
-      .map(item => item.type === 'task' ? item.taskId : null)
-      .filter(id => id !== null)
-      .filter(id => tasks.some(t => t.id === id && !t.completion));
+      .filter(item => item.type === 'task')
+      .map(item => item.taskId)
+      .filter(id => tasks.some(t => t.id === id))
 
-    if (availableTaskIds.length === 0) return;
+    if (availableTaskIds.length === 0) return
 
-    let randomId;
-    if (availableTaskIds.length === 1) {
-      randomId = availableTaskIds[0];
-    } else {
-      const candidates = availableTaskIds.filter(id => id !== workingOnId);
-      randomId = candidates[Math.floor(Math.random() * candidates.length)];
+    const currentWorkingOn = data.workingOn || []
+    const candidates = availableTaskIds.filter(id => !currentWorkingOn.includes(id))
+    const pool = candidates.length > 0 ? candidates : availableTaskIds
+    const randomId = pool[Math.floor(Math.random() * pool.length)]
+
+    if (!currentWorkingOn.includes(randomId)) {
+      onSave({
+        ...data,
+        workingOn: [...currentWorkingOn, randomId],
+        meta: { ...data.meta, updatedAt: new Date().toISOString() }
+      })
     }
 
-    setWorkingOnId(randomId);
-
     setTimeout(() => {
-      const rowElement = document.querySelector(`.board-row[aria-label*="${tasks.find(t => t.id === randomId)?.text}"]`);
+      const rowElement = document.querySelector(`[data-board-item-id="${randomId}"]`)
       if (rowElement) {
-        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        rowElement.classList.add('random-flash');
-        setTimeout(() => rowElement.classList.remove('random-flash'), 1000);
+        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        rowElement.classList.add('random-flash')
+        setTimeout(() => rowElement.classList.remove('random-flash'), 1000)
       }
-    }, 100);
-  }, [boardItems, tasks, workingOnId]);
+    }, 100)
+  }, [boardItems, tasks, data, onSave])
 
   const handleAddTaskBelowMarker = useCallback((markerId) => {
     const newTask = {
@@ -894,7 +897,7 @@ function Board({ data, onSave }) {
           </div>
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={closestCorners}
             onDragStart={handleDragStart}
             onDragMove={handleDragMove}
             onDragOver={handleDragMove}
