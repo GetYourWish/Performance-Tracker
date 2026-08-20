@@ -38,42 +38,46 @@ function CategoryChip({ category, onAddMarker }) {
 }
 
 // Drop indicator overlay component - appears as a glowing blue line without affecting layout
-function DropIndicator({ activeId, boardItems }) {
-  if (!activeId) return null
+function DropIndicator({ activeId }) {
+  const [position, setPosition] = useState({ top: 0, width: 0 })
   
-  // Calculate position based on the active insertion point ID
-  const isInsertTop = activeId === 'insert-top'
-  
-  // Find the element to position relative to
-  let targetElement = null
-  if (isInsertTop) {
-    targetElement = document.querySelector('.board-list')
-  } else {
-    targetElement = document.querySelector(`[data-board-item-id="${activeId}"]`)
-  }
-  
-  if (!targetElement) return null
-  
-  const rect = targetElement.getBoundingClientRect()
-  const containerRect = document.querySelector('.board-list')?.getBoundingClientRect()
-  
-  if (!containerRect) return null
-  
-  // Position: for insert-top, show at top of list; otherwise show below the target element
-  const top = isInsertTop 
-    ? containerRect.top 
-    : rect.bottom - containerRect.top + 4
+  useEffect(() => {
+    // Calculate position based on the active insertion point ID
+    const isInsertTop = activeId === 'insert-top'
+    
+    // Find the element to position relative to
+    let targetElement = null
+    if (isInsertTop) {
+      targetElement = document.querySelector('.board-list')
+    } else {
+      targetElement = document.querySelector(`[data-board-item-id="${activeId}"]`)
+    }
+    
+    if (!targetElement) return
+    
+    const containerRect = document.querySelector('.board-list')?.getBoundingClientRect()
+    if (!containerRect) return
+    
+    let topPosition
+    if (isInsertTop) {
+      topPosition = 0
+    } else {
+      const rect = targetElement.getBoundingClientRect()
+      topPosition = rect.bottom - containerRect.top + 2
+    }
+    
+    setPosition({
+      top: topPosition,
+      width: containerRect.width
+    })
+  }, [activeId])
   
   return (
     <div 
       className="drop-indicator-overlay"
       style={{
-        position: 'absolute',
-        top: `${top}px`,
-        left: `${containerRect.left}px`,
-        width: `${containerRect.width}px`,
-        pointerEvents: 'none',
-        zIndex: 1000
+        top: `${position.top}px`,
+        width: `${position.width}px`
       }}
     >
       <div className="drop-indicator-line" />
@@ -953,7 +957,14 @@ function Board({ data, onSave }) {
               items={boardItems.map(i => i.type === 'task' ? i.taskId : i.markerId)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="board-list">
+              <div className="board-list" style={{ position: 'relative' }}>
+                {/* Drop indicator overlay */}
+                {dropIndicatorId && (
+                  <DropIndicator 
+                    activeId={dropIndicatorId} 
+                    boardItems={boardItems}
+                  />
+                )}
                 <AnimatePresence mode="popLayout">
                   {renderBoardRows()}
                 </AnimatePresence>
