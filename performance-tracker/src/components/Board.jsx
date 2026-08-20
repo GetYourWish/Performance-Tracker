@@ -892,16 +892,6 @@ function Board({ data, onSave }) {
               autoFocus
             />
           </div>
-      <div 
-        className="board-content-wrapper"
-        onClick={(e) => {
-          // Clear selection when clicking on empty board area
-          if (e.target === e.currentTarget) {
-            handleClearSelection()
-          }
-        }}
-      >
-        <div className="board-main">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
