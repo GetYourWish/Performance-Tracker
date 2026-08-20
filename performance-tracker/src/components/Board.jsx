@@ -37,8 +37,52 @@ function CategoryChip({ category, onAddMarker }) {
   )
 }
 
+// Drop indicator overlay component - appears as a glowing blue line without affecting layout
+function DropIndicator({ activeId, boardItems }) {
+  if (!activeId) return null
+  
+  // Calculate position based on the active insertion point ID
+  const isInsertTop = activeId === 'insert-top'
+  
+  // Find the element to position relative to
+  let targetElement = null
+  if (isInsertTop) {
+    targetElement = document.querySelector('.board-list')
+  } else {
+    targetElement = document.querySelector(`[data-board-item-id="${activeId}"]`)
+  }
+  
+  if (!targetElement) return null
+  
+  const rect = targetElement.getBoundingClientRect()
+  const containerRect = document.querySelector('.board-list')?.getBoundingClientRect()
+  
+  if (!containerRect) return null
+  
+  // Position: for insert-top, show at top of list; otherwise show below the target element
+  const top = isInsertTop 
+    ? containerRect.top 
+    : rect.bottom - containerRect.top + 4
+  
+  return (
+    <div 
+      className="drop-indicator-overlay"
+      style={{
+        position: 'absolute',
+        top: `${top}px`,
+        left: `${containerRect.left}px`,
+        width: `${containerRect.width}px`,
+        pointerEvents: 'none',
+        zIndex: 1000
+      }}
+    >
+      <div className="drop-indicator-line" />
+    </div>
+  )
+}
+
 // Insertion point component for precise drop locations
-function InsertionPoint({ id, onDrop, forceActive }) {
+function InsertionPoint({ id, forceActive }) {
   const { setNodeRef, isOver } = useDroppable({ 
     id,
     data: {
