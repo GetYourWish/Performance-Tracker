@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import {
   DndContext,
-  closestCenter,
+  closestCorners,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -168,6 +168,7 @@ function Board({ data, onSave }) {
   const [deleteTask, setDeleteTask] = useState(null)
   const [selectedItems, setSelectedItems] = useState([])
   const [activeInsertionPoint, setActiveInsertionPoint] = useState(null)
+  const [workingOnId, setWorkingOnId] = useState(null)
   
   // Derived memoized array for working on tasks (persisted in data.workingOn)
   const workingOnTasks = useMemo(() => data?.workingOn || [], [data?.workingOn])
@@ -529,6 +530,34 @@ function Board({ data, onSave }) {
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
   }, [data, markers, boardItems, onSave])
+
+  const handleRandomizeTask = useCallback(() => {
+    const availableTaskIds = boardItems
+      .map(item => item.type === 'task' ? item.taskId : null)
+      .filter(id => id !== null)
+      .filter(id => tasks.some(t => t.id === id && !t.completion));
+
+    if (availableTaskIds.length === 0) return;
+
+    let randomId;
+    if (availableTaskIds.length === 1) {
+      randomId = availableTaskIds[0];
+    } else {
+      const candidates = availableTaskIds.filter(id => id !== workingOnId);
+      randomId = candidates[Math.floor(Math.random() * candidates.length)];
+    }
+
+    setWorkingOnId(randomId);
+
+    setTimeout(() => {
+      const rowElement = document.querySelector(`.board-row[aria-label*="${tasks.find(t => t.id === randomId)?.text}"]`);
+      if (rowElement) {
+        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        rowElement.classList.add('random-flash');
+        setTimeout(() => rowElement.classList.remove('random-flash'), 1000);
+      }
+    }, 100);
+  }, [boardItems, tasks, workingOnId]);
 
   const handleAddTaskBelowMarker = useCallback((markerId) => {
     const newTask = {
@@ -955,7 +984,7 @@ function Board({ data, onSave }) {
         <div className="board-main">
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={closestCorners}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
@@ -993,12 +1022,22 @@ function Board({ data, onSave }) {
           </DndContext>
         </div>
         
-        <div className="board-sidebar">
-          <CategorySidebar 
-            categories={categories}
-            onCreateCategory={(updatedCategories) => onSave({ ...data, categories: updatedCategories, meta: { ...data.meta, updatedAt: new Date().toISOString() } })}
-            onAddMarker={handleAddMarker}
-          />
+        <div className="board-right-panel">
+          <button
+            type="button"
+            className="randomizer-btn"
+            onClick={handleRandomizeTask}
+            title="Pick a random task to work on"
+          >
+            🎲 Randomizer
+          </button>
+          <div className="board-sidebar">
+            <CategorySidebar 
+              categories={categories}
+              onCreateCategory={(updatedCategories) => onSave({ ...data, categories: updatedCategories, meta: { ...data.meta, updatedAt: new Date().toISOString() } })}
+              onAddMarker={handleAddMarker}
+            />
+          </div>
         </div>
       </div>
 
