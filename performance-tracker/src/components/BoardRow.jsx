@@ -26,6 +26,7 @@ const BoardRow = memo(function BoardRow({
   onUpdateMarkerNote
 }) {
   const [editText, setEditText] = useState(task?.text || '')
+  const [showCategoryNotePopup, setShowCategoryNotePopup] = useState(false)
   const [categoryNoteEdit, setCategoryNoteEdit] = useState('')
   
   const {
@@ -133,6 +134,7 @@ const BoardRow = memo(function BoardRow({
             onClick={(e) => {
               e.stopPropagation()
               setCategoryNoteEdit(marker.note || '')
+              setShowCategoryNotePopup(true)
             }}
             title="Click to add/edit category note"
           >
@@ -152,47 +154,58 @@ const BoardRow = memo(function BoardRow({
           </button>
         </div>
         {/* Category note edit popup */}
-        {categoryNoteEdit !== null && (
-          <div className="category-note-edit-popup" onClick={(e) => e.stopPropagation()}>
-            <textarea
-              value={categoryNoteEdit}
-              onChange={(e) => setCategoryNoteEdit(e.target.value)}
-              placeholder="Enter category note..."
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  // Save note to marker
-                  onUpdateMarkerNote && onUpdateMarkerNote(marker.id, categoryNoteEdit)
-                  setCategoryNoteEdit(null)
-                } else if (e.key === 'Escape') {
-                  setCategoryNoteEdit(null)
-                }
-              }}
-            />
-            <div className="note-edit-actions">
-              <button 
-                className="save-note-btn"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  // Save note to marker
-                  onUpdateMarkerNote && onUpdateMarkerNote(marker.id, categoryNoteEdit)
-                  setCategoryNoteEdit(null)
+        {showCategoryNotePopup && (
+          <>
+            <div className="category-note-edit-popup-overlay" onClick={(e) => {
+              e.stopPropagation()
+              setShowCategoryNotePopup(false)
+              setCategoryNoteEdit('')
+            }} />
+            <div className="category-note-edit-popup" onClick={(e) => e.stopPropagation()}>
+              <textarea
+                value={categoryNoteEdit}
+                onChange={(e) => setCategoryNoteEdit(e.target.value)}
+                placeholder="Enter category note..."
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    // Save note to marker
+                    onUpdateMarkerNote && onUpdateMarkerNote(marker.id, categoryNoteEdit)
+                    setShowCategoryNotePopup(false)
+                    setCategoryNoteEdit('')
+                  } else if (e.key === 'Escape') {
+                    setShowCategoryNotePopup(false)
+                    setCategoryNoteEdit('')
+                  }
                 }}
-              >
-                Save
-              </button>
-              <button 
-                className="cancel-note-btn"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setCategoryNoteEdit(null)
-                }}
-              >
-                Cancel
-              </button>
+              />
+              <div className="note-edit-actions">
+                <button 
+                  className="save-note-btn"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    // Save note to marker
+                    onUpdateMarkerNote && onUpdateMarkerNote(marker.id, categoryNoteEdit)
+                    setShowCategoryNotePopup(false)
+                    setCategoryNoteEdit('')
+                  }}
+                >
+                  Save
+                </button>
+                <button 
+                  className="cancel-note-btn"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowCategoryNotePopup(false)
+                    setCategoryNoteEdit('')
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-          </div>
+          </>
         )}
         <div className="move-buttons">
           <button 

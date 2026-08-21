@@ -1376,18 +1376,28 @@
 }
 
 .category-note-edit-popup {
-  position: absolute;
-  top: 100%;
-  left: 0;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   z-index: 1001;
-  min-width: 250px;
-  max-width: 350px;
-  margin-top: 4px;
+  min-width: 350px;
+  max-width: 500px;
+}
+
+.category-note-edit-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
 }
 
 .category-note-edit-popup textarea {
