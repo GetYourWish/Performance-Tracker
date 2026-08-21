@@ -1292,3 +1292,21 @@
 .board-row.random-flash {
   animation: random-flash-anim 1s ease-out;
 }
+
+/* Stacked Chart Review Styles */
+.stacked-review {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.stacked-chart-container {
+  background: var(--bg-secondary);
+  padding: 16px;
+  border-radius: var(--radius-lg);
+}
+
+.stacked-chart {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+}
