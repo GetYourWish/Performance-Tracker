@@ -20,7 +20,7 @@ __pycache__/
 target/
 .gradle/
 
-# Editors
+# Editor/IDE files
 .vscode/
 .idea/
 *.swp
@@ -30,17 +30,37 @@ target/
 # Logs
 *.log
 
-# Environment
-.env
-.env.local
-*.env.*
-
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# System
+# Environment
+.env
+.env.local
+*.env.*
+
+# System files
 .DS_Store
 Thumbs.db
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
 ```
