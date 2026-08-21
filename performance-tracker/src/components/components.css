@@ -218,6 +218,31 @@
   color: var(--text-primary);
   font-weight: 500;
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.category-note-indicator {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  color: inherit;
+  font-size: 11px;
+  font-weight: bold;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.category-note-indicator:hover {
+  background: rgba(255, 255, 255, 0.5);
+  transform: scale(1.1);
 }
 
 .add-task-marker-btn {
@@ -1309,4 +1334,111 @@
 .stacked-chart {
   background: var(--bg-secondary);
   border-radius: var(--radius-lg);
+}
+
+/* Category Note Styles */
+.category-note-tooltip {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 200px;
+  max-width: 300px;
+  margin-top: 4px;
+}
+
+.category-note-content {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.edit-note-btn {
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.edit-note-btn:hover {
+  opacity: 0.9;
+}
+
+.category-note-edit-popup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 1001;
+  min-width: 250px;
+  max-width: 350px;
+  margin-top: 4px;
+}
+
+.category-note-edit-popup textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  resize: vertical;
+  font-family: inherit;
+  margin-bottom: 8px;
+}
+
+.category-note-edit-popup textarea:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.note-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.save-note-btn,
+.cancel-note-btn {
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: none;
+}
+
+.save-note-btn {
+  background: var(--accent-color);
+  color: white;
+}
+
+.save-note-btn:hover {
+  opacity: 0.9;
+}
+
+.cancel-note-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.cancel-note-btn:hover {
+  background: var(--border-color);
 }

@@ -22,9 +22,12 @@ const BoardRow = memo(function BoardRow({
   isWorkingOn,
   onToggleWorkingOn,
   selectionSize = 1,
-  onAddTaskBelow
+  onAddTaskBelow,
+  onUpdateMarkerNote
 }) {
   const [editText, setEditText] = useState(task?.text || '')
+  const [showCategoryNote, setShowCategoryNote] = useState(false)
+  const [categoryNoteEdit, setCategoryNoteEdit] = useState('')
   
   const {
     attributes,
@@ -60,6 +63,13 @@ const BoardRow = memo(function BoardRow({
       setEditText(task.text)
     }
   }, [task?.text])
+
+  // Sync category note from marker when it changes
+  useEffect(() => {
+    if (marker && marker.note !== undefined) {
+      setCategoryNoteEdit(marker.note || '')
+    }
+  }, [marker?.note, marker?.id])
 
   if (marker) {
     return (
@@ -118,6 +128,22 @@ const BoardRow = memo(function BoardRow({
           className="category-marker"
           style={{ backgroundColor: category.color + '4D', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}
         >
+          {/* Category note indicator - shows when note exists */}
+          {(marker.note || categoryNoteEdit) && (
+            <div 
+              className="category-note-indicator"
+              onMouseEnter={() => setShowCategoryNote(true)}
+              onMouseLeave={() => setShowCategoryNote(false)}
+              onClick={(e) => {
+                e.stopPropagation()
+                setCategoryNoteEdit(marker.note || '')
+                setShowCategoryNote(false)
+              }}
+              title={marker.note || 'Add note'}
+            >
+              i
+            </div>
+          )}
           <span>/{category.name}</span>
           <button 
             className="add-task-marker-btn"
@@ -131,6 +157,67 @@ const BoardRow = memo(function BoardRow({
             +
           </button>
         </div>
+        {/* Category note tooltip */}
+        {showCategoryNote && (
+          <div className="category-note-tooltip">
+            <div className="category-note-content">
+              {marker.note || 'No note'}
+            </div>
+            <button 
+              className="edit-note-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                setCategoryNoteEdit(marker.note || '')
+                setShowCategoryNote(false)
+              }}
+            >
+              Edit
+            </button>
+          </div>
+        )}
+        {/* Category note edit popup */}
+        {categoryNoteEdit !== null && !showCategoryNote && (
+          <div className="category-note-edit-popup" onClick={(e) => e.stopPropagation()}>
+            <textarea
+              value={categoryNoteEdit}
+              onChange={(e) => setCategoryNoteEdit(e.target.value)}
+              placeholder="Enter category note..."
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  // Save note to marker
+                  onUpdateMarkerNote && onUpdateMarkerNote(marker.id, categoryNoteEdit)
+                  setCategoryNoteEdit(null)
+                } else if (e.key === 'Escape') {
+                  setCategoryNoteEdit(null)
+                }
+              }}
+            />
+            <div className="note-edit-actions">
+              <button 
+                className="save-note-btn"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  // Save note to marker
+                  onUpdateMarkerNote && onUpdateMarkerNote(marker.id, categoryNoteEdit)
+                  setCategoryNoteEdit(null)
+                }}
+              >
+                Save
+              </button>
+              <button 
+                className="cancel-note-btn"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCategoryNoteEdit(null)
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         <div className="move-buttons">
           <button 
             className="move-btn"
