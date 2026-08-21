@@ -26,7 +26,6 @@ const BoardRow = memo(function BoardRow({
   onUpdateMarkerNote
 }) {
   const [editText, setEditText] = useState(task?.text || '')
-  const [showCategoryNote, setShowCategoryNote] = useState(false)
   const [categoryNoteEdit, setCategoryNoteEdit] = useState('')
   
   const {
@@ -128,22 +127,17 @@ const BoardRow = memo(function BoardRow({
           className="category-marker"
           style={{ backgroundColor: category.color + '4D', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}
         >
-          {/* Category note indicator - shows when note exists */}
-          {(marker.note || categoryNoteEdit) && (
-            <div 
-              className="category-note-indicator"
-              onMouseEnter={() => setShowCategoryNote(true)}
-              onMouseLeave={() => setShowCategoryNote(false)}
-              onClick={(e) => {
-                e.stopPropagation()
-                setCategoryNoteEdit(marker.note || '')
-                setShowCategoryNote(false)
-              }}
-              title={marker.note || 'Add note'}
-            >
-              i
-            </div>
-          )}
+          {/* Category note indicator - always visible */}
+          <div 
+            className="category-note-indicator"
+            onClick={(e) => {
+              e.stopPropagation()
+              setCategoryNoteEdit(marker.note || '')
+            }}
+            title="Click to add/edit category note"
+          >
+            i
+          </div>
           <span>/{category.name}</span>
           <button 
             className="add-task-marker-btn"
@@ -157,26 +151,8 @@ const BoardRow = memo(function BoardRow({
             +
           </button>
         </div>
-        {/* Category note tooltip */}
-        {showCategoryNote && (
-          <div className="category-note-tooltip">
-            <div className="category-note-content">
-              {marker.note || 'No note'}
-            </div>
-            <button 
-              className="edit-note-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                setCategoryNoteEdit(marker.note || '')
-                setShowCategoryNote(false)
-              }}
-            >
-              Edit
-            </button>
-          </div>
-        )}
         {/* Category note edit popup */}
-        {categoryNoteEdit !== null && !showCategoryNote && (
+        {categoryNoteEdit !== null && (
           <div className="category-note-edit-popup" onClick={(e) => e.stopPropagation()}>
             <textarea
               value={categoryNoteEdit}
