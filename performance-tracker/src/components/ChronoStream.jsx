@@ -299,6 +299,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
       </div>
     </div>
   )
+  }
 
   // Normal view layout
   const renderNormalView = () => {
@@ -314,7 +315,8 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
           margin={{ top: 10, right: 40, left: 0, bottom: 10 }}
           onMouseMove={(state) => {
             const point = state?.activePayload?.[0]?.payload
-            setHoverDay(point && point.count > 0 && !point.isFuture ? point : null)
+            // Show hover for any non-future day, regardless of task count
+            setHoverDay(point && !point.isFuture ? point : null)
           }}
           onMouseLeave={() => setHoverDay(null)}
           onClick={(state) => {
