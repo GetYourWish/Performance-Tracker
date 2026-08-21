@@ -852,6 +852,25 @@ function Board({ data, onSave }) {
     })
   }, [markers, boardItems, data, onSave])
 
+  const handleUpdateMarkerNote = useCallback((markerId, note) => {
+    const updatedMarkers = markers.map(m => {
+      if (m.id === markerId) {
+        return { 
+          ...m, 
+          note: note.trim(),
+          updatedAt: new Date().toISOString() 
+        }
+      }
+      return m
+    })
+
+    onSave({
+      ...data,
+      markers: updatedMarkers,
+      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+    })
+  }, [markers, data, onSave])
+
 
   // Render board rows with insertion points
   const renderBoardRows = () => {
@@ -930,6 +949,7 @@ function Board({ data, onSave }) {
             onSelect={handleSelectItem}
             selectionSize={selectedItems.length}
             onAddTaskBelow={() => handleAddTaskBelowMarker(item.markerId)}
+            onUpdateMarkerNote={handleUpdateMarkerNote}
           />
         )
         
