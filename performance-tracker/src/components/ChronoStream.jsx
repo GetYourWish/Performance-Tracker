@@ -111,7 +111,13 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
   // Custom tooltip for dark theme
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
-      const dayData = filteredData.find(d => d.date === label || d.dayName === label)
+      // For month view, the label will be fullDate; for week view, it will be dayName
+      // We need to find the matching data by checking both fields
+      const dayData = filteredData.find(d => 
+        d.date === label || 
+        d.dayName === label || 
+        d.fullDate === label
+      )
       
       // Don't show tooltip for future days with null score
       if (dayData?.score === null) {
@@ -189,7 +195,11 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
   }
   
   // Export layout component
-  const renderExportLayout = () => (
+  const renderExportLayout = () => {
+    // For month view, use fullDate as the XAxis dataKey to show unique dates
+    const xAxisDataKey = range === 'month' ? 'fullDate' : 'dayName'
+    
+    return (
     <div ref={chartRef} style={{
       background: '#1a1a2e',
       padding: '30px',
@@ -213,11 +223,12 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
           <XAxis 
-            dataKey="dayName" 
-            tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+            dataKey={xAxisDataKey}
+            tick={{ fill: 'var(--text-secondary)', fontSize: range === 'month' ? 10 : 12 }}
             axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
             tickLine={{ stroke: 'rgba(255,255,255,0.1)' }}
             type="category"
+            interval="preserveStartEnd"
           />
           <YAxis hide domain={[0, 'auto']} />
           <Area
@@ -290,7 +301,12 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
   )
 
   // Normal view layout
-  const renderNormalView = () => (
+  const renderNormalView = () => {
+    // For month view, use fullDate as the XAxis dataKey to show unique dates
+    // For week view, use dayName since all 7 days are unique within a week
+    const xAxisDataKey = range === 'month' ? 'fullDate' : 'dayName'
+    
+    return (
     <div className="chrono-stream-container" style={{ position: 'relative', cursor: hoverDay ? 'pointer' : 'default' }}>
       <ResponsiveContainer width="100%" height={300}>
         <AreaChart 
@@ -313,11 +329,12 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
           <XAxis 
-            dataKey="dayName" 
-            tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+            dataKey={xAxisDataKey}
+            tick={{ fill: 'var(--text-secondary)', fontSize: range === 'month' ? 10 : 12 }}
             axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
             tickLine={{ stroke: 'rgba(255,255,255,0.1)' }}
             type="category"
+            interval="preserveStartEnd"
           />
           <YAxis hide domain={[0, 'auto']} />
           <Tooltip content={<CustomTooltip />} />
@@ -335,6 +352,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
       </ResponsiveContainer>
     </div>
   )
+  }
 
   if (filteredData.length === 0) {
     return (
