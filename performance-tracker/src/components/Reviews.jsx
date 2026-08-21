@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from 'react'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, getYear, startOfYear, endOfYear } from 'date-fns'
 import { calculateDayScore, parseDate, formatDate, groupTasksByDate } from '../utils/helpers'
 import ChronoStream from './ChronoStream'
+import StackedChart from './StackedChart'
 import HeatmapGrid from './HeatmapSkyline'
 import { toPng } from 'html-to-image'
 
@@ -461,6 +462,12 @@ function Reviews({ data, onDayClick }) {
             Flow State
           </button>
           <button 
+            className={`tab ${reviewType === 'stacked' ? 'active' : ''}`}
+            onClick={() => setReviewType('stacked')}
+          >
+            Stacked Chart
+          </button>
+          <button 
             className={`tab ${reviewType === 'heatmap' ? 'active' : ''}`}
             onClick={() => setReviewType('heatmap')}
           >
@@ -619,6 +626,44 @@ function Reviews({ data, onDayClick }) {
               onDayClick={handleDayClick}
               isExporting={isExporting}
               chartRef={chartRef}
+            />
+          </div>
+        )}
+
+        {reviewType === 'stacked' && (
+          <div className="stacked-review">
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {['week', 'month', 'all'].map(r => (
+                  <button
+                    key={r}
+                    className={`tab ${streamRange === r ? 'active' : ''}`}
+                    onClick={() => setStreamRange(r)}
+                    style={{
+                      padding: '6px 12px',
+                      background: streamRange === r ? 'var(--bg-primary)' : 'var(--bg-secondary)',
+                      borderRadius: 'var(--radius-md)',
+                      color: streamRange === r ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      fontSize: '13px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                  >
+                    {r.charAt(0).toUpperCase() + r.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Stacked Bar Chart showing category distribution per day */}
+            <StackedChart
+              tasks={completedTasks}
+              categories={categories}
+              difficulties={difficulties}
+              range={streamRange}
+              weekStartsOn={settings.weekStartsOn}
+              onDayClick={handleDayClick}
             />
           </div>
         )}
