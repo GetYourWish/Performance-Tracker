@@ -154,9 +154,10 @@ const BoardRow = memo(function BoardRow({
             +
           </button>
         </div>
-        {/* Category note edit popup */}
+        
+        {/* Category note edit popup - rendered at root level to avoid stretching */}
         {showCategoryNotePopup && (
-          <>
+          <div className="category-note-popup-wrapper">
             <div className="category-note-edit-popup-overlay" onClick={(e) => {
               e.stopPropagation()
               setShowCategoryNotePopup(false)
@@ -254,7 +255,7 @@ const BoardRow = memo(function BoardRow({
                 </div>
               )}
             </div>
-          </>
+          </div>
         )}
         <div className="move-buttons">
           <button 
