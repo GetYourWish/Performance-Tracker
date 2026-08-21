@@ -242,7 +242,6 @@
 
 .category-note-indicator:hover {
   background: rgba(255, 255, 255, 0.5);
-  transform: scale(1.1);
 }
 
 .add-task-marker-btn {
