@@ -86,27 +86,10 @@ const BoardRow = memo(function BoardRow({
         aria-label={`Category marker: ${category.name}`}
         data-board-item-id={id}
         onClick={(e) => {
-          // Check for modifier key click on marker row - should toggle selection ONLY with modifier
-          const multiSelectModifier = window.__multiSelectModifier || 'ctrl'
-          let isMultiSelect = false
-          if (multiSelectModifier === 'ctrl') {
-            isMultiSelect = e.ctrlKey || e.metaKey
-          } else if (multiSelectModifier === 'shift') {
-            isMultiSelect = e.shiftKey
-          } else if (multiSelectModifier === 'alt') {
-            isMultiSelect = e.altKey
-          }
-          
-          // Only select if modifier key is pressed AND not clicking on interactive elements
-          if (onSelect && !e.target.closest('.drag-handle') && !e.target.closest('button') && !e.target.closest('.category-marker') && isMultiSelect) {
-            e.stopPropagation()
-            onSelect(id, { 
-              ctrl: e.ctrlKey, 
-              meta: e.metaKey, 
-              shift: e.shiftKey, 
-              alt: e.altKey 
-            })
-          }
+          // Marker rows should NEVER be selected by clicking on them
+          // They can only be selected programmatically or via keyboard navigation if needed
+          // This prevents accidental selection when clicking near the marker
+          e.stopPropagation()
         }}
         {...rowListeners}
       >
@@ -372,11 +355,8 @@ const BoardRow = memo(function BoardRow({
               shift: e.shiftKey, 
               alt: e.altKey 
             })
-          } else {
-            // Plain click - select only this item
-            e.stopPropagation()
-            onSelect(id, { ctrl: false, meta: false, shift: false, alt: false })
           }
+          // Plain click without modifier does NOT select - prevents accidental selection
         }
       }}
       {...rowListeners}
