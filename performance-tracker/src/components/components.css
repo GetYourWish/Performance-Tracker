@@ -1613,8 +1613,7 @@
   background: var(--bg-primary);
   padding: 32px;
   border-radius: var(--radius-lg);
-  width: 100%;
-  max-width: 900px;
+  width: 80vw;
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
