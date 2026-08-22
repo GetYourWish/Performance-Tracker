@@ -86,7 +86,7 @@ const BoardRow = memo(function BoardRow({
         aria-label={`Category marker: ${category.name}`}
         data-board-item-id={id}
         onClick={(e) => {
-          // Check for modifier key click on marker row - should toggle selection
+          // Check for modifier key click on marker row - should toggle selection ONLY with modifier
           const multiSelectModifier = window.__multiSelectModifier || 'ctrl'
           let isMultiSelect = false
           if (multiSelectModifier === 'ctrl') {
@@ -97,7 +97,8 @@ const BoardRow = memo(function BoardRow({
             isMultiSelect = e.altKey
           }
           
-          if (onSelect && !e.target.closest('.drag-handle') && !e.target.closest('button')) {
+          // Only select if modifier key is pressed
+          if (onSelect && !e.target.closest('.drag-handle') && !e.target.closest('button') && isMultiSelect) {
             e.stopPropagation()
             onSelect(id, { 
               ctrl: e.ctrlKey, 
