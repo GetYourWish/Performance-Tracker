@@ -21,15 +21,23 @@ import BoardRow from './BoardRow'
 import { generateId, getCurrentDate, getTaskCategory } from '../utils/helpers'
 
 // Simple category chip with + button to add marker
-function CategoryChip({ category, onAddMarker }) {
+function CategoryChip({ category, onAddMarker, onNavigateToMarker }) {
   return (
-    <div className="category-chip" style={{ backgroundColor: category.color }}>
+    <div 
+      className="category-chip" 
+      style={{ backgroundColor: category.color }}
+      onClick={onNavigateToMarker}
+      title="Click to navigate to this category on the board"
+    >
       <span className="category-chip-name">{category.name}</span>
       <button
         className="chip-add-marker-btn"
         title="Add marker to board"
         aria-label={`Add ${category.name} marker to the board`}
-        onClick={onAddMarker}
+        onClick={(e) => {
+          e.stopPropagation() // Prevent triggering the chip click
+          onAddMarker()
+        }}
       >
         +
       </button>
@@ -115,7 +123,7 @@ function InsertionPoint({ id, forceActive, onDrop }) {
 }
 
 // Sidebar component for categories - simple list with + button on chips
-function CategorySidebar({ categories, onCreateCategory, onAddMarker }) {
+function CategorySidebar({ categories, onCreateCategory, onAddMarker, onNavigateToCategory }) {
   const [isCreating, setIsCreating] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#60a5fa')
@@ -177,6 +185,7 @@ function CategorySidebar({ categories, onCreateCategory, onAddMarker }) {
             key={category.id}
             category={category}
             onAddMarker={() => onAddMarker(category)}
+            onNavigateToMarker={() => onNavigateToCategory(category)}
           />
         ))}
 
@@ -585,6 +594,30 @@ function Board({ data, onSave }) {
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
   }, [data, markers, boardItems, onSave])
+
+  const handleNavigateToCategory = useCallback((category) => {
+    // Find the first marker of this category on the board
+    const firstMarkerItem = boardItems.find(item => {
+      if (item.type !== 'marker') return false
+      const marker = markers.find(m => m.id === item.markerId)
+      return marker && marker.categoryId === category.id
+    })
+    
+    if (firstMarkerItem) {
+      const marker = markers.find(m => m.id === firstMarkerItem.markerId)
+      if (marker) {
+        // Scroll to the marker element on the board
+        setTimeout(() => {
+          const markerElement = document.querySelector(`[data-board-item-id="${firstMarkerItem.markerId}"]`)
+          if (markerElement) {
+            markerElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            markerElement.classList.add('random-flash')
+            setTimeout(() => markerElement.classList.remove('random-flash'), 1000)
+          }
+        }, 100)
+      }
+    }
+  }, [boardItems, markers])
 
   const handleRandomizeTask = useCallback(() => {
     const availableTaskIds = boardItems
@@ -1055,6 +1088,7 @@ function Board({ data, onSave }) {
               categories={categories}
               onCreateCategory={(updatedCategories) => onSave({ ...data, categories: updatedCategories, meta: { ...data.meta, updatedAt: new Date().toISOString() } })}
               onAddMarker={handleAddMarker}
+              onNavigateToCategory={handleNavigateToCategory}
             />
           </div>
         </div>
