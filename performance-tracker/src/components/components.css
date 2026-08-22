@@ -118,7 +118,7 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
 }
 
 .board-row {
@@ -129,6 +129,11 @@
   background: var(--row-fill);
   border-radius: var(--radius-md);
   transition: all var(--transition-fast);
+  margin-bottom: 4px;
+}
+
+.board-row:last-child {
+  margin-bottom: 0;
 }
 
 .board-row:hover {
@@ -210,6 +215,7 @@
 .marker-row {
   justify-content: center;
   background: transparent;
+  margin-bottom: 0 !important;
 }
 
 /* Add space between consecutive category markers (not between tasks) */
