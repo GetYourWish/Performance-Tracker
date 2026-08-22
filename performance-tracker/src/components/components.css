@@ -216,11 +216,14 @@
   justify-content: center;
   background: transparent;
   margin-bottom: 0 !important;
+  margin-top: 0 !important;
 }
 
 /* Add space between consecutive category markers (not between tasks) */
-.marker-row + .marker-row {
-  margin-top: 150px;
+/* Note: InsertionPoints are between markers, so we need to target the insertion point between markers */
+.insertion-point-between-markers {
+  height: 150px !important;
+  margin: 0 !important;
 }
 
 .category-marker {
