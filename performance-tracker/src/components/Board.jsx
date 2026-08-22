@@ -94,7 +94,7 @@ function DropIndicator({ activeId }) {
 }
 
 // Insertion point component for precise drop locations
-function InsertionPoint({ id, forceActive, onDrop }) {
+function InsertionPoint({ id, forceActive, onDrop, className = '' }) {
   const { setNodeRef, isOver } = useDroppable({ 
     id,
     data: {
@@ -109,7 +109,7 @@ function InsertionPoint({ id, forceActive, onDrop }) {
   return (
     <div
       ref={setNodeRef}
-      className={`insertion-point ${isActive ? 'is-over' : ''}`}
+      className={`insertion-point ${isActive ? 'is-over' : ''} ${className}`}
       data-insertion-id={id}
       style={{
         // Ensure insertion points are always rendered and have height
@@ -986,6 +986,10 @@ function Board({ data, onSave }) {
           />
         )
         
+        // Check if the next item is also a marker (for spacing)
+        const nextItem = boardItems[index + 1]
+        const isNextMarker = nextItem && nextItem.type === 'marker'
+        
         // Add insertion point after this marker
         rows.push(
           <InsertionPoint 
@@ -993,6 +997,7 @@ function Board({ data, onSave }) {
             id={item.markerId} 
             onDrop={(categoryId, isNew, _) => handleMarkerDrop(categoryId, isNew, item.markerId)} 
             forceActive={dropIndicatorId === item.markerId}
+            className={isNextMarker ? 'insertion-point-between-markers' : ''}
           />
         )
       }
