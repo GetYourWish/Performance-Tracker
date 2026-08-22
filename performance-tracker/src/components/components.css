@@ -1655,13 +1655,11 @@
 }
 
 .working-on-task-item:hover {
-  background: var(--bg-tertiary);
   transform: translateX(6px);
 }
 
 .working-on-task-item.selected {
   border-color: #22c55e;
-  background: rgba(34, 197, 94, 0.1);
 }
 
 .working-on-task-content {
