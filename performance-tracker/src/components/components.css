@@ -212,8 +212,9 @@
   background: transparent;
 }
 
+/* Add space between consecutive category markers (not between tasks) */
 .marker-row + .marker-row {
-  margin-top: 16px;
+  margin-top: 24px;
 }
 
 .category-marker {
