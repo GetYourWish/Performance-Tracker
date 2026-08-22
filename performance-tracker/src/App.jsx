@@ -3,6 +3,7 @@ import Board from './components/Board'
 import Reviews from './components/Reviews'
 import Settings from './components/Settings'
 import SetupScreen from './components/SetupScreen'
+import { WorkingOnMarker, WorkingOnPopup } from './components/WorkingOnMarker'
 import { validateAndHealData, generateId } from './utils/helpers'
 import './App.css'
 
@@ -14,6 +15,7 @@ function App() {
   const [setupRequired, setSetupRequired] = useState(false)
   const [conflicts, setConflicts] = useState([])
   const [selectedDate, setSelectedDate] = useState(new Date())
+  const [showWorkingOnPopup, setShowWorkingOnPopup] = useState(false)
   
   // Debounce save to avoid constant disk writes
   const saveTimeoutRef = useRef(null)
@@ -290,6 +292,11 @@ function App() {
         >
           Settings
         </button>
+        <div style={{ flex: 1 }}></div>
+        <WorkingOnMarker 
+          data={data} 
+          onOpenPopup={() => setShowWorkingOnPopup(true)} 
+        />
       </nav>
       
       <main className="main-content">
@@ -339,6 +346,86 @@ function App() {
           />
         )}
       </main>
+
+      {showWorkingOnPopup && (
+        <WorkingOnPopup
+          tasks={(data?.workingOn || []).map(id => data.tasks.find(t => t.id === id)).filter(Boolean)}
+          markers={data?.markers || []}
+          categories={data?.categories || []}
+          difficulties={data?.difficulties || []}
+          onClose={() => setShowWorkingOnPopup(false)}
+          onCompleteTask={({ taskId, difficultyId, date, note }) => {
+            // Find task index in boardItems to determine category based on markers ONLY
+            const boardItems = data?.board || []
+            const markers = data?.markers || []
+            const taskIndex = boardItems.findIndex(item => item.type === 'task' && item.taskId === taskId)
+            
+            // Strict marker-based category derivation
+            let aboveMarker = null
+            let belowMarker = null
+            
+            for (let i = taskIndex - 1; i >= 0; i--) {
+              const item = boardItems[i]
+              if (item && item.type === 'marker') {
+                aboveMarker = item
+                break
+              }
+            }
+            
+            for (let i = taskIndex + 1; i < boardItems.length; i++) {
+              const item = boardItems[i]
+              if (item && item.type === 'marker') {
+                belowMarker = item
+                break
+              }
+            }
+            
+            let categoryId = null
+            if (aboveMarker && belowMarker && aboveMarker.markerId === belowMarker.markerId) {
+              const marker = markers.find(m => m.id === aboveMarker.markerId)
+              if (marker) categoryId = marker.categoryId
+            } else if (aboveMarker && belowMarker) {
+              const aboveMarkerObj = markers.find(m => m.id === aboveMarker.markerId)
+              const belowMarkerObj = markers.find(m => m.id === belowMarker.markerId)
+              if (aboveMarkerObj && belowMarkerObj && aboveMarkerObj.categoryId === belowMarkerObj.categoryId) {
+                categoryId = aboveMarkerObj.categoryId
+              }
+            }
+            
+            const updatedTasks = data.tasks.map(t => {
+              if (t.id === taskId) {
+                return {
+                  ...t,
+                  completion: {
+                    completedDate: date,
+                    completedAt: new Date().toISOString(),
+                    difficultyId,
+                    categoryId,
+                    note: note || ''
+                  }
+                }
+              }
+              return t
+            })
+
+            const updatedBoard = boardItems.filter(item => 
+              !(item.type === 'task' && item.taskId === taskId)
+            )
+            
+            const updatedWorkingOn = (data.workingOn || []).filter(id => id !== taskId)
+
+            saveData({
+              ...data,
+              tasks: updatedTasks,
+              board: updatedBoard,
+              workingOn: updatedWorkingOn,
+              meta: { ...data.meta, updatedAt: new Date().toISOString() }
+            })
+
+            setShowWorkingOnPopup(false)
+          }}
+        />
+      )}
     </div>
   )
 }
