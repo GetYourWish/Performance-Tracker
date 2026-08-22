@@ -99,15 +99,14 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
                   }}
                 >
                   <div className="working-on-task-content">
-                    <span className="working-on-task-text">{task.text}</span>
                     {category && (
                       <span 
-                        className="working-on-category-badge"
+                        className="working-on-category-marker"
                         style={{ backgroundColor: category.color }}
-                      >
-                        {category.name}
-                      </span>
+                        title={category.name}
+                      ></span>
                     )}
+                    <span className="working-on-task-text">{task.text}</span>
                   </div>
                 </div>
               )
