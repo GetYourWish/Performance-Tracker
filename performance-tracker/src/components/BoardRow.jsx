@@ -97,8 +97,8 @@ const BoardRow = memo(function BoardRow({
             isMultiSelect = e.altKey
           }
           
-          // Only select if modifier key is pressed
-          if (onSelect && !e.target.closest('.drag-handle') && !e.target.closest('button') && isMultiSelect) {
+          // Only select if modifier key is pressed AND not clicking on interactive elements
+          if (onSelect && !e.target.closest('.drag-handle') && !e.target.closest('button') && !e.target.closest('.category-marker') && isMultiSelect) {
             e.stopPropagation()
             onSelect(id, { 
               ctrl: e.ctrlKey, 
