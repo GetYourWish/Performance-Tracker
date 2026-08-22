@@ -27,6 +27,9 @@ target/
 *.swo
 *.tmp
 
+# Logs
+*.log
+
 # System files
 .DS_Store
 Thumbs.db
@@ -34,8 +37,7 @@ Thumbs.db
 .env.local
 *.env.*
 
-# Logs and coverage
-*.log
+# Coverage
 coverage/
 htmlcov/
 .coverage
