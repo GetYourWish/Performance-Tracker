@@ -1679,15 +1679,18 @@
   line-height: 1.5;
 }
 
-.working-on-category-badge {
-  padding: 10px 20px;
-  border-radius: 20px;
-  font-size: 14px;
-  color: #fff;
-  font-weight: 600;
+.working-on-category-marker {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
   flex-shrink: 0;
-  white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  margin-right: 16px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.working-on-task-item:hover .working-on-category-marker {
+  transform: scale(1.15);
 }
 
 .completion-section {
