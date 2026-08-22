@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
-import { getTaskCategory } from '../utils/helpers'
 
-function WorkingOnPopup({ tasks, markers, categories, difficulties, onClose, onCompleteTask }) {
+function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, onClose, onCompleteTask }) {
   const [selectedTaskId, setSelectedTaskId] = useState(null)
   const [selectedDifficulty, setSelectedDifficulty] = useState(null)
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
@@ -11,7 +10,7 @@ function WorkingOnPopup({ tasks, markers, categories, difficulties, onClose, onC
 
   const handleComplete = () => {
     if (!selectedTaskId || !selectedDifficulty) return
-    
+
     onCompleteTask({
       taskId: selectedTaskId,
       difficultyId: selectedDifficulty,
@@ -25,6 +24,43 @@ function WorkingOnPopup({ tasks, markers, categories, difficulties, onClose, onC
     if (e.key === 'Escape') {
       onClose()
     }
+  }
+
+  // Helper to get category for a task based on board markers
+  const getTaskCategory = (taskId) => {
+    const taskIndex = boardItems.findIndex(item => item.type === 'task' && item.taskId === taskId)
+    if (taskIndex === -1) return null
+
+    let aboveMarker = null
+    let belowMarker = null
+
+    // Find nearest marker above (before) the task
+    for (let i = taskIndex - 1; i >= 0; i--) {
+      const item = boardItems[i]
+      if (item && item.type === 'marker') {
+        aboveMarker = item
+        break
+      }
+    }
+
+    // Find nearest marker below (after) the task
+    for (let i = taskIndex + 1; i < boardItems.length; i++) {
+      const item = boardItems[i]
+      if (item && item.type === 'marker') {
+        belowMarker = item
+        break
+      }
+    }
+
+    // Task has a category ONLY if both markers exist AND they reference the same category
+    if (aboveMarker && belowMarker) {
+      if (aboveMarker.categoryId === belowMarker.categoryId) {
+        const category = categories.find(c => c.id === aboveMarker.categoryId)
+        return category || null
+      }
+    }
+
+    return null
   }
 
   return (
@@ -52,7 +88,7 @@ function WorkingOnPopup({ tasks, markers, categories, difficulties, onClose, onC
             <p className="empty-state">No tasks currently being worked on.</p>
           ) : (
             tasks.map(task => {
-              const category = getTaskCategory(task.id, markers, categories)
+              const category = getTaskCategory(task.id)
               return (
                 <div 
                   key={task.id}
