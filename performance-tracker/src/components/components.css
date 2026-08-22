@@ -1611,11 +1611,11 @@
 
 .working-on-popup {
   background: var(--bg-primary);
-  padding: 28px;
+  padding: 32px;
   border-radius: var(--radius-lg);
   width: 100%;
-  max-width: 800px;
-  max-height: 85vh;
+  max-width: 900px;
+  max-height: 90vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
 }
@@ -1636,9 +1636,9 @@
 .working-on-tasks-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 20px;
-  max-height: 50vh;
+  gap: 12px;
+  margin-bottom: 24px;
+  max-height: 65vh;
   overflow-y: auto;
 }
 
@@ -1646,7 +1646,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 18px 24px;
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -1656,7 +1656,7 @@
 
 .working-on-task-item:hover {
   background: var(--bg-tertiary);
-  transform: translateX(4px);
+  transform: translateX(6px);
 }
 
 .working-on-task-item.selected {
@@ -1668,25 +1668,26 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
   flex: 1;
 }
 
 .working-on-task-text {
   flex: 1;
   color: var(--text-primary);
-  font-size: 15px;
-  line-height: 1.4;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 .working-on-category-badge {
-  padding: 6px 14px;
-  border-radius: 16px;
-  font-size: 13px;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 14px;
   color: #fff;
-  font-weight: 500;
+  font-weight: 600;
   flex-shrink: 0;
   white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .completion-section {
