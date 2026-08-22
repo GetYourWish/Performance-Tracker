@@ -210,7 +210,10 @@
 .marker-row {
   justify-content: center;
   background: transparent;
-  margin: 12px 0;
+}
+
+.marker-row + .marker-row {
+  margin-top: 16px;
 }
 
 .category-marker {
