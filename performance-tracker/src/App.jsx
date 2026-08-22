@@ -350,6 +350,7 @@ function App() {
       {showWorkingOnPopup && (
         <WorkingOnPopup
           tasks={(data?.workingOn || []).map(id => data.tasks.find(t => t.id === id)).filter(Boolean)}
+          boardItems={data?.board || []}
           markers={data?.markers || []}
           categories={data?.categories || []}
           difficulties={data?.difficulties || []}
