@@ -905,6 +905,21 @@ function Board({ data, onSave }) {
   }, [markers, data, onSave])
 
 
+  // Filter boardItems to only include items that will actually be rendered
+  // This ensures index-based lookups work correctly for consecutive marker detection
+  const visibleBoardItems = useMemo(() => {
+    return boardItems.filter(item => {
+      if (item.type === 'task') {
+        const task = tasks.find(t => t.id === item.taskId)
+        return task && !task.completion
+      } else if (item.type === 'marker') {
+        const marker = markers.find(m => m.id === item.markerId)
+        return marker
+      }
+      return false
+    })
+  }, [boardItems, tasks, markers])
+
   // Render board rows with insertion points
   const renderBoardRows = () => {
     const rows = []
@@ -919,10 +934,11 @@ function Board({ data, onSave }) {
       />
     )
     
-    boardItems.forEach((item, index) => {
+    visibleBoardItems.forEach((item, index) => {
+      const prevItem = visibleBoardItems[index - 1]
+      
       if (item.type === 'task') {
         const task = tasks.find(t => t.id === item.taskId)
-        if (!task || task.completion) return
 
         const taskIndex = boardItems.indexOf(item)
         const category = getTaskCategory(taskIndex, boardItems, markers, categories)
@@ -969,6 +985,9 @@ function Board({ data, onSave }) {
         const category = categories.find(c => c.id === marker.categoryId)
         if (!category) return
 
+        // Check if previous visible item is also a marker (for consecutive spacing)
+        const isConsecutiveMarker = prevItem?.type === 'marker'
+
         rows.push(
           <BoardRow
             key={item.markerId}
@@ -983,40 +1002,17 @@ function Board({ data, onSave }) {
             selectionSize={selectedItems.length}
             onAddTaskBelow={() => handleAddTaskBelowMarker(item.markerId)}
             onUpdateMarkerNote={handleUpdateMarkerNote}
+            isConsecutiveMarker={isConsecutiveMarker}
           />
         )
         
-        // Check if the next *rendered* item is also a marker (for spacing)
-        // Look ahead through boardItems to find the next item that will actually be rendered
-        let isNextMarker = false
-        for (let i = index + 1; i < boardItems.length; i++) {
-          const nextItem = boardItems[i]
-          if (nextItem.type === 'marker') {
-            // Check if this marker will be rendered (exists in markers array)
-            const nextMarker = markers.find(m => m.id === nextItem.markerId)
-            if (nextMarker) {
-              isNextMarker = true
-            }
-            break
-          } else if (nextItem.type === 'task') {
-            // Check if this task will be rendered (exists and not completed)
-            const nextTask = tasks.find(t => t.id === nextItem.taskId)
-            if (nextTask && !nextTask.completion) {
-              // Found a task that will be rendered, so markers are not consecutive
-              break
-            }
-            // Otherwise continue looking (this task is filtered out)
-          }
-        }
-        
-        // Add insertion point after this marker
+        // Add insertion point after this marker (always normal height for precise DnD)
         rows.push(
           <InsertionPoint 
             key={`insert-${item.markerId}`} 
             id={item.markerId} 
             onDrop={(categoryId, isNew, _) => handleMarkerDrop(categoryId, isNew, item.markerId)} 
             forceActive={dropIndicatorId === item.markerId}
-            className={isNextMarker ? 'insertion-point-between-markers' : ''}
           />
         )
       }

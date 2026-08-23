@@ -220,10 +220,9 @@
 }
 
 /* Add space between consecutive category markers (not between tasks) */
-/* Note: InsertionPoints are between markers, so we need to target the insertion point between markers */
-.insertion-point-between-markers {
-  height: 150px !important;
-  margin: 0 !important;
+/* Applied to the marker itself, not the insertion point, to avoid DnD hitbox issues */
+.marker-row.consecutive-marker {
+  margin-top: 150px !important;
 }
 
 .category-marker {
