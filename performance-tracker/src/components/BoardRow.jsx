@@ -23,7 +23,8 @@ const BoardRow = memo(function BoardRow({
   onToggleWorkingOn,
   selectionSize = 1,
   onAddTaskBelow,
-  onUpdateMarkerNote
+  onUpdateMarkerNote,
+  isConsecutiveMarker = false
 }) {
   const [editText, setEditText] = useState(task?.text || '')
   const [showCategoryNotePopup, setShowCategoryNotePopup] = useState(false)
@@ -81,7 +82,7 @@ const BoardRow = memo(function BoardRow({
         animate={{ opacity: 1, scaleY: 1 }}
         transition={{ type: 'spring', stiffness: 280, damping: 24 }}
         style={style}
-        className={`board-row marker-row ${isSelected ? 'selected' : ''}`}
+        className={`board-row marker-row ${isSelected ? 'selected' : ''} ${isConsecutiveMarker ? 'consecutive-marker' : ''}`}
         role="listitem"
         aria-label={`Category marker: ${category.name}`}
         data-board-item-id={id}
