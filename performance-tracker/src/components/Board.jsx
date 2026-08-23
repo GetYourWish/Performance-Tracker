@@ -986,9 +986,28 @@ function Board({ data, onSave }) {
           />
         )
         
-        // Check if the next item is also a marker (for spacing)
-        const nextItem = boardItems[index + 1]
-        const isNextMarker = nextItem && nextItem.type === 'marker'
+        // Check if the next *rendered* item is also a marker (for spacing)
+        // Look ahead through boardItems to find the next item that will actually be rendered
+        let isNextMarker = false
+        for (let i = index + 1; i < boardItems.length; i++) {
+          const nextItem = boardItems[i]
+          if (nextItem.type === 'marker') {
+            // Check if this marker will be rendered (exists in markers array)
+            const nextMarker = markers.find(m => m.id === nextItem.markerId)
+            if (nextMarker) {
+              isNextMarker = true
+            }
+            break
+          } else if (nextItem.type === 'task') {
+            // Check if this task will be rendered (exists and not completed)
+            const nextTask = tasks.find(t => t.id === nextItem.taskId)
+            if (nextTask && !nextTask.completion) {
+              // Found a task that will be rendered, so markers are not consecutive
+              break
+            }
+            // Otherwise continue looking (this task is filtered out)
+          }
+        }
         
         // Add insertion point after this marker
         rows.push(
