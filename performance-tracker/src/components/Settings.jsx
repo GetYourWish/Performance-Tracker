@@ -346,6 +346,23 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
             </div>
             
             <div className="setting-item">
+              <label>Consecutive Marker Spacing</label>
+              <input
+                type="number"
+                value={parseInt(settings.consecutiveMarkerMargin) || 150}
+                onChange={(e) => handleSettingChange('consecutiveMarkerMargin', `${Math.max(0, parseInt(e.target.value) || 0)}px`)}
+                min="0"
+                max="500"
+                step="10"
+                style={{ width: '100px' }}
+              />
+              <span style={{ marginLeft: '8px', color: 'var(--text-secondary)' }}>px</span>
+              <p className="setting-note">
+                Space between consecutive category markers on the board (default: 150px)
+              </p>
+            </div>
+            
+            <div className="setting-item">
               <label>Flow State Chart Color</label>
               <input
                 type="color"
