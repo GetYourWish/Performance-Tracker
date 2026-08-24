@@ -308,6 +308,7 @@ function App() {
             data={data} 
             selectedDate={selectedDate}
             onDayClick={(date) => setSelectedDate(date)} 
+            onSave={saveData}
           />
         )}
         {currentView === 'settings' && (
