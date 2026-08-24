@@ -221,8 +221,9 @@
 
 /* Add space between consecutive category markers (not between tasks) */
 /* Applied to the marker itself, not the insertion point, to avoid DnD hitbox issues */
+/* Margin value is configurable via settings --consecutive-marker-margin CSS variable */
 .marker-row.consecutive-marker {
-  margin-top: 150px !important;
+  margin-top: var(--consecutive-marker-margin, 150px) !important;
 }
 
 .category-marker {

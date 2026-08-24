@@ -283,7 +283,11 @@ function Board({ data, onSave }) {
     
     // Store multi-select modifier for BoardRow to access
     window.__multiSelectModifier = settings.multiSelectModifier || 'ctrl'
-  }, [settings.theme, settings.multiSelectModifier])
+    
+    // Apply consecutive marker margin CSS variable from settings
+    const consecutiveMarkerMargin = settings.consecutiveMarkerMargin || '150px'
+    root.style.setProperty('--consecutive-marker-margin', consecutiveMarkerMargin)
+  }, [settings.theme, settings.multiSelectModifier, settings.consecutiveMarkerMargin])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
