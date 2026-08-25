@@ -20,19 +20,13 @@ function App() {
   // Debounce save to avoid constant disk writes
   const saveTimeoutRef = useRef(null)
   const pendingSaveRef = useRef(null)
-  const dataRef = useRef(data)
-
-  // Keep dataRef in sync with data state
-  useEffect(() => {
-    dataRef.current = data
-  }, [data])
 
   // Load app state and data file path on mount
   useEffect(() => {
     loadAppState()
   }, [])
 
-  // Watch for external file changes via watcher and periodic polling (every 5s)
+  // Watch for external file changes
   useEffect(() => {
     if (!dataFile) return
 
@@ -41,47 +35,21 @@ function App() {
     const setupListener = async () => {
       unsubscribeFn = window.api.onExternalChange(async (event) => {
         console.log('File changed externally:', event.payload)
-        // Skip if local unsaved changes exist
-        if (pendingSaveRef.current || saveTimeoutRef.current) return
-        await loadData(dataFile, true) // true = external change
+        await loadData(true) // true = external change, preserve typing
       })
       
-      // Check for conflicts on initial load
+      // Check for conflicts on initial load and periodically
       checkForConflicts()
     }
     
     setupListener()
 
-    // Periodically check tracker.json every 5 seconds for changes
-    const intervalId = setInterval(async () => {
-      // Don't reload if user has pending local save operations
-      if (pendingSaveRef.current || saveTimeoutRef.current) {
-        return
-      }
-
-      try {
-        const loadedData = await window.api.loadData()
-        if (!loadedData) return
-
-        const healedData = validateAndHealData(loadedData)
-        if (JSON.stringify(healedData) !== JSON.stringify(dataRef.current)) {
-          console.log('Periodic poll: tracker.json changed externally, updating state...')
-          setData(healedData)
-        }
-
-        await checkForConflicts()
-      } catch (error) {
-        console.error('Error during periodic tracker.json check:', error)
-      }
-    }, 5000)
-
     return () => {
       if (unsubscribeFn) {
         unsubscribeFn()
       }
-      clearInterval(intervalId)
     }
-  }, [dataFile, checkForConflicts])
+  }, [dataFile])
   
   // Check for conflict files
   const checkForConflicts = useCallback(async () => {
