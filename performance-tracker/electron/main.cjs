@@ -134,33 +134,18 @@ async function setupWatcher() {
   const dirPath = path.dirname(dataFilePath);
   watcher = chokidar.watch([dirPath], {
     ignoreInitial: true,
-    awaitWriteFinish: {
-      stabilityThreshold: 100,
-      pollInterval: 50
-    },
     ignored: (filePath) => {
-      // Ignore temporary files created by atomic save or backup directories
+      // Ignore temporary files created by our atomic save
       return filePath.includes('.tmp') || 
              filePath.includes('~') ||
-             filePath.endsWith('.bak') ||
-             filePath.includes('.backups');
+             filePath.endsWith('.bak');
     }
   });
 
-  const handleFileEvent = (event, changedPath) => {
-    if (!mainWindow || isExternalWrite) return;
-    const baseName = path.basename(dataFilePath, '.json');
-    const changedFileName = path.basename(changedPath);
-
-    // Check if the modified file is our data file OR a Syncthing conflict file
-    if (changedPath === dataFilePath || changedFileName.startsWith(baseName + '-conflict-')) {
-      mainWindow.webContents.send('external-change', { event, path: changedPath });
-    }
-  };
-
-  watcher.on('all', (event, changedPath) => {
-    if (['add', 'change', 'unlink'].includes(event)) {
-      handleFileEvent(event, changedPath);
+  watcher.on('change', async (changedPath) => {
+    if (changedPath === dataFilePath && !isExternalWrite) {
+      // External change detected (not from our own write)
+      mainWindow.webContents.send('external-change', changedPath);
     }
   });
 }
