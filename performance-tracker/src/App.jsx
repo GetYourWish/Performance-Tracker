@@ -35,7 +35,8 @@ function App() {
     const setupListener = async () => {
       unsubscribeFn = window.api.onExternalChange(async (event) => {
         console.log('File changed externally:', event.payload)
-        await loadData(true) // true = external change, preserve typing
+        await loadData(dataFile, true) // true = external change
+        checkForConflicts()
       })
       
       // Check for conflicts on initial load and periodically
@@ -49,7 +50,7 @@ function App() {
         unsubscribeFn()
       }
     }
-  }, [dataFile])
+  }, [dataFile, checkForConflicts])
   
   // Check for conflict files
   const checkForConflicts = useCallback(async () => {
