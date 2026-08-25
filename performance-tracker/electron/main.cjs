@@ -10,6 +10,7 @@ let dataFilePath = null;
 let watcher = null;
 let debounceTimer = null;
 let isExternalWrite = false;
+const FILE_POLL_INTERVAL_MS = 5_000;
 
 // App state file path
 const appStatePath = path.join(app.getPath('userData'), 'app-state.json');
@@ -134,6 +135,10 @@ async function setupWatcher() {
   const dirPath = path.dirname(dataFilePath);
   watcher = chokidar.watch([dirPath], {
     ignoreInitial: true,
+    // Synced folders do not reliably forward filesystem events to Electron.
+    // Polling ensures changes made by another device are noticed promptly.
+    usePolling: true,
+    interval: FILE_POLL_INTERVAL_MS,
     ignored: (filePath) => {
       // Ignore temporary files created by our atomic save
       return filePath.includes('.tmp') || 
