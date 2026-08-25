@@ -7,7 +7,7 @@ import HeatmapGrid from './HeatmapSkyline'
 import { toPng } from 'html-to-image'
 
 // Task Detail Popup Component
-function TaskDetailPopup({ task, difficulty, category, onClose }) {
+function TaskDetailPopup({ task, difficulty, category, onClose, onEditDate }) {
   const completion = task.completion
   
   if (!completion) return null
@@ -41,8 +41,20 @@ function TaskDetailPopup({ task, difficulty, category, onClose }) {
         
         <div className="form-group">
           <label>Completion Date</label>
-          <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}>
-            {format(completedDate, 'EEEE, MMMM d, yyyy')}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ flex: 1, padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}>
+              {format(completedDate, 'EEEE, MMMM d, yyyy')}
+            </div>
+            {onEditDate && (
+              <button 
+                className="action-btn"
+                onClick={() => onEditDate(task)}
+                title="Edit completion date"
+                style={{ padding: '8px 12px', fontSize: '13px' }}
+              >
+                Edit Date
+              </button>
+            )}
           </div>
         </div>
         
@@ -284,13 +296,14 @@ function DeleteConfirmPopup({ task, onConfirm, onCancel }) {
   )
 }
 
-function Reviews({ data, onDayClick }) {
+function Reviews({ data, onDayClick, onSave }) {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [reviewType, setReviewType] = useState('daily')
   const [heatmapYear, setHeatmapYear] = useState(getYear(new Date()))
   const [selectedDay, setSelectedDay] = useState(null)
   const [isExporting, setIsExporting] = useState(false)
   const chartRef = useRef(null)
+  const [taskToEdit, setTaskToEdit] = useState(null)
 
   const tasks = data?.tasks || []
   const difficulties = data?.difficulties || []
@@ -689,7 +702,66 @@ function Reviews({ data, onDayClick }) {
           difficulty={difficulties.find(d => d.id === selectedTask.completion.difficultyId)}
           category={categories.find(c => c.id === selectedTask.completion.categoryId)}
           onClose={() => setSelectedTask(null)}
+          onEditDate={(task) => {
+            setSelectedTask(null)
+            setTaskToEdit(task)
+          }}
         />
+      )}
+
+      {/* Edit Date Popup */}
+      {taskToEdit && (
+        <div 
+          className="popup-overlay" 
+          onClick={() => setTaskToEdit(null)}
+          onKeyDown={(e) => e.key === 'Escape' && setTaskToEdit(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-date-title"
+        >
+          <div className="completion-popup" onClick={(e) => e.stopPropagation()}>
+            <h3 id="edit-date-title">Edit Completion Date</h3>
+            
+            <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
+              Update the completion date for this task. This is useful when you work past midnight or need to correct a mistake.
+            </p>
+            
+            <div className="form-group">
+              <label>New Completion Date</label>
+              <input
+                type="date"
+                value={taskToEdit.completion.completedDate}
+                onChange={(e) => {
+                  const newDate = e.target.value
+                  // Update the task with new date, keeping the same time component
+                  const updatedTasks = tasks.map(t => {
+                    if (t.id === taskToEdit.id) {
+                      return {
+                        ...t,
+                        completion: {
+                          ...t.completion,
+                          completedDate: newDate
+                        }
+                      }
+                    }
+                    return t
+                  })
+                  
+                  onSave({
+                    ...data,
+                    tasks: updatedTasks,
+                    meta: { ...data.meta, updatedAt: new Date().toISOString() }
+                  })
+                  setTaskToEdit(null)
+                }}
+              />
+            </div>
+            
+            <div className="popup-actions">
+              <button className="btn-cancel" onClick={() => setTaskToEdit(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Day Detail Popup */}
