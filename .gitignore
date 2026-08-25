@@ -15,9 +15,10 @@ node_modules/
 venv/
 .venv/
 __pycache__/
-*.pyc
-.pytest_cache/
 .mypy_cache/
+.pytest_cache/
+target/
+.gradle/
 
 # Editor/IDE files
 .vscode/
@@ -42,24 +43,4 @@ htmlcov/
 # System files
 .DS_Store
 Thumbs.db
-
-# Compressed files
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
 ```
