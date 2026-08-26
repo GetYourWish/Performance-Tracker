@@ -1,10 +1,13 @@
 import { useMemo, useState, useRef } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList } from 'recharts'
 import { format, eachDayOfInterval, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addDays, isAfter, isBefore, isEqual } from 'date-fns'
-import { formatDate, parseDate, calculateDayScore } from '../utils/helpers'
+import { formatDate, parseDate, calculateDayScore, groupTasksByDate } from '../utils/helpers'
 
 export default function ChronoStream({ tasks, categories, difficulties, range, flowStateColor = '#8b5cf6', onDayClick, weekStartsOn = 1, isExporting = false, chartRef }) {
   const [hoverDay, setHoverDay] = useState(null)
+  
+  // Pre-group tasks by date for O(1) per-day lookup instead of O(n) filter per day
+  const tasksByDate = useMemo(() => groupTasksByDate(tasks), [tasks])
   
   // Helper to check if a date is in the future
   const isFutureDate = (date) => {
@@ -55,7 +58,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
     
     return days.map(day => {
       const dayStr = formatDate(day)
-      const daysTasks = tasks.filter(t => t.completion?.completedDate === dayStr)
+      const daysTasks = tasksByDate.get(dayStr) || []
       
       // Check if this day is in the future
       const dayMidnight = new Date(day)
@@ -178,7 +181,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
           if (onDayClick && payload) {
             onDayClick(
               parseDate(payload.date),
-              tasks.filter(t => t.completion?.completedDate === payload.date)
+              tasksByDate.get(payload.date) || []
             )
           }
         }}
@@ -316,7 +319,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
             if (point && point.count > 0 && !point.isFuture && onDayClick) {
               onDayClick(
                 parseDate(point.date),
-                tasks.filter(t => t.completion?.completedDate === point.date)
+                tasksByDate.get(point.date) || []
               )
             }
           }}

@@ -119,15 +119,9 @@ export default function HeatmapGrid({ heatmapData, categories, onDayClick }) {
                 }}
                 onMouseEnter={(e) => {
                   handleCellHover(cell, e);
-                  if (cell.value > 0) {
-                    e.currentTarget.style.transform = 'scale(1.3)';
-                    e.currentTarget.style.boxShadow = '0 0 8px rgba(57, 211, 83, 0.6)';
-                  }
                 }}
-                onMouseLeave={(e) => {
+                onMouseLeave={() => {
                   handleCellLeave();
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = 'none';
                 }}
                 onClick={() => onDayClick && onDayClick(cell.day, cell.tasks)}
               />
