@@ -180,7 +180,12 @@ function CategorySidebar({ categories, onCreateCategory, onAddMarker, onNavigate
       <p className="drag-hint">Click + on a category to add a marker to the board</p>
       
       <div className="categories-list">
-        {categories.filter(c => c.active !== false).map((category) => (
+        {[...categories].sort((a, b) => {
+          const pa = a.priorityMultiplier ?? 1
+          const pb = b.priorityMultiplier ?? 1
+          if (pb !== pa) return pb - pa
+          return (a.name || '').localeCompare(b.name || '')
+        }).filter(c => c.active !== false).map((category) => (
           <CategoryChip
             key={category.id}
             category={category}
