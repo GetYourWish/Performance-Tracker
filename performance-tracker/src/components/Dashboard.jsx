@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { subDays, startOfWeek, format, differenceInDays, startOfMonth, getYear, startOfYear } from 'date-fns'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import MomentumRing from './MomentumRing'
-import { calculateTaskScoreBreakdown, formatDate, groupTasksByDate } from '../utils/helpers'
+import { calculateTaskScoreBreakdown, formatDate, parseDate, groupTasksByDate } from '../utils/helpers'
 
 const RANGE_OPTIONS = [
   { key: '30d', label: '30d' },
@@ -712,7 +712,6 @@ function CompositionPanel({ tasks, rangeTasks, difficulties, categories, setting
   const now = new Date()
   const last7 = subDays(now, 6)
   const prev7Start = subDays(now, 13)
-  const last7End = subDays(now, 1)
 
   const momentumData = categories.filter(c => c.active !== false).map(c => {
     const recent = rangeTasks.filter(t => {
