@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fse = require('fs-extra');
@@ -14,6 +14,24 @@ const FILE_POLL_INTERVAL_MS = 5_000;
 
 // App state file path
 const appStatePath = path.join(app.getPath('userData'), 'app-state.json');
+
+// Resolve app icon path — works in both dev and packaged (asar) mode
+function getAppIconPath() {
+  // In packaged mode, electron-builder embeds the icon into the exe.
+  // We also keep a copy in resources/ via extraResources so we can
+  // reference it at runtime for the window title-bar icon.
+  if (app.isPackaged) {
+    // extraResources puts files in <resources_dir>/icon.ico
+    const p1 = path.join(process.resourcesPath, 'icon.ico');
+    // Fallback: next to the exe (for portable builds)
+    const p2 = path.join(path.dirname(process.execPath), 'icon.ico');
+    // Fallback: inside asar (shouldn't happen, but just in case)
+    const p3 = path.join(__dirname, '..', 'build', 'icon.ico');
+    return require('fs').existsSync(p1) ? p1 : require('fs').existsSync(p2) ? p2 : p3;
+  }
+  // Dev mode: read from project build/ directory
+  return path.join(__dirname, '..', 'build', 'icon.ico');
+}
 
 // Load saved data path or set default - uses SyncThis folder next to executable per spec
 async function initializeDataPath() {
@@ -157,10 +175,12 @@ async function setupWatcher() {
 
 // Create main window
 function createWindow() {
+  const iconPath = getAppIconPath();
+  console.log('App icon path:', iconPath);
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
