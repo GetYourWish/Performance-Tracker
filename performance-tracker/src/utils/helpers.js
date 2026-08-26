@@ -73,7 +73,8 @@ export function getDaysInMonth(year, month) {
 }
 
 // Calculate score for a set of completed tasks - OPTIMIZED with difficulty map lookup
-export function calculateDayScore(completedTasks, difficulties, fatigueIncrement = 0.10, fatigueCap = 3.0) {
+// Formula: baseScore * fatigueMultiplier * categoryPriorityMultiplier
+export function calculateDayScore(completedTasks, difficulties, fatigueIncrement = 0.10, fatigueCap = 3.0, categories = []) {
   if (!completedTasks || completedTasks.length === 0) {
     return 0
   }
@@ -86,13 +87,24 @@ export function calculateDayScore(completedTasks, difficulties, fatigueIncrement
   let totalScore = 0
   let multiplier = 1.0
 
-  // Create difficulty lookup map for O(1) access instead of O(n) find
+  // Create lookups for O(1) access
   const difficultyMap = new Map(difficulties.map(d => [d.id, d]))
+  const categoryMap = new Map(categories.map(c => [c.id, c]))
 
   for (const task of sorted) {
     const difficulty = difficultyMap.get(task.completion.difficultyId)
     const baseScore = difficulty ? difficulty.score : 0
-    const adjustedScore = baseScore * multiplier
+
+    // Apply category priority multiplier (default 1.0 if no category)
+    let priorityMultiplier = 1.0
+    if (task.completion.categoryId) {
+      const category = categoryMap.get(task.completion.categoryId)
+      if (category && typeof category.priorityMultiplier === 'number') {
+        priorityMultiplier = category.priorityMultiplier
+      }
+    }
+
+    const adjustedScore = baseScore * multiplier * priorityMultiplier
     totalScore += adjustedScore
     
     // Increase multiplier for next task
