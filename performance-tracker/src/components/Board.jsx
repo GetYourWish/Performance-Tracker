@@ -1187,7 +1187,6 @@ function Board({ data, onSave }) {
         <div className={`board-right-panel${sidebarCollapsed ? ' collapsed' : ''}`}>
           {sidebarCollapsed ? (
             <>
-              {/* Collapsed icon bar */}
               <button
                 type="button"
                 className="sidebar-icon-btn"
@@ -1219,7 +1218,6 @@ function Board({ data, onSave }) {
                 </svg>
               </button>
 
-              {/* Quick category creation popover */
               {quickCatForm && (
                 <div className="quick-cat-popover" ref={quickCatRef} onClick={(e) => e.stopPropagation()}>
                   <input
@@ -1252,7 +1250,6 @@ function Board({ data, onSave }) {
                 </div>
               )}
 
-              {/* Expand/collapse toggle */}
               <button
                 type="button"
                 className="sidebar-toggle-btn"
@@ -1288,7 +1285,6 @@ function Board({ data, onSave }) {
                 />
               </div>
 
-              {/* Collapse toggle — at the bottom right */}
               <button
                 type="button"
                 className="sidebar-toggle-btn"
