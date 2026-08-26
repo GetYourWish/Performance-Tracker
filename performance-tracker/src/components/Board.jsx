@@ -249,6 +249,7 @@ function Board({ data, onSave }) {
   const dropIndicatorRef = useRef(null)
   const pointerYRef = useRef(0)
   const dragMoveListenerRef = useRef(null)
+  const dragMoveRafRef = useRef(null)
   const quickCatRef = useRef(null)
   const addCatBtnRef = useRef(null)
 
@@ -327,14 +328,14 @@ function Board({ data, onSave }) {
     root.style.setProperty('--consecutive-marker-margin', consecutiveMarkerMargin)
   }, [settings.theme, settings.multiSelectModifier, settings.consecutiveMarkerMargin])
 
-  const sensors = useSensors(
+  const sensors = useMemo(() => useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 }
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates
     })
-  )
+  ), [])
 
   const handleCreateTask = useCallback(() => {
     if (!newTaskText.trim()) return
@@ -631,33 +632,39 @@ function Board({ data, onSave }) {
       return 
     }
 
-    if (over.data.current?.type === 'insertion-point') {
-      setDropIndicator(over.id)
-      return
-    }
+    // Throttle to once per animation frame to avoid excessive re-renders
+    if (dragMoveRafRef.current) return
+    dragMoveRafRef.current = requestAnimationFrame(() => {
+      dragMoveRafRef.current = null
 
-    // over is a row: highlight the gap ABOVE or BELOW it based on pointer Y
-    const idx = boardItems.findIndex(item => (item.type === 'task' ? item.taskId : item.markerId) === over.id)
-    if (idx === -1) { 
-      setDropIndicator(null)
-      return 
-    }
-
-    const el = document.querySelector(`[data-board-item-id="${over.id}"]`)
-    const rect = el?.getBoundingClientRect()
-    const before = rect ? pointerYRef.current < rect.top + rect.height / 2 : false
-
-    if (before) {
-      if (idx === 0) {
-        setDropIndicator('insert-top')
-      } else {
-        const prev = boardItems[idx - 1]
-        const prevId = prev.type === 'task' ? prev.taskId : prev.markerId
-        setDropIndicator(prevId)
+      if (over.data.current?.type === 'insertion-point') {
+        setDropIndicator(over.id)
+        return
       }
-    } else {
-      setDropIndicator(over.id)
-    }
+
+      // over is a row: highlight the gap ABOVE or BELOW it based on pointer Y
+      const idx = boardItems.findIndex(item => (item.type === 'task' ? item.taskId : item.markerId) === over.id)
+      if (idx === -1) { 
+        setDropIndicator(null)
+        return 
+      }
+
+      const el = document.querySelector(`[data-board-item-id="${over.id}"]`)
+      const rect = el?.getBoundingClientRect()
+      const before = rect ? pointerYRef.current < rect.top + rect.height / 2 : false
+
+      if (before) {
+        if (idx === 0) {
+          setDropIndicator('insert-top')
+        } else {
+          const prev = boardItems[idx - 1]
+          const prevId = prev.type === 'task' ? prev.taskId : prev.markerId
+          setDropIndicator(prevId)
+        }
+      } else {
+        setDropIndicator(over.id)
+      }
+    })
   }, [boardItems])
 
   const handleAddMarker = useCallback((category) => {
@@ -785,6 +792,10 @@ function Board({ data, onSave }) {
   const handleDragEnd = (event) => {
     const { active } = event
     const indicatorId = dropIndicatorRef.current
+    if (dragMoveRafRef.current) {
+      cancelAnimationFrame(dragMoveRafRef.current)
+      dragMoveRafRef.current = null
+    }
     setDraggingItem(null)
     setDropIndicator(null)
     cleanupDragListeners()
@@ -831,12 +842,16 @@ function Board({ data, onSave }) {
   }
 
   const handleDragCancel = useCallback(() => {
+    if (dragMoveRafRef.current) {
+      cancelAnimationFrame(dragMoveRafRef.current)
+      dragMoveRafRef.current = null
+    }
     setDraggingItem(null)
     setDropIndicator(null)
     cleanupDragListeners()
   }, [cleanupDragListeners])
 
-  const handleMarkerDrop = (categoryId, isNewCategory = false, insertionId = null, categoryObj = null, appendToEnd = false) => {
+  const handleMarkerDrop = useCallback((categoryId, isNewCategory = false, insertionId = null, categoryObj = null, appendToEnd = false) => {
     // If this is a new category being created, we need to add it to categories first
     if (isNewCategory && typeof categoryId === 'object') {
       // categoryId is actually the new category object
@@ -972,7 +987,7 @@ function Board({ data, onSave }) {
       board: updatedBoard,
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
-  }
+  }, [data, markers, boardItems, categories, onSave])
 
   const handleDeleteMarker = useCallback((markerId) => {
     const updatedMarkers = markers.filter(m => m.id !== markerId)
@@ -1049,6 +1064,13 @@ function Board({ data, onSave }) {
     return map
   }, [markers])
 
+  // Pre-compute category map for O(1) lookups
+  const categoryMap = useMemo(() => {
+    const map = new Map()
+    for (const c of categories) map.set(c.id, c)
+    return map
+  }, [categories])
+
   // Memoize sortable item IDs
   const sortableItemIds = useMemo(() =>
     boardItems.map(i => i.type === 'task' ? i.taskId : i.markerId)
@@ -1114,7 +1136,7 @@ function Board({ data, onSave }) {
         const marker = markerMap.get(item.markerId)
         if (!marker) return
 
-        const category = categories.find(c => c.id === marker.categoryId)
+        const category = categoryMap.get(marker.categoryId)
         if (!category) return
 
         // Check if previous visible item is also a marker (for consecutive spacing)
@@ -1199,7 +1221,7 @@ function Board({ data, onSave }) {
                     boardItems={boardItems}
                   />
                 )}
-                <AnimatePresence mode="popLayout">
+                <AnimatePresence mode="sync">
                   {renderBoardRows}
                 </AnimatePresence>
                 

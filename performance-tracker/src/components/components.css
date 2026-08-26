@@ -742,6 +742,11 @@
   overflow-x: auto !important;
 }
 
+.heatmap-flat-grid .heatmap-cell:hover {
+  transform: scale(1.3) !important;
+  box-shadow: 0 0 8px rgba(57, 211, 83, 0.6) !important;
+}
+
 .heatmap-flat-grid .heatmap-cell {
   width: 12px !important;
   height: 12px !important;

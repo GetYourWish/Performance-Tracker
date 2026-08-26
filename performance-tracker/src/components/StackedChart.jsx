@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import { format, eachDayOfInterval, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isAfter } from 'date-fns'
-import { formatDate, parseDate } from '../utils/helpers'
+import { formatDate, parseDate, groupTasksByDate } from '../utils/helpers'
 
 export default function StackedChart({ tasks, categories, difficulties, range, weekStartsOn = 1, onDayClick }) {
   const [hoveredBar, setHoveredBar] = useState(null)
+  
+  // Pre-group tasks by date for O(1) per-day lookup instead of O(n) filter per day
+  const tasksByDate = useMemo(() => groupTasksByDate(tasks), [tasks])
   
   // Get today's date at midnight for comparisons
   const getTodayMidnight = () => {
@@ -88,7 +91,7 @@ export default function StackedChart({ tasks, categories, difficulties, range, w
     
     return days.map(day => {
       const dayStr = formatDate(day)
-      const daysTasks = tasks.filter(t => t.completion?.completedDate === dayStr)
+      const daysTasks = tasksByDate.get(dayStr) || []
       
       // Check if this day is in the future
       const dayMidnight = new Date(day)
@@ -270,7 +273,7 @@ export default function StackedChart({ tasks, categories, difficulties, range, w
             if (onDayClick && !data.isFuture) {
               onDayClick(
                 parseDate(data.date),
-                tasks.filter(t => t.completion?.completedDate === data.date)
+                tasksByDate.get(data.date) || []
               )
             }
           }}
@@ -313,7 +316,7 @@ export default function StackedChart({ tasks, categories, difficulties, range, w
             if (point && point.total > 0 && !point.isFuture && onDayClick) {
               onDayClick(
                 parseDate(point.date),
-                tasks.filter(t => t.completion?.completedDate === point.date)
+                tasksByDate.get(point.date) || []
               )
             }
           }}

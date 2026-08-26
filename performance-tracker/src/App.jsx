@@ -136,14 +136,8 @@ function App() {
     saveTimeoutRef.current = setTimeout(async () => {
       if (pendingSaveRef.current && dataFile) {
         try {
-          // Save first without awaiting backup - backup is non-critical
           window.api.saveData(pendingSaveRef.current).catch(err => {
             console.error('Failed to save data:', err);
-          });
-          
-          // Create backup in background (non-blocking, non-critical)
-          window.api.backupNow().catch(err => {
-            console.warn('Backup failed (non-critical):', err);
           });
           
           // Update UI state immediately for responsive feel
@@ -173,13 +167,7 @@ function App() {
     
     if (pendingSaveRef.current && dataFile) {
       try {
-        // Save immediately
         await window.api.saveData(pendingSaveRef.current);
-        
-        // Backup in background (non-blocking)
-        window.api.backupNow().catch(err => {
-          console.warn('Backup failed (non-critical):', err);
-        });
         
         setData(pendingSaveRef.current);
         pendingSaveRef.current = null;

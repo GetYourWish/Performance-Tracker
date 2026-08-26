@@ -8,9 +8,8 @@ const chokidar = require('chokidar');
 let mainWindow;
 let dataFilePath = null;
 let watcher = null;
-let debounceTimer = null;
 let isExternalWrite = false;
-const FILE_POLL_INTERVAL_MS = 5_000;
+const FILE_POLL_INTERVAL_MS = 15_000;
 
 // Available icon themes
 const ICON_THEMES = ['gradient', 'ember'];
@@ -102,23 +101,6 @@ async function atomicSave(filePath, data) {
   const tempPath = filePath + '.tmp';
   await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf8');
   await fs.rename(tempPath, filePath);
-}
-
-// Debounced save
-function debouncedSave(data) {
-  if (debounceTimer) clearTimeout(debounceTimer);
-  
-  debounceTimer = setTimeout(async () => {
-    try {
-      if (dataFilePath) {
-        isExternalWrite = true;
-        await atomicSave(dataFilePath, data);
-        isExternalWrite = false;
-      }
-    } catch (error) {
-      console.error('Error during auto-save:', error);
-    }
-  }, 100); // 100ms debounce - fast enough to feel responsive, slow enough to batch writes
 }
 
 // Create backups - handles non-existent file gracefully
@@ -238,12 +220,19 @@ ipcMain.handle('load-data', async () => {
   }
 });
 
+// save-data: The renderer already debounces saves (100ms), so we save immediately here.
+// No additional debounce needed — avoids double-timer overhead.
 ipcMain.handle('save-data', async (event, data) => {
   if (!dataFilePath) {
     await initializeDataPath();
   }
-  
-  debouncedSave(data);
+  try {
+    isExternalWrite = true;
+    await atomicSave(dataFilePath, data);
+    isExternalWrite = false;
+  } catch (error) {
+    console.error('Error during save:', error);
+  }
 });
 
 ipcMain.handle('choose-data-location', async () => {
