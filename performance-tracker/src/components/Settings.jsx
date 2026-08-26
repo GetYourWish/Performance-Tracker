@@ -218,6 +218,12 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
         >
           Logs
         </button>
+        <button 
+          className={`tab ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dashboard')}
+        >
+          Dashboard
+        </button>
       </div>
 
       <div className="settings-content scrollable">
@@ -549,6 +555,85 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
                 <option value="score">Score</option>
                 <option value="count">Task Count</option>
               </select>
+            </div>
+          </div>
+        )}
+        {activeTab === 'dashboard' && (
+          <div className="settings-section">
+            <h3>Dashboard Cards</h3>
+            <p className="setting-note">
+              Toggle visibility of cards on the Performance Cockpit dashboard.
+            </p>
+            <div className="dashboard-visibility-groups">
+              {[
+                {
+                  group: 'Intensity',
+                  cards: [
+                    { id: 'avgDifficulty', label: 'Avg Difficulty' },
+                    { id: 'pointsPerTask', label: 'Points Per Task' },
+                    { id: 'intensityTrend', label: 'Intensity Trend' },
+                    { id: 'trueVsEffort', label: 'True vs Effort' }
+                  ]
+                },
+                {
+                  group: 'Records',
+                  cards: [
+                    { id: 'bestPeriods', label: 'Best Periods' },
+                    { id: 'streaks', label: 'Streaks' },
+                    { id: 'importantStreak', label: 'Important Streak' },
+                    { id: 'heaviestLift', label: 'Heaviest Lift' },
+                    { id: 'balanceDays', label: 'Balance Days' }
+                  ]
+                },
+                {
+                  group: 'Rhythm',
+                  cards: [
+                    { id: 'activeDays', label: 'Active Days' },
+                    { id: 'focusDepth', label: 'Focus Depth' },
+                    { id: 'weekdayBars', label: 'Weekday Bars' },
+                    { id: 'shelfTime', label: 'Shelf Time' },
+                    { id: 'powerHours', label: 'Power Hours' }
+                  ]
+                },
+                {
+                  group: 'Composition',
+                  cards: [
+                    { id: 'difficultyMix', label: 'Difficulty Mix' },
+                    { id: 'categoryDonut', label: 'Category Donut' },
+                    { id: 'topDifficulty', label: 'Top Difficulty' },
+                    { id: 'alignment', label: 'Alignment' },
+                    { id: 'momentum', label: 'Momentum' },
+                    { id: 'quietNudge', label: 'Quiet Nudge' }
+                  ]
+                }
+              ].map(g => (
+                <div key={g.group} className="dash-vis-group">
+                  <h4 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>{g.group}</h4>
+                  {g.cards.map(c => {
+                    const dash = settings.dashboard || {}
+                    const checked = dash[c.id] !== false
+                    return (
+                      <label key={c.id} className="dash-vis-item">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            onSave({
+                              ...data,
+                              settings: {
+                                ...settings,
+                                dashboard: { ...settings.dashboard, [c.id]: !checked }
+                              },
+                              meta: { ...data.meta, updatedAt: new Date().toISOString() }
+                            })
+                          }}
+                        />
+                        <span>{c.label}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         )}
