@@ -335,7 +335,8 @@ function Reviews({ data, onDayClick, onSave }) {
       daysTasks, 
       difficulties, 
       settings.fatigueIncrement || 0.10, 
-      settings.fatigueCap || 3.0
+      settings.fatigueCap || 3.0,
+      categories
     )
 
     return {
@@ -344,7 +345,7 @@ function Reviews({ data, onDayClick, onSave }) {
       count: daysTasks.length,
       tasks: daysTasks
     }
-  }, [selectedDate, tasksByDate, difficulties, settings])
+  }, [selectedDate, tasksByDate, difficulties, categories, settings])
 
   // Weekly Review Data - OPTIMIZED: Use pre-grouped tasks
   const weeklyData = useMemo(() => {
@@ -359,7 +360,8 @@ function Reviews({ data, onDayClick, onSave }) {
         daysTasks,
         difficulties,
         settings.fatigueIncrement || 0.10,
-        settings.fatigueCap || 3.0
+        settings.fatigueCap || 3.0,
+        categories
       )
 
       return {
@@ -380,7 +382,7 @@ function Reviews({ data, onDayClick, onSave }) {
       totalCount,
       bestDay
     }
-  }, [selectedDate, tasksByDate, difficulties, settings])
+  }, [selectedDate, tasksByDate, difficulties, categories, settings])
 
   // Heatmap Data - OPTIMIZED: Use pre-grouped tasks (O(n) instead of O(n*m))
   const heatmapData = useMemo(() => {
@@ -400,7 +402,8 @@ function Reviews({ data, onDayClick, onSave }) {
           daysTasks,
           difficulties,
           settings.fatigueIncrement || 0.10,
-          settings.fatigueCap || 3.0
+          settings.fatigueCap || 3.0,
+          categories
         )
       }
 

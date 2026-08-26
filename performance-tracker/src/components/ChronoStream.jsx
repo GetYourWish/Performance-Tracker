@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList } from 'recharts'
 import { format, eachDayOfInterval, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addDays, isAfter, isBefore, isEqual } from 'date-fns'
-import { formatDate, parseDate } from '../utils/helpers'
+import { formatDate, parseDate, calculateDayScore } from '../utils/helpers'
 
 export default function ChronoStream({ tasks, categories, difficulties, range, flowStateColor = '#8b5cf6', onDayClick, weekStartsOn = 1, isExporting = false, chartRef }) {
   const [hoverDay, setHoverDay] = useState(null)
@@ -75,22 +75,14 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
         }
       }
       
-      // Calculate total score for the day using the same logic as calculateDayScore
-      let score = 0
-      let fatigueMultiplier = 1
-      const sortedTasks = [...daysTasks].sort((a, b) => {
-        const aDiff = difficulties.find(d => d.id === a.completion?.difficultyId)?.score || 0
-        const bDiff = difficulties.find(d => d.id === b.completion?.difficultyId)?.score || 0
-        return bDiff - aDiff
-      })
-      
-      sortedTasks.forEach((task, index) => {
-        const difficulty = difficulties.find(d => d.id === task.completion?.difficultyId)
-        const baseScore = difficulty?.score || 0
-        score += baseScore * fatigueMultiplier
-        fatigueMultiplier += 0.10 // Default fatigue increment
-        if (fatigueMultiplier > 3.0) fatigueMultiplier = 3.0 // Default fatigue cap
-      })
+      // Calculate total score using the shared scoring function (includes category priority)
+      const score = calculateDayScore(
+        daysTasks,
+        difficulties,
+        0.10,  // fatigueIncrement - uses default; ChronoStream doesn't receive settings
+        3.0,   // fatigueCap - uses default
+        categories
+      )
       
       // For past/current days with no data, score stays 0 (already initialized)
       
@@ -103,7 +95,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
         isFuture: false
       }
     })
-  }, [tasks, difficulties, dateRange])
+  }, [tasks, difficulties, categories, dateRange])
   
   // Use chartData directly - it already handles future dates with null scores
   const filteredData = chartData

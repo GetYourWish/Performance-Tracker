@@ -105,7 +105,8 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
       name: 'New Category',
       color: '#60a5fa',
       order: categories.length,
-      active: true
+      active: true,
+      priorityMultiplier: 1
     }
     onSave({
       ...data,
@@ -339,6 +340,10 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
         {activeTab === 'categories' && (
           <div className="settings-section">
             <h3>Categories</h3>
+            <p className="setting-note">
+              Set a priority multiplier per category. Tasks in a category with a 2x multiplier
+              earn double points. Default is 1.0 (no change).
+            </p>
             
             <div className="categories-list">
               {categories.map((category, index) => (
@@ -353,6 +358,15 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
                     type="color"
                     value={category.color}
                     onChange={(e) => handleCategoryUpdate(index, 'color', e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    value={category.priorityMultiplier ?? 1}
+                    onChange={(e) => handleCategoryUpdate(index, 'priorityMultiplier', parseFloat(e.target.value) || 0)}
+                    step="0.1"
+                    min="0"
+                    style={{ width: '70px' }}
+                    title="Priority multiplier for scoring (default: 1.0)"
                   />
                   <div className="reorder-buttons">
                     <button 
