@@ -9,6 +9,22 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
   const settings = data?.settings || {}
   const difficulties = data?.difficulties || []
   const categories = data?.categories || []
+  const logs = data?.logs || []
+  const [logFilter, setLogFilter] = useState('all')
+
+  const filteredLogs = (() => {
+    const sorted = [...logs].reverse() // newest first
+    if (logFilter === 'today') {
+      const todayStr = new Date().toISOString().slice(0, 10)
+      return sorted.filter(l => l.timestamp?.slice(0, 10) === todayStr)
+    }
+    if (logFilter === 'week') {
+      const now = new Date()
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      return sorted.filter(l => new Date(l.timestamp) >= weekAgo)
+    }
+    return sorted
+  })()
 
   const handleSettingChange = (key, value) => {
     onSave({
@@ -195,6 +211,12 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
           onClick={() => setActiveTab('scoring')}
         >
           Scoring
+        </button>
+        <button 
+          className={`tab ${activeTab === 'logs' ? 'active' : ''}`}
+          onClick={() => setActiveTab('logs')}
+        >
+          Logs
         </button>
       </div>
 
@@ -528,6 +550,95 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
                 <option value="count">Task Count</option>
               </select>
             </div>
+          </div>
+        )}
+        {activeTab === 'logs' && (
+          <div className="settings-section">
+            <div className="logs-header">
+              <h3>Completion Logs</h3>
+              <div className="logs-actions">
+                <select
+                  value={logFilter}
+                  onChange={(e) => setLogFilter(e.target.value)}
+                  className="logs-filter-select"
+                >
+                  <option value="all">All</option>
+                  <option value="today">Today</option>
+                  <option value="week">This Week</option>
+                </select>
+                <button
+                  className="action-btn"
+                  onClick={() => {
+                    if (window.confirm('Clear all completion logs? This cannot be undone.')) {
+                      onSave({
+                        ...data,
+                        logs: [],
+                        meta: { ...data.meta, updatedAt: new Date().toISOString() }
+                      })
+                    }
+                  }}
+                  disabled={logs.length === 0}
+                >
+                  Clear Logs
+                </button>
+              </div>
+            </div>
+
+            <p className="setting-note">
+              Each task completion is logged with its full score calculation. Logs are capped at 500 entries.
+            </p>
+
+            {filteredLogs.length === 0 ? (
+              <div className="logs-empty">No completions logged yet.</div>
+            ) : (
+              <div className="logs-list">
+                {filteredLogs.map(log => (
+                  <div key={log.id} className="log-entry">
+                    <div className="log-top-row">
+                      <span className="log-task-text">{log.taskText}</span>
+                      <span className="log-final-score">{log.finalScore} pts</span>
+                    </div>
+                    <div className="log-meta-row">
+                      <span className="log-time">
+                        {new Date(log.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}{' '}
+                        {new Date(log.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span
+                        className="log-difficulty-chip"
+                        style={{
+                          backgroundColor: log.difficultyColor + '22',
+                          color: log.difficultyColor,
+                          borderColor: log.difficultyColor
+                        }}
+                      >
+                        {log.difficultyLabel}
+                      </span>
+                      {log.categoryName && (
+                        <span
+                          className="log-category-chip"
+                          style={{
+                            backgroundColor: log.categoryColor + '22',
+                            color: log.categoryColor,
+                            borderColor: log.categoryColor
+                          }}
+                        >
+                          {log.categoryName}
+                        </span>
+                      )}
+                    </div>
+                    <div className="log-formula-row">
+                      <code className="log-formula">
+                        {log.basePoints} (base)
+                        {log.fatigueMultiplier !== 1 ? ` × ${log.fatigueMultiplier.toFixed(2)} (fatigue)` : ''}
+                        {log.priorityMultiplier !== 1 ? ` × ${log.priorityMultiplier.toFixed(1)} (priority)` : ''}
+                        {' = '}
+                        <strong>{log.finalScore}</strong>
+                      </code>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

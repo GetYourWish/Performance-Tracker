@@ -72,6 +72,57 @@ export function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate()
 }
 
+// Calculate the score breakdown for a SINGLE task at the moment of completion
+// Returns an object with all formula components for logging
+export function calculateTaskScoreBreakdown(task, completedTasks, difficulties, fatigueIncrement, fatigueCap, categories) {
+  const difficultyMap = new Map(difficulties.map(d => [d.id, d]))
+  const categoryMap = new Map(categories.map(c => [c.id, c]))
+
+  const difficulty = difficultyMap.get(task.completion.difficultyId)
+  const basePoints = difficulty ? difficulty.score : 0
+  const difficultyLabel = difficulty ? difficulty.label : 'Unknown'
+  const difficultyColor = difficulty ? difficulty.color : '#888'
+
+  // Determine category info
+  let categoryName = null
+  let categoryColor = null
+  let priorityMultiplier = 1.0
+  if (task.completion.categoryId) {
+    const category = categoryMap.get(task.completion.categoryId)
+    if (category) {
+      categoryName = category.name
+      categoryColor = category.color
+      if (typeof category.priorityMultiplier === 'number') {
+        priorityMultiplier = category.priorityMultiplier
+      }
+    }
+  }
+
+  // Calculate fatigue multiplier: count tasks completed earlier on the same date
+  const completionDate = task.completion.completedDate
+  const earlierTasks = completedTasks.filter(t =>
+    t.id !== task.id &&
+    t.completion &&
+    t.completion.completedDate === completionDate &&
+    new Date(t.completion.completedAt) < new Date(task.completion.completedAt)
+  )
+  const taskIndex = earlierTasks.length // 0-based position in the day
+  const fatigueMultiplier = Math.min(1.0 + (taskIndex * fatigueIncrement), fatigueCap)
+
+  const finalScore = basePoints * fatigueMultiplier * priorityMultiplier
+
+  return {
+    basePoints,
+    difficultyLabel,
+    difficultyColor,
+    categoryName,
+    categoryColor,
+    priorityMultiplier,
+    fatigueMultiplier,
+    finalScore: Math.round(finalScore * 100) / 100 // 2 decimal places
+  }
+}
+
 // Calculate score for a set of completed tasks - OPTIMIZED with difficulty map lookup
 // Formula: baseScore * fatigueMultiplier * categoryPriorityMultiplier
 export function calculateDayScore(completedTasks, difficulties, fatigueIncrement = 0.10, fatigueCap = 3.0, categories = []) {
@@ -243,6 +294,14 @@ export function validateAndHealData(data) {
 
   // Initialize workingOn array if missing
   if (!healed.workingOn) healed.workingOn = []
+
+  // Initialize logs array if missing
+  if (!healed.logs) healed.logs = []
+
+  // Cap logs at 500 entries to prevent unbounded growth
+  if (healed.logs.length > 500) {
+    healed.logs = healed.logs.slice(healed.logs.length - 500)
+  }
 
   // Heal workingOn: remove IDs of tasks that no longer exist or are completed
   healed.workingOn = healed.workingOn.filter(taskId => {

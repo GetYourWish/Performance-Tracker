@@ -4,7 +4,7 @@ import Reviews from './components/Reviews'
 import Settings from './components/Settings'
 import SetupScreen from './components/SetupScreen'
 import { WorkingOnMarker, WorkingOnPopup } from './components/WorkingOnMarker'
-import { validateAndHealData, generateId } from './utils/helpers'
+import { validateAndHealData, generateId, calculateTaskScoreBreakdown } from './utils/helpers'
 import './App.css'
 
 function App() {
@@ -398,14 +398,58 @@ function App() {
                 categoryId = aboveMarkerObj.categoryId
               }
             }
-            
+
+            const completedAt = new Date().toISOString()
+
+            // Build the completed task object to compute score breakdown
+            const completedTask = {
+              id: taskId,
+              text: data.tasks.find(t => t.id === taskId)?.text || '',
+              completion: {
+                completedDate: date,
+                completedAt,
+                difficultyId,
+                categoryId,
+                note: note || ''
+              }
+            }
+
+            const appDifficulties = data?.difficulties || []
+            const appCategories = data?.categories || []
+            const appSettings = data?.settings || {}
+            const allCompleted = [...(data?.tasks || []).filter(t => t.completion), completedTask]
+            const breakdown = calculateTaskScoreBreakdown(
+              completedTask,
+              allCompleted,
+              appDifficulties,
+              appSettings.fatigueIncrement || 0.10,
+              appSettings.fatigueCap || 3.0,
+              appCategories
+            )
+
+            // Create log entry
+            const logEntry = {
+              id: generateId(),
+              timestamp: completedAt,
+              taskId,
+              taskText: completedTask.text,
+              difficultyLabel: breakdown.difficultyLabel,
+              difficultyColor: breakdown.difficultyColor,
+              categoryName: breakdown.categoryName,
+              categoryColor: breakdown.categoryColor,
+              priorityMultiplier: breakdown.priorityMultiplier,
+              fatigueMultiplier: breakdown.fatigueMultiplier,
+              basePoints: breakdown.basePoints,
+              finalScore: breakdown.finalScore
+            }
+
             const updatedTasks = data.tasks.map(t => {
               if (t.id === taskId) {
                 return {
                   ...t,
                   completion: {
                     completedDate: date,
-                    completedAt: new Date().toISOString(),
+                    completedAt,
                     difficultyId,
                     categoryId,
                     note: note || ''
@@ -421,12 +465,19 @@ function App() {
             
             const updatedWorkingOn = (data.workingOn || []).filter(id => id !== taskId)
 
+            // Cap logs at 500 entries
+            const existingLogs = data.logs || []
+            const updatedLogs = existingLogs.length >= 500
+              ? [...existingLogs.slice(existingLogs.length - 499), logEntry]
+              : [...existingLogs, logEntry]
+
             saveData({
               ...data,
               tasks: updatedTasks,
               board: updatedBoard,
               workingOn: updatedWorkingOn,
-              meta: { ...data.meta, updatedAt: new Date().toISOString() }
+              logs: updatedLogs,
+              meta: { ...data.meta, updatedAt: completedAt }
             })
 
             setShowWorkingOnPopup(false)
