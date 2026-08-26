@@ -2,6 +2,11 @@
 node_modules/
 
 # Build outputs
+build/*
+!build/
+!build/icon.svg
+!build/icon.png
+!build/icon.ico
 dist/
 out/
 release/

@@ -1,14 +1,7 @@
-```
 # Build artifacts
 dist/
-build/
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
+release/
+out/
 
 # Dependencies
 node_modules/
@@ -21,6 +14,7 @@ target/
 .gradle/
 
 # Editor/IDE files
+.vs/
 .vscode/
 .idea/
 *.swp
@@ -43,4 +37,3 @@ htmlcov/
 # System files
 .DS_Store
 Thumbs.db
-```
