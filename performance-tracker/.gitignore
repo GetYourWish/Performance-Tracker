@@ -7,6 +7,10 @@ build/*
 !build/icon.svg
 !build/icon.png
 !build/icon.ico
+!build/icons/
+!build/icons/*.svg
+!build/icons/*.png
+!build/icons/*.ico
 dist/
 out/
 release/

@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "electron .",
-    "build:icon": "electron scripts/build-icon.cjs",
+    "build:icon": "node scripts/gen-icons.cjs && cp build/icons/gradient.svg build/icon.svg && cp build/icons/gradient.png build/icon.png && cp build/icons/gradient.ico build/icon.ico",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win portable nsis"
   },
@@ -49,10 +49,7 @@
       "electron/**/*"
     ],
     "extraResources": [
-      {
-        "from": "build/icon.ico",
-        "to": "icon.ico"
-      }
+      { "from": "build/icons", "to": "icons" }
     ],
     "win": {
       "target": [

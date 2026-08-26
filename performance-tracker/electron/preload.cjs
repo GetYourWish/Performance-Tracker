@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('api', {
   getCurrentDataPath: () => ipcRenderer.invoke('get-current-data-path'),
   checkConflicts: (filePath) => ipcRenderer.invoke('check-conflicts', { filePath }),
   saveImage: (dataUrl, suggestedName) => ipcRenderer.invoke('save-image', { dataUrl, suggestedName }),
+  getIconThemes: () => ipcRenderer.invoke('get-icon-themes'),
+  reloadWithIcon: (iconTheme) => ipcRenderer.invoke('reload-with-icon', iconTheme),
   onExternalChange: (callback) => {
     const listener = (event, payload) => callback({ payload });
     ipcRenderer.on('external-change', listener);
