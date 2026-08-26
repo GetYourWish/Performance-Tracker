@@ -238,9 +238,28 @@ function Board({ data, onSave }) {
   const [activeInsertionPoint, setActiveInsertionPoint] = useState(null)
   const [workingOnId, setWorkingOnId] = useState(null)
   const [dropIndicatorId, setDropIndicatorId] = useState(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [quickCatForm, setQuickCatForm] = useState(null) // { name, color } when creating from collapsed sidebar
   const dropIndicatorRef = useRef(null)
   const pointerYRef = useRef(0)
   const dragMoveListenerRef = useRef(null)
+  const quickCatRef = useRef(null)
+
+  // Close quick cat popover on outside click
+  useEffect(() => {
+    if (!quickCatForm) return
+    const handler = (e) => {
+      if (quickCatRef.current && !quickCatRef.current.contains(e.target)) {
+        setQuickCatForm(null)
+      }
+    }
+    // Slight delay to avoid the opening click immediately closing it
+    const timer = setTimeout(() => document.addEventListener('pointerdown', handler), 0)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('pointerdown', handler)
+    }
+  }, [quickCatForm])
 
   const setDropIndicator = (id) => {
     dropIndicatorRef.current = id
@@ -671,6 +690,24 @@ function Board({ data, onSave }) {
       }
     }
   }, [boardItems, markers])
+
+  const handleQuickCreateCategory = useCallback((name, color) => {
+    const newCategory = {
+      id: generateId(),
+      name: name.trim(),
+      color,
+      order: categories.length,
+      active: true,
+      priorityMultiplier: 1
+    }
+    const updatedCategories = [...categories, newCategory]
+    onSave({
+      ...data,
+      categories: updatedCategories,
+      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+    })
+    setQuickCatForm(null)
+  }, [categories, data, onSave])
 
   const handleRandomizeTask = useCallback(() => {
     const availableTaskIds = boardItems
@@ -1147,23 +1184,123 @@ function Board({ data, onSave }) {
           </DndContext>
         </div>
         
-        <div className="board-right-panel">
-          <button
-            type="button"
-            className="randomizer-btn"
-            onClick={handleRandomizeTask}
-            title="Pick a random task to work on"
-          >
-            🎲 Randomizer
-          </button>
-          <div className="board-sidebar">
-            <CategorySidebar 
-              categories={categories}
-              onCreateCategory={(updatedCategories) => onSave({ ...data, categories: updatedCategories, meta: { ...data.meta, updatedAt: new Date().toISOString() } })}
-              onAddMarker={handleAddMarker}
-              onNavigateToCategory={handleNavigateToCategory}
-            />
-          </div>
+        <div className={`board-right-panel${sidebarCollapsed ? ' collapsed' : ''}`}>
+          {sidebarCollapsed ? (
+            <>
+              {/* Collapsed icon bar */}
+              <button
+                type="button"
+                className="sidebar-icon-btn"
+                onClick={handleRandomizeTask}
+                title="Pick a random task to work on"
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="2" width="8" height="8" rx="2" />
+                  <rect x="14" y="2" width="8" height="8" rx="2" />
+                  <rect x="8" y="14" width="8" height="8" rx="2" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="sidebar-icon-btn"
+                onClick={() => setQuickCatForm({ name: '', color: '#60a5fa' })}
+                title="Add new category"
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7" rx="2" />
+                  <rect x="14" y="3" width="7" height="7" rx="2" />
+                  <rect x="3" y="14" width="7" height="7" rx="2" />
+                  <rect x="14" y="14" width="7" height="7" rx="2" />
+                  <line x1="12" y1="12" x2="12" y2="12.01" stroke="none" />
+                  <line x1="17.5" y1="17.5" x2="17.5" y2="17.5" stroke="none" />
+                  <circle cx="17.5" cy="17.5" r="3" fill="currentColor" stroke="none" />
+                  <line x1="17.5" y1="15" x2="17.5" y2="20" stroke="white" strokeWidth="2" />
+                  <line x1="15" y1="17.5" x2="20" y2="17.5" stroke="white" strokeWidth="2" />
+                </svg>
+              </button>
+
+              {/* Quick category creation popover */
+              {quickCatForm && (
+                <div className="quick-cat-popover" ref={quickCatRef} onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="text"
+                    placeholder="Category name"
+                    value={quickCatForm.name}
+                    onChange={(e) => setQuickCatForm({ ...quickCatForm, name: e.target.value })}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && quickCatForm.name.trim()) {
+                        handleQuickCreateCategory(quickCatForm.name, quickCatForm.color)
+                      } else if (e.key === 'Escape') {
+                        setQuickCatForm(null)
+                      }
+                    }}
+                  />
+                  <input
+                    type="color"
+                    value={quickCatForm.color}
+                    onChange={(e) => setQuickCatForm({ ...quickCatForm, color: e.target.value })}
+                  />
+                  <button
+                    className="quick-cat-confirm"
+                    onClick={() => {
+                      if (quickCatForm.name.trim()) handleQuickCreateCategory(quickCatForm.name, quickCatForm.color)
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
+              )}
+
+              {/* Expand/collapse toggle */}
+              <button
+                type="button"
+                className="sidebar-toggle-btn"
+                onClick={() => setSidebarCollapsed(false)}
+                title="Expand sidebar"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 6 9 12 15 18" />
+                </svg>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="randomizer-btn"
+                onClick={handleRandomizeTask}
+                title="Pick a random task to work on"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', verticalAlign: '-2px' }}>
+                  <rect x="2" y="2" width="8" height="8" rx="2" />
+                  <rect x="14" y="2" width="8" height="8" rx="2" />
+                  <rect x="8" y="14" width="8" height="8" rx="2" />
+                </svg>
+                Randomizer
+              </button>
+              <div className="board-sidebar">
+                <CategorySidebar
+                  categories={categories}
+                  onCreateCategory={(updatedCategories) => onSave({ ...data, categories: updatedCategories, meta: { ...data.meta, updatedAt: new Date().toISOString() } })}
+                  onAddMarker={handleAddMarker}
+                  onNavigateToCategory={handleNavigateToCategory}
+                />
+              </div>
+
+              {/* Collapse toggle — at the bottom right */}
+              <button
+                type="button"
+                className="sidebar-toggle-btn"
+                onClick={() => setSidebarCollapsed(true)}
+                title="Minimize sidebar"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 6 15 12 9 18" />
+                </svg>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
