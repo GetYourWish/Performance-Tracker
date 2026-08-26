@@ -1344,9 +1344,7 @@
   gap: 16px;
   position: relative;
   transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.2s ease,
               gap 0.25s ease;
-  overflow: hidden;
 }
 
 /* Collapsed sidebar — narrow icon strip */
@@ -1401,10 +1399,8 @@
 
 /* Quick category creation popover (from collapsed sidebar) */
 .quick-cat-popover {
-  position: absolute;
-  top: 52px;
-  right: 0;
-  z-index: 100;
+  position: fixed;
+  z-index: 200;
   display: flex;
   gap: 6px;
   align-items: center;
