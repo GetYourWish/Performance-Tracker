@@ -1,10 +1,26 @@
 import { useState } from 'react'
 
+const ICON_PREVIEWS = [
+  {
+    id: 'gradient',
+    name: 'Gradient',
+    desc: 'Purple to Cyan',
+    colors: ['#8b5cf6', '#22d3ee'],
+  },
+  {
+    id: 'ember',
+    name: 'Ember',
+    desc: 'Orange to Gold',
+    colors: ['#f97316', '#facc15'],
+  },
+]
+
 function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder, onChangeDataFolder }) {
   const [activeTab, setActiveTab] = useState('data')
   const [moveStatus, setMoveStatus] = useState(null) // null | 'choosing' | 'confirming' | 'moving'
   const [pendingFolder, setPendingFolder] = useState(null)
   const [error, setError] = useState('')
+  const [iconSwitching, setIconSwitching] = useState(false)
 
   const settings = data?.settings || {}
   const difficulties = data?.difficulties || []
@@ -35,6 +51,23 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
       },
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
+  }
+
+  const handleIconSwitch = async (iconId) => {
+    const current = settings.appIcon || 'gradient'
+    if (iconId === current || iconSwitching) return
+    setIconSwitching(true)
+    // Save preference to tracker data
+    handleSettingChange('appIcon', iconId)
+    // Tell main process to swap the window icon
+    try {
+      if (window.api?.reloadWithIcon) {
+        await window.api.reloadWithIcon(iconId)
+      }
+    } catch (e) {
+      console.error('Icon switch failed:', e)
+    }
+    setIconSwitching(false)
   }
 
   const handleDifficultyUpdate = (index, field, value) => {
@@ -491,6 +524,40 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
               <p className="setting-note">
                 Choose the color for the Flow State chart
               </p>
+            </div>
+
+            <div className="setting-item">
+              <label>App Icon</label>
+              <p className="setting-note" style={{ marginBottom: '10px' }}>
+                Choose the icon shown in the taskbar and window title.
+                The window will briefly refresh to apply the change.
+              </p>
+              <div className="icon-picker-grid">
+                {ICON_PREVIEWS.map((icon) => {
+                  const isActive = (settings.appIcon || 'gradient') === icon.id
+                  return (
+                    <button
+                      key={icon.id}
+                      className={`icon-picker-card ${isActive ? 'icon-picker-active' : ''}`}
+                      onClick={() => handleIconSwitch(icon.id)}
+                      disabled={iconSwitching}
+                    >
+                      <div className="icon-picker-preview" style={{ background: `linear-gradient(135deg, ${icon.colors[0]}, ${icon.colors[1]})` }}>
+                        <svg width="40" height="40" viewBox="0 0 256 256" fill="none">
+                          <rect x="60" y="150" width="34" height="76" rx="10" fill="white" opacity="0.9"/>
+                          <rect x="111" y="108" width="34" height="118" rx="10" fill="white"/>
+                          <rect x="162" y="66" width="34" height="160" rx="10" fill="white" opacity="0.85"/>
+                        </svg>
+                      </div>
+                      <div className="icon-picker-label">
+                        <span className="icon-picker-name">{icon.name}</span>
+                        <span className="icon-picker-desc">{icon.desc}</span>
+                      </div>
+                      {isActive && <div className="icon-picker-check">&#10003;</div>}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
         )}

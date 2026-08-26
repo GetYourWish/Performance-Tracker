@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const fse = require('fs-extra');
 const chokidar = require('chokidar');
 
@@ -12,25 +13,31 @@ let debounceTimer = null;
 let isExternalWrite = false;
 const FILE_POLL_INTERVAL_MS = 5_000;
 
+// Available icon themes
+const ICON_THEMES = ['gradient', 'ember'];
+
 // App state file path
 const appStatePath = path.join(app.getPath('userData'), 'app-state.json');
 
-// Resolve app icon path — works in both dev and packaged (asar) mode
-function getAppIconPath() {
-  // In packaged mode, electron-builder embeds the icon into the exe.
-  // We also keep a copy in resources/ via extraResources so we can
-  // reference it at runtime for the window title-bar icon.
+/** Resolve the icon ICO path for a given theme, works in dev and packaged mode. */
+function getIconPathForTheme(theme) {
+  const fname = `${theme}.ico`;
   if (app.isPackaged) {
-    // extraResources puts files in <resources_dir>/icon.ico
-    const p1 = path.join(process.resourcesPath, 'icon.ico');
-    // Fallback: next to the exe (for portable builds)
-    const p2 = path.join(path.dirname(process.execPath), 'icon.ico');
-    // Fallback: inside asar (shouldn't happen, but just in case)
-    const p3 = path.join(__dirname, '..', 'build', 'icon.ico');
-    return require('fs').existsSync(p1) ? p1 : require('fs').existsSync(p2) ? p2 : p3;
+    const p1 = path.join(process.resourcesPath, 'icons', fname);
+    const p2 = path.join(path.dirname(process.execPath), 'resources', 'icons', fname);
+    if (fsSync.existsSync(p1)) return p1;
+    if (fsSync.existsSync(p2)) return p2;
   }
-  // Dev mode: read from project build/ directory
+  // Dev mode: look in build/icons/
+  const dev = path.join(__dirname, '..', 'build', 'icons', fname);
+  if (fsSync.existsSync(dev)) return dev;
+  // Ultimate fallback: default icon at build/icon.ico
   return path.join(__dirname, '..', 'build', 'icon.ico');
+}
+
+/** Get the icon path for the user's chosen theme (or default). */
+function getAppIconPath(iconTheme) {
+  return getIconPathForTheme(iconTheme || 'gradient');
 }
 
 // Load saved data path or set default - uses SyncThis folder next to executable per spec
@@ -174,8 +181,8 @@ async function setupWatcher() {
 }
 
 // Create main window
-function createWindow() {
-  const iconPath = getAppIconPath();
+function createWindow(iconTheme) {
+  const iconPath = getAppIconPath(iconTheme);
   console.log('App icon path:', iconPath);
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -392,15 +399,64 @@ ipcMain.handle('save-image', async (event, { dataUrl, suggestedName }) => {
   return result.filePath;
 });
 
+// IPC: get available icon themes
+ipcMain.handle('get-icon-themes', () => {
+  return ICON_THEMES.map(theme => ({
+    id: theme,
+    name: theme.charAt(0).toUpperCase() + theme.slice(1),
+    preview: getIconPathForTheme(theme).replace('.ico', '.png'),
+  }));
+});
+
+// IPC: reload the window with a new icon (called after user picks a different icon)
+ipcMain.handle('reload-with-icon', async (event, iconTheme) => {
+  if (!ICON_THEMES.includes(iconTheme)) return { success: false, error: 'Unknown theme' };
+  // Save the icon theme preference to app state (survives data file changes)
+  try {
+    const state = JSON.parse(await fs.readFile(appStatePath, 'utf8').catch(() => '{}'));
+    state.iconTheme = iconTheme;
+    await fs.writeFile(appStatePath, JSON.stringify(state, null, 2));
+  } catch (e) {
+    console.error('Failed to save icon theme:', e);
+  }
+  // Recreate the window with the new icon
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const [x, y] = mainWindow.getPosition();
+    const [w, h] = mainWindow.getSize();
+    const isMaximized = mainWindow.isMaximized();
+    const isFullScreen = mainWindow.isFullScreen();
+    mainWindow.close();
+    mainWindow = null;
+    createWindow(iconTheme);
+    if (isMaximized) mainWindow.maximize();
+    else if (isFullScreen) mainWindow.setFullScreen(true);
+    else mainWindow.setPosition(x, y);
+    mainWindow.setSize(w, h);
+  } else {
+    createWindow(iconTheme);
+  }
+  return { success: true };
+});
+
 // Initialize when ready
 app.whenReady().then(async () => {
   await initializeDataPath();
   await setupWatcher();
-  createWindow();
+
+  // Read saved icon theme preference
+  let savedIconTheme = 'gradient';
+  try {
+    const state = JSON.parse(await fs.readFile(appStatePath, 'utf8').catch(() => '{}'));
+    if (state.iconTheme && ICON_THEMES.includes(state.iconTheme)) {
+      savedIconTheme = state.iconTheme;
+    }
+  } catch (e) { /* ignore */ }
+
+  createWindow(savedIconTheme);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow(savedIconTheme);
     }
   });
 });
