@@ -57,8 +57,21 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
     const current = settings.appIcon || 'gradient'
     if (iconId === current || iconSwitching) return
     setIconSwitching(true)
-    // Save preference to tracker data
-    handleSettingChange('appIcon', iconId)
+    // Save preference to tracker data IMMEDIATELY (bypass debounce)
+    // The window will be destroyed by reloadWithIcon, so a debounced save would never flush
+    const updatedData = {
+      ...data,
+      settings: {
+        ...settings,
+        appIcon: iconId
+      },
+      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+    }
+    try {
+      await window.api.saveData(updatedData)
+    } catch (e) {
+      console.error('Failed to save icon preference:', e)
+    }
     // Tell main process to swap the window icon
     try {
       if (window.api?.reloadWithIcon) {
