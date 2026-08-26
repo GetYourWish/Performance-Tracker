@@ -1759,3 +1759,26 @@
   border-top: 1px solid var(--border-color);
   padding-top: 20px;
 }
+
+/* Export Image button in Working On popup */
+.working-on-export-btn {
+  padding: 6px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+ white-space: nowrap;
+}
+
+.working-on-export-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.working-on-export-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

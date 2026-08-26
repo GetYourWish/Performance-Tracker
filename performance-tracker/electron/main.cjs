@@ -352,6 +352,25 @@ ipcMain.handle('check-conflicts', async (event, { filePath }) => {
   }
 });
 
+// Save a base64-encoded PNG to a user-chosen location
+ipcMain.handle('save-image', async (event, { dataUrl, suggestedName }) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save Image',
+    defaultPath: suggestedName || 'working-on.png',
+    filters: [
+      { name: 'PNG Image', extensions: ['png'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+
+  if (result.canceled || !result.filePath) return null;
+
+  // Strip the "data:image/png;base64," prefix
+  const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
+  await fs.writeFile(result.filePath, Buffer.from(base64Data, 'base64'));
+  return result.filePath;
+});
+
 // Initialize when ready
 app.whenReady().then(async () => {
   await initializeDataPath();
