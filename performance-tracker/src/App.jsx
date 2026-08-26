@@ -335,13 +335,18 @@ function App() {
                 alert('Failed to open folder: ' + error.message)
               }
             }}
-            onChangeDataLocation={async () => {
-              // Reset app state to trigger setup screen
+            onChangeDataFolder={async (folderPath) => {
               try {
-                await window.api.setAppState({ dataPath: null })
-                window.location.reload()
+                const result = await window.api.moveDataToFolder(folderPath)
+                // Update the in-memory dataFile so the UI reflects the new path
+                if (result && result.filePath) {
+                  setDataFile(result.filePath)
+                }
+                return result
               } catch (error) {
-                console.error('Failed to reset data location:', error)
+                console.error('Failed to move data:', error)
+                alert('Failed to move data: ' + error.message)
+                throw error
               }
             }}
           />

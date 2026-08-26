@@ -223,6 +223,68 @@ ipcMain.handle('choose-data-location', async () => {
   return null;
 });
 
+// Choose a data folder — opens a native folder picker dialog
+ipcMain.handle('choose-data-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Choose Data Folder',
+    defaultPath: dataFilePath ? path.dirname(dataFilePath) : app.getPath('documents'),
+    properties: ['openDirectory', 'createDirectory']
+  });
+
+  if (!result.canceled && result.filePaths.length > 0) {
+    const selectedFolder = result.filePaths[0];
+    const newFilePath = path.join(selectedFolder, 'tracker.json');
+    return { folder: selectedFolder, filePath: newFilePath };
+  }
+
+  return null;
+});
+
+// Move existing data file to a new folder, keeping backups intact
+ipcMain.handle('move-data-to-folder', async (event, { newFolderPath }) => {
+  if (!dataFilePath) {
+    throw new Error('No current data file to move');
+  }
+
+  const newFilePath = path.join(newFolderPath, 'tracker.json');
+
+  // If source and destination are the same, nothing to do
+  if (path.resolve(dataFilePath) === path.resolve(newFilePath)) {
+    return { success: true, filePath: dataFilePath, moved: false };
+  }
+
+  try {
+    // Create backup before moving
+    await createBackup();
+
+    // Copy existing data to new location
+    try {
+      await fs.access(dataFilePath);
+      const fileData = await fs.readFile(dataFilePath, 'utf8');
+      await fs.mkdir(newFolderPath, { recursive: true });
+      await fs.writeFile(newFilePath, fileData, 'utf8');
+    } catch (readErr) {
+      // Source file doesn't exist yet — just ensure the new folder exists
+      await fs.mkdir(newFolderPath, { recursive: true });
+    }
+
+    // Update the active path
+    dataFilePath = newFilePath;
+    await saveDataPath(dataFilePath);
+    await setupWatcher();
+
+    return { success: true, filePath: dataFilePath, moved: true };
+  } catch (error) {
+    console.error('Failed to move data:', error);
+    throw error;
+  }
+});
+
+// Get the current data file path (from memory)
+ipcMain.handle('get-current-data-path', async () => {
+  return dataFilePath;
+});
+
 ipcMain.handle('open-data-folder', async () => {
   if (dataFilePath) {
     await shell.openPath(path.dirname(dataFilePath));

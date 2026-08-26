@@ -1047,6 +1047,41 @@
   color: var(--text-muted);
 }
 
+/* Folder picker confirmation dialog */
+.folder-confirm-dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.folder-confirm-dialog p {
+  margin: 4px 0;
+}
+
+.folder-confirm-dialog code {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.folder-confirm-dialog .data-actions {
+  margin-top: 12px;
+}
+
+/* Folder move success message */
+.folder-move-success {
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid #4ade80;
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  margin-top: 12px;
+  color: #4ade80;
+  font-size: 14px;
+}
+
 /* Category marker - readable text with semi-transparent background */
 .category-marker {
   padding: 8px 20px;
