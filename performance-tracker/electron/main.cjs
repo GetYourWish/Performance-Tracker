@@ -23,16 +23,27 @@ const appStatePath = path.join(app.getPath('userData'), 'app-state.json');
 function getIconPathForTheme(theme) {
   const fname = `${theme}.ico`;
   if (app.isPackaged) {
+    // Primary: extraResources copies build/icons/ → resources/icons/
     const p1 = path.join(process.resourcesPath, 'icons', fname);
+    if (fsSync.existsSync(p1)) { console.log(`Icon resolved: ${p1}`); return p1; }
+    // Fallback: some builds put resources in a subfolder next to exe
     const p2 = path.join(path.dirname(process.execPath), 'resources', 'icons', fname);
-    if (fsSync.existsSync(p1)) return p1;
-    if (fsSync.existsSync(p2)) return p2;
+    if (fsSync.existsSync(p2)) { console.log(`Icon resolved (exe-relative): ${p2}`); return p2; }
+    // Fallback: flat icon.ico at resources root (guaranteed by extraResources)
+    const p3 = path.join(process.resourcesPath, 'icon.ico');
+    if (fsSync.existsSync(p3)) { console.log(`Icon resolved (root fallback): ${p3}`); return p3; }
+    // Fallback: flat icon.ico next to exe (portable)
+    const p4 = path.join(path.dirname(process.execPath), 'icon.ico');
+    if (fsSync.existsSync(p4)) { console.log(`Icon resolved (exe-dir): ${p4}`); return p4; }
+    console.warn('No icon file found in packaged mode, using built-in');
   }
-  // Dev mode: look in build/icons/
+  // Dev mode: look in build/icons/ first
   const dev = path.join(__dirname, '..', 'build', 'icons', fname);
-  if (fsSync.existsSync(dev)) return dev;
+  if (fsSync.existsSync(dev)) { console.log(`Icon resolved (dev): ${dev}`); return dev; }
   // Ultimate fallback: default icon at build/icon.ico
-  return path.join(__dirname, '..', 'build', 'icon.ico');
+  const fallback = path.join(__dirname, '..', 'build', 'icon.ico');
+  console.log(`Icon resolved (fallback): ${fallback}`);
+  return fallback;
 }
 
 /** Get the icon path for the user's chosen theme (or default). */

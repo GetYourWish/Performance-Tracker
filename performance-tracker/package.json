@@ -49,7 +49,8 @@
       "electron/**/*"
     ],
     "extraResources": [
-      { "from": "build/icons", "to": "icons" }
+      { "from": "build/icons", "to": "icons" },
+      { "from": "build/icon.ico", "to": "icon.ico" }
     ],
     "win": {
       "target": [
