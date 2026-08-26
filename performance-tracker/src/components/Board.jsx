@@ -18,7 +18,7 @@ import {
 import { AnimatePresence } from 'framer-motion'
 import CompletionPopup from './CompletionPopup'
 import BoardRow from './BoardRow'
-import { generateId, getCurrentDate, getTaskCategory } from '../utils/helpers'
+import { generateId, getCurrentDate, getTaskCategory, calculateTaskScoreBreakdown } from '../utils/helpers'
 
 // Simple category chip with + button to add marker
 function CategoryChip({ category, onAddMarker, onNavigateToMarker }) {
@@ -446,13 +446,55 @@ function Board({ data, onSave }) {
       }
     }
     
+    const completedAt = new Date().toISOString()
+    
+    // Build the completed task object to compute score breakdown
+    const completedTask = {
+      id: completionData.taskId,
+      text: data.tasks.find(t => t.id === completionData.taskId)?.text || '',
+      completion: {
+        completedDate: completionData.date,
+        completedAt,
+        difficultyId: completionData.difficultyId,
+        categoryId,
+        note: completionData.note || ''
+      }
+    }
+
+    // Compute score breakdown using all completed tasks (including this one)
+    const allCompleted = [...data.tasks.filter(t => t.completion), completedTask]
+    const breakdown = calculateTaskScoreBreakdown(
+      completedTask,
+      allCompleted,
+      difficulties,
+      settings.fatigueIncrement || 0.10,
+      settings.fatigueCap || 3.0,
+      categories
+    )
+
+    // Create log entry
+    const logEntry = {
+      id: generateId(),
+      timestamp: completedAt,
+      taskId: completionData.taskId,
+      taskText: completedTask.text,
+      difficultyLabel: breakdown.difficultyLabel,
+      difficultyColor: breakdown.difficultyColor,
+      categoryName: breakdown.categoryName,
+      categoryColor: breakdown.categoryColor,
+      priorityMultiplier: breakdown.priorityMultiplier,
+      fatigueMultiplier: breakdown.fatigueMultiplier,
+      basePoints: breakdown.basePoints,
+      finalScore: breakdown.finalScore
+    }
+
     const updatedTasks = data.tasks.map(t => {
       if (t.id === completionData.taskId) {
         return {
           ...t,
           completion: {
             completedDate: completionData.date,
-            completedAt: new Date().toISOString(),
+            completedAt,
             difficultyId: completionData.difficultyId,
             categoryId: categoryId,
             note: completionData.note || ''
@@ -469,16 +511,23 @@ function Board({ data, onSave }) {
     // Remove from workingOn if present
     const updatedWorkingOn = (data.workingOn || []).filter(id => id !== completionData.taskId)
 
+    // Cap logs at 500 entries
+    const existingLogs = data.logs || []
+    const updatedLogs = existingLogs.length >= 500
+      ? [...existingLogs.slice(existingLogs.length - 499), logEntry]
+      : [...existingLogs, logEntry]
+
     onSave({
       ...data,
       tasks: updatedTasks,
       board: updatedBoard,
       workingOn: updatedWorkingOn,
-      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+      logs: updatedLogs,
+      meta: { ...data.meta, updatedAt: completedAt }
     })
 
     setCompletionTask(null)
-  }, [boardItems, markers, categories, data.workingOn, data, onSave])
+  }, [boardItems, markers, categories, data.workingOn, data, onSave, difficulties, settings])
 
   const handleToggleWorkingOn = useCallback((itemId) => {
     const currentWorkingOn = data.workingOn || []
