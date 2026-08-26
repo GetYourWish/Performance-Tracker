@@ -74,9 +74,10 @@ export function getDaysInMonth(year, month) {
 
 // Calculate the score breakdown for a SINGLE task at the moment of completion
 // Returns an object with all formula components for logging
-export function calculateTaskScoreBreakdown(task, completedTasks, difficulties, fatigueIncrement, fatigueCap, categories) {
-  const difficultyMap = new Map(difficulties.map(d => [d.id, d]))
-  const categoryMap = new Map(categories.map(c => [c.id, c]))
+// Accepts pre-built Maps for performance when called in bulk
+export function calculateTaskScoreBreakdown(task, completedTasks, difficulties, fatigueIncrement, fatigueCap, categories, _difficultyMap, _categoryMap, _tasksByDate) {
+  const difficultyMap = _difficultyMap || new Map(difficulties.map(d => [d.id, d]))
+  const categoryMap = _categoryMap || new Map(categories.map(c => [c.id, c]))
 
   const difficulty = difficultyMap.get(task.completion.difficultyId)
   const basePoints = difficulty ? difficulty.score : 0
@@ -100,13 +101,26 @@ export function calculateTaskScoreBreakdown(task, completedTasks, difficulties, 
 
   // Calculate fatigue multiplier: count tasks completed earlier on the same date
   const completionDate = task.completion.completedDate
-  const earlierTasks = completedTasks.filter(t =>
-    t.id !== task.id &&
-    t.completion &&
-    t.completion.completedDate === completionDate &&
-    new Date(t.completion.completedAt) < new Date(task.completion.completedAt)
-  )
-  const taskIndex = earlierTasks.length // 0-based position in the day
+  let taskIndex = 0
+  if (_tasksByDate && _tasksByDate.has(completionDate)) {
+    // O(k) for k tasks on that day instead of O(n) for all tasks
+    const dayTasks = _tasksByDate.get(completionDate)
+    const taskTime = new Date(task.completion.completedAt).getTime()
+    for (let i = 0; i < dayTasks.length; i++) {
+      if (dayTasks[i].id !== task.id && new Date(dayTasks[i].completion.completedAt).getTime() < taskTime) {
+        taskIndex++
+      }
+    }
+  } else if (!_tasksByDate) {
+    // Fallback: original O(n) filter (only when no pre-grouped map provided)
+    const earlierTasks = completedTasks.filter(t =>
+      t.id !== task.id &&
+      t.completion &&
+      t.completion.completedDate === completionDate &&
+      new Date(t.completion.completedAt) < new Date(task.completion.completedAt)
+    )
+    taskIndex = earlierTasks.length
+  }
   const fatigueMultiplier = Math.min(1.0 + (taskIndex * fatigueIncrement), fatigueCap)
 
   const finalScore = basePoints * fatigueMultiplier * priorityMultiplier
@@ -166,6 +180,7 @@ export function calculateDayScore(completedTasks, difficulties, fatigueIncrement
 }
 
 // Pre-group tasks by date for efficient heatmap calculation - O(n) instead of O(n*m)
+// Each group is sorted by completedAt for O(k) fatigue lookups
 export function groupTasksByDate(completedTasks) {
   const grouped = new Map()
   
@@ -177,6 +192,11 @@ export function groupTasksByDate(completedTasks) {
       grouped.set(dateStr, [])
     }
     grouped.get(dateStr).push(task)
+  }
+  
+  // Sort each day's tasks by completion time for efficient fatigue index calculation
+  for (const [, tasks] of grouped) {
+    tasks.sort((a, b) => new Date(a.completion.completedAt).getTime() - new Date(b.completion.completedAt).getTime())
   }
   
   return grouped

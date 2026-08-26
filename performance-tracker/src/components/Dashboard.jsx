@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, memo } from 'react'
 import { motion } from 'framer-motion'
 import { subDays, startOfWeek, format, differenceInDays, startOfMonth, getYear, startOfYear } from 'date-fns'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
@@ -45,6 +45,20 @@ function filterByRange(tasks, rangeKey) {
     if (!t.completion?.completedAt) return false
     return new Date(t.completion.completedAt) >= start
   })
+}
+
+// Pre-compute score breakdowns for all tasks — O(N*k) once, O(1) per lookup
+function buildScoreCache(completedTasks, difficulties, categories, fatigueInc, fatigueCap) {
+  const cache = new Map()
+  if (completedTasks.length === 0) return cache
+  const diffMap = new Map(difficulties.map(d => [d.id, d]))
+  const catMap = new Map(categories.map(c => [c.id, c]))
+  const tasksByDate = groupTasksByDate(completedTasks)
+  for (const task of completedTasks) {
+    const bd = calculateTaskScoreBreakdown(task, completedTasks, difficulties, fatigueInc, fatigueCap, categories, diffMap, catMap, tasksByDate)
+    cache.set(task.id, bd)
+  }
+  return cache
 }
 
 function EmptyCard() {
@@ -102,12 +116,11 @@ function DashTooltip({ active, payload, label }) {
   )
 }
 
-function IntensityPanel({ tasks, rangeTasks, difficulties, categories, settings }) {
+const IntensityPanel = memo(function IntensityPanel({ rangeTasks, difficulties, categories, settings, scoreCache }) {
   const hasData = rangeTasks.length > 0
   if (!hasData) return <EmptyCard />
 
   const diffMap = new Map(difficulties.map(d => [d.id, d]))
-  const catMap = new Map(categories.map(c => [c.id, c]))
   const sortedDiffs = [...difficulties].filter(d => d.active !== false).sort((a, b) => a.score - b.score)
   const minDiff = sortedDiffs.length > 0 ? sortedDiffs[0].score : 0
   const maxDiff = sortedDiffs.length > 0 ? sortedDiffs[sortedDiffs.length - 1].score : 1
@@ -122,15 +135,15 @@ function IntensityPanel({ tasks, rangeTasks, difficulties, categories, settings 
 
   const gaugeGradient = sortedDiffs.map(d => `${d.color} ${((d.score - minDiff) / range) * 100}%`).join(', ')
 
-  const fatigueInc = settings.fatigueIncrement || 0.10
-  const fatigueCap = settings.fatigueCap || 3.0
-
+  // Use pre-computed score cache — O(1) per task instead of O(N)
   let totalTrue = 0
   let totalEffort = 0
   rangeTasks.forEach(t => {
-    const bd = calculateTaskScoreBreakdown(t, rangeTasks, difficulties, fatigueInc, fatigueCap, categories)
-    totalTrue += bd.finalScore
-    totalEffort += bd.basePoints * bd.fatigueMultiplier
+    const bd = scoreCache.get(t.id)
+    if (bd) {
+      totalTrue += bd.finalScore
+      totalEffort += bd.basePoints * bd.fatigueMultiplier
+    }
   })
 
   const pointsPerTask = rangeTasks.length > 0 ? totalTrue / rangeTasks.length : 0
@@ -221,10 +234,9 @@ function IntensityPanel({ tasks, rangeTasks, difficulties, categories, settings 
       )}
     </>
   )
-}
+})
 
-function RecordsPanel({ tasks, rangeTasks, difficulties, categories, settings, onDayClick }) {
-  const allCompleted = tasks
+const RecordsPanel = memo(function RecordsPanel({ tasks: allCompleted, rangeTasks, difficulties, categories, settings, scoreCache, onDayClick }) {
   if (allCompleted.length === 0) return <EmptyCard />
 
   const diffMap = new Map(difficulties.map(d => [d.id, d]))
@@ -237,9 +249,8 @@ function RecordsPanel({ tasks, rangeTasks, difficulties, categories, settings, o
 
   for (const [dateStr, dayTasks] of tasksByDate) {
     let score = 0
-    const sorted = [...dayTasks].sort((a, b) => new Date(a.completion.completedAt) - new Date(b.completion.completedAt))
     let mult = 1.0
-    for (const t of sorted) {
+    for (const t of dayTasks) {
       const d = diffMap.get(t.completion.difficultyId)
       const base = d ? d.score : 0
       let pm = 1.0
@@ -292,28 +303,30 @@ function RecordsPanel({ tasks, rangeTasks, difficulties, categories, settings, o
     if (v.score > bestMonthScore) { bestMonthScore = v.score; bestMonthLabel = v.label; bestMonthCount = v.count }
   }
 
-  const allDates = [...dateScores.keys()].sort()
+  // Use Set for O(1) date lookups instead of Array.includes() O(n)
+  const allDatesSet = new Set(dateScores.keys())
+  const allDatesArr = [...allDatesSet].sort()
   let currentStreak = 0
   let longestStreak = 0
   let tempStreak = 0
   const today = formatDate(new Date())
   const yesterday = formatDate(subDays(new Date(), 1))
 
-  if (allDates.includes(today) || allDates.includes(yesterday)) {
-    let checkDate = allDates.includes(today) ? today : yesterday
-    const idx = allDates.indexOf(checkDate)
+  if (allDatesSet.has(today) || allDatesSet.has(yesterday)) {
+    let checkDate = allDatesSet.has(today) ? today : yesterday
+    const idx = allDatesArr.indexOf(checkDate)
     for (let i = idx; i >= 0; i--) {
       const expected = formatDate(subDays(parseDate(checkDate), idx - i))
-      if (allDates.includes(expected)) currentStreak++
+      if (allDatesSet.has(expected)) currentStreak++
       else break
     }
   }
 
-  for (let i = 0; i < allDates.length; i++) {
+  for (let i = 0; i < allDatesArr.length; i++) {
     if (i === 0) { tempStreak = 1 }
     else {
-      const prev = parseDate(allDates[i - 1])
-      const curr = parseDate(allDates[i])
+      const prev = parseDate(allDatesArr[i - 1])
+      const curr = parseDate(allDatesArr[i])
       if (differenceInDays(curr, prev) === 1) tempStreak++
       else tempStreak = 1
     }
@@ -326,26 +339,28 @@ function RecordsPanel({ tasks, rangeTasks, difficulties, categories, settings, o
   let importantCurrentStreak = 0
   let importantLongestStreak = 0
   let impTemp = 0
-  const importantDates = allDates.filter(d => {
+  // Use Set for O(1) lookups
+  const importantDatesArr = allDatesArr.filter(d => {
     const dayTasks = tasksByDate.get(d) || []
     return dayTasks.some(t => t.completion?.categoryId && highPriorityIds.has(t.completion.categoryId))
   })
+  const importantDatesSet = new Set(importantDatesArr)
 
-  if (importantDates.length > 0) {
-    if (importantDates.includes(today) || importantDates.includes(yesterday)) {
-      const startD = importantDates.includes(today) ? today : yesterday
-      const startIdx = importantDates.indexOf(startD)
+  if (importantDatesArr.length > 0) {
+    if (importantDatesSet.has(today) || importantDatesSet.has(yesterday)) {
+      const startD = importantDatesSet.has(today) ? today : yesterday
+      const startIdx = importantDatesArr.indexOf(startD)
       for (let i = startIdx; i >= 0; i--) {
         const expected = formatDate(subDays(parseDate(startD), i - startIdx))
-        if (importantDates.includes(expected)) importantCurrentStreak++
+        if (importantDatesSet.has(expected)) importantCurrentStreak++
         else break
       }
     }
-    for (let i = 0; i < importantDates.length; i++) {
+    for (let i = 0; i < importantDatesArr.length; i++) {
       if (i === 0) impTemp = 1
       else {
-        const prev = parseDate(importantDates[i - 1])
-        const curr = parseDate(importantDates[i])
+        const prev = parseDate(importantDatesArr[i - 1])
+        const curr = parseDate(importantDatesArr[i])
         if (differenceInDays(curr, prev) === 1) impTemp++
         else impTemp = 1
       }
@@ -353,11 +368,12 @@ function RecordsPanel({ tasks, rangeTasks, difficulties, categories, settings, o
     }
   }
 
+  // Use pre-computed score cache for heaviest lift — O(N) with O(1) lookups
   let heaviestLift = null
   let maxVal = 0
   allCompleted.forEach(t => {
-    const bd = calculateTaskScoreBreakdown(t, allCompleted, difficulties, fatigueInc, fatigueCap, categories)
-    if (bd.finalScore > maxVal) { maxVal = bd.finalScore; heaviestLift = { task: t, breakdown: bd } }
+    const bd = scoreCache.get(t.id)
+    if (bd && bd.finalScore > maxVal) { maxVal = bd.finalScore; heaviestLift = { task: t, breakdown: bd } }
   })
 
   let balanceDays = 0
@@ -457,15 +473,12 @@ function RecordsPanel({ tasks, rangeTasks, difficulties, categories, settings, o
       )}
     </>
   )
-}
+})
 
-function RhythmPanel({ tasks, rangeTasks, difficulties, categories, settings }) {
-  const allCompleted = tasks
+const RhythmPanel = memo(function RhythmPanel({ tasks: allCompleted, rangeTasks, difficulties, categories, settings, scoreCache }) {
   if (allCompleted.length === 0) return <EmptyCard />
 
   const diffMap = new Map(difficulties.map(d => [d.id, d]))
-  const fatigueInc = settings.fatigueIncrement || 0.10
-  const fatigueCap = settings.fatigueCap || 3.0
 
   const now = new Date()
   const last30 = subDays(now, 29)
@@ -485,6 +498,7 @@ function RhythmPanel({ tasks, rangeTasks, difficulties, categories, settings }) 
   const activeDaysInRange = new Set(rangeTasks.map(t => t.completion?.completedDate).filter(Boolean))
   const focusDepth = activeDaysInRange.size > 0 ? (rangeTasks.length / activeDaysInRange.size) : 0
 
+  // Use pre-computed score cache — O(1) per task
   const weekdayData = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((name, i) => {
     const dayTasks = rangeTasks.filter(t => {
       if (!t.completion?.completedAt) return false
@@ -494,8 +508,8 @@ function RhythmPanel({ tasks, rangeTasks, difficulties, categories, settings }) 
     const activeDayCount = uniqueDays.size
     let totalScore = 0
     dayTasks.forEach(t => {
-      const bd = calculateTaskScoreBreakdown(t, allCompleted, difficulties, fatigueInc, fatigueCap, categories)
-      totalScore += bd.finalScore
+      const bd = scoreCache.get(t.id)
+      if (bd) totalScore += bd.finalScore
     })
     return {
       day: name,
@@ -535,8 +549,8 @@ function RhythmPanel({ tasks, rangeTasks, difficulties, categories, settings }) 
     })
     let totalPts = 0
     blockTasks.forEach(t => {
-      const bd = calculateTaskScoreBreakdown(t, allCompleted, difficulties, fatigueInc, fatigueCap, categories)
-      totalPts += bd.finalScore
+      const bd = scoreCache.get(t.id)
+      if (bd) totalPts += bd.finalScore
     })
     return {
       block: b.label,
@@ -633,16 +647,14 @@ function RhythmPanel({ tasks, rangeTasks, difficulties, categories, settings }) 
       )}
     </>
   )
-}
+})
 
-function CompositionPanel({ tasks, rangeTasks, difficulties, categories, settings }) {
+const CompositionPanel = memo(function CompositionPanel({ tasks, rangeTasks, difficulties, categories, settings, scoreCache }) {
   const hasData = rangeTasks.length > 0
   if (!hasData) return <EmptyCard />
 
   const diffMap = new Map(difficulties.map(d => [d.id, d]))
   const catMap = new Map(categories.map(c => [c.id, c]))
-  const fatigueInc = settings.fatigueIncrement || 0.10
-  const fatigueCap = settings.fatigueCap || 3.0
 
   const sortedDiffs = [...difficulties].filter(d => d.active !== false).sort((a, b) => b.score - a.score)
   const diffCounts = new Map()
@@ -659,13 +671,15 @@ function CompositionPanel({ tasks, rangeTasks, difficulties, categories, setting
 
   const [donutMode, setDonutMode] = useState('tasks')
 
+  // Use pre-computed score cache — O(1) per task instead of O(N)
   const catByTasks = new Map()
   const catByPoints = new Map()
   let uncategorizedTasks = 0
   let uncategorizedPoints = 0
 
   rangeTasks.forEach(t => {
-    const bd = calculateTaskScoreBreakdown(t, rangeTasks, difficulties, fatigueInc, fatigueCap, categories)
+    const bd = scoreCache.get(t.id)
+    if (!bd) return
     const cat = t.completion?.categoryId ? catMap.get(t.completion.categoryId) : null
     if (cat) {
       catByTasks.set(cat.id, (catByTasks.get(cat.id) || 0) + 1)
@@ -697,11 +711,13 @@ function CompositionPanel({ tasks, rangeTasks, difficulties, categories, setting
   const topDiff = sortedDiffs.length > 0 ? sortedDiffs[0] : null
   const topDiffCount = topDiff ? (diffCounts.get(topDiff.label) || 0) : 0
 
+  // Use score cache for alignment — O(N) with O(1) lookups
   const highPriorityIds = new Set(categories.filter(c => (c.priorityMultiplier ?? 1) > 1).map(c => c.id))
   let highPriorityPoints = 0
   let totalPoints = 0
   rangeTasks.forEach(t => {
-    const bd = calculateTaskScoreBreakdown(t, rangeTasks, difficulties, fatigueInc, fatigueCap, categories)
+    const bd = scoreCache.get(t.id)
+    if (!bd) return
     totalPoints += bd.finalScore
     if (t.completion?.categoryId && highPriorityIds.has(t.completion.categoryId)) {
       highPriorityPoints += bd.finalScore
@@ -866,18 +882,27 @@ function CompositionPanel({ tasks, rangeTasks, difficulties, categories, setting
       )}
     </>
   )
-}
+})
 
 export default function Dashboard({ data }) {
   const [range, setRange] = useState('30d')
 
   const tasks = data?.tasks || []
-  const completedTasks = tasks.filter(t => t.completion)
   const difficulties = data?.difficulties || []
   const categories = data?.categories || []
   const settings = data?.settings || {}
 
+  // Memoize completedTasks — avoids re-filtering on every render
+  const completedTasks = useMemo(() => tasks.filter(t => t.completion), [tasks])
+
   const rangeTasks = useMemo(() => filterByRange(completedTasks, range), [completedTasks, range])
+
+  // Pre-compute score cache for ALL completed tasks — O(N*k) once, O(1) per lookup
+  const scoreCache = useMemo(() => {
+    const fatigueInc = settings.fatigueIncrement || 0.10
+    const fatigueCap = settings.fatigueCap || 3.0
+    return buildScoreCache(completedTasks, difficulties, categories, fatigueInc, fatigueCap)
+  }, [completedTasks, difficulties, categories, settings.fatigueIncrement, settings.fatigueCap])
 
   const allTimeTotal = useMemo(() => {
     let total = 0
@@ -899,12 +924,12 @@ export default function Dashboard({ data }) {
       mult = Math.min(mult + fatigueInc, fatigueCap)
     }
     return total
-  }, [completedTasks, difficulties, categories, settings])
+  }, [completedTasks, difficulties, categories, settings.fatigueIncrement, settings.fatigueCap])
 
-  const handleDayClick = (dateStr) => {
+  const handleDayClick = useCallback((dateStr) => {
     const event = new CustomEvent('dashboard-day-click', { detail: dateStr })
     window.dispatchEvent(event)
-  }
+  }, [])
 
   return (
     <div className="dashboard-container">
@@ -937,19 +962,19 @@ export default function Dashboard({ data }) {
 
       <div className="dash-grid">
         <Panel panelKey="intensity" title={PANEL_META.intensity.title} gradient={PANEL_META.intensity.gradient}>
-          <IntensityPanel tasks={completedTasks} rangeTasks={rangeTasks} difficulties={difficulties} categories={categories} settings={settings} />
+          <IntensityPanel tasks={completedTasks} rangeTasks={rangeTasks} difficulties={difficulties} categories={categories} settings={settings} scoreCache={scoreCache} />
         </Panel>
 
         <Panel panelKey="records" title={PANEL_META.records.title} gradient={PANEL_META.records.gradient}>
-          <RecordsPanel tasks={completedTasks} rangeTasks={rangeTasks} difficulties={difficulties} categories={categories} settings={settings} onDayClick={handleDayClick} />
+          <RecordsPanel tasks={completedTasks} rangeTasks={rangeTasks} difficulties={difficulties} categories={categories} settings={settings} scoreCache={scoreCache} onDayClick={handleDayClick} />
         </Panel>
 
         <Panel panelKey="rhythm" title={PANEL_META.rhythm.title} gradient={PANEL_META.rhythm.gradient}>
-          <RhythmPanel tasks={completedTasks} rangeTasks={rangeTasks} difficulties={difficulties} categories={categories} settings={settings} />
+          <RhythmPanel tasks={completedTasks} rangeTasks={rangeTasks} difficulties={difficulties} categories={categories} settings={settings} scoreCache={scoreCache} />
         </Panel>
 
         <Panel panelKey="composition" title={PANEL_META.composition.title} gradient={PANEL_META.composition.gradient}>
-          <CompositionPanel tasks={completedTasks} rangeTasks={rangeTasks} difficulties={difficulties} categories={categories} settings={settings} />
+          <CompositionPanel tasks={completedTasks} rangeTasks={rangeTasks} difficulties={difficulties} categories={categories} settings={settings} scoreCache={scoreCache} />
         </Panel>
       </div>
     </div>

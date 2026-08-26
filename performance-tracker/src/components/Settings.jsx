@@ -1,4 +1,48 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+
+// Dashboard card visibility groups — static config moved to module scope
+const DASHBOARD_VIS_GROUPS = [
+  {
+    group: 'Intensity',
+    cards: [
+      { id: 'avgDifficulty', label: 'Avg Difficulty' },
+      { id: 'pointsPerTask', label: 'Points Per Task' },
+      { id: 'intensityTrend', label: 'Intensity Trend' },
+      { id: 'trueVsEffort', label: 'True vs Effort' }
+    ]
+  },
+  {
+    group: 'Records',
+    cards: [
+      { id: 'bestPeriods', label: 'Best Periods' },
+      { id: 'streaks', label: 'Streaks' },
+      { id: 'importantStreak', label: 'Important Streak' },
+      { id: 'heaviestLift', label: 'Heaviest Lift' },
+      { id: 'balanceDays', label: 'Balance Days' }
+    ]
+  },
+  {
+    group: 'Rhythm',
+    cards: [
+      { id: 'activeDays', label: 'Active Days' },
+      { id: 'focusDepth', label: 'Focus Depth' },
+      { id: 'weekdayBars', label: 'Weekday Bars' },
+      { id: 'shelfTime', label: 'Shelf Time' },
+      { id: 'powerHours', label: 'Power Hours' }
+    ]
+  },
+  {
+    group: 'Composition',
+    cards: [
+      { id: 'difficultyMix', label: 'Difficulty Mix' },
+      { id: 'categoryDonut', label: 'Category Donut' },
+      { id: 'topDifficulty', label: 'Top Difficulty' },
+      { id: 'alignment', label: 'Alignment' },
+      { id: 'momentum', label: 'Momentum' },
+      { id: 'quietNudge', label: 'Quiet Nudge' }
+    ]
+  }
+]
 
 const ICON_PREVIEWS = [
   {
@@ -28,7 +72,7 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
   const logs = data?.logs || []
   const [logFilter, setLogFilter] = useState('all')
 
-  const filteredLogs = (() => {
+  const filteredLogs = useMemo(() => {
     const sorted = [...logs].reverse() // newest first
     if (logFilter === 'today') {
       const todayStr = new Date().toISOString().slice(0, 10)
@@ -40,7 +84,7 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
       return sorted.filter(l => new Date(l.timestamp) >= weekAgo)
     }
     return sorted
-  })()
+  }, [logs, logFilter])
 
   const handleSettingChange = (key, value) => {
     onSave({
@@ -645,48 +689,7 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
               Toggle visibility of cards on the Performance Cockpit dashboard.
             </p>
             <div className="dashboard-visibility-groups">
-              {[
-                {
-                  group: 'Intensity',
-                  cards: [
-                    { id: 'avgDifficulty', label: 'Avg Difficulty' },
-                    { id: 'pointsPerTask', label: 'Points Per Task' },
-                    { id: 'intensityTrend', label: 'Intensity Trend' },
-                    { id: 'trueVsEffort', label: 'True vs Effort' }
-                  ]
-                },
-                {
-                  group: 'Records',
-                  cards: [
-                    { id: 'bestPeriods', label: 'Best Periods' },
-                    { id: 'streaks', label: 'Streaks' },
-                    { id: 'importantStreak', label: 'Important Streak' },
-                    { id: 'heaviestLift', label: 'Heaviest Lift' },
-                    { id: 'balanceDays', label: 'Balance Days' }
-                  ]
-                },
-                {
-                  group: 'Rhythm',
-                  cards: [
-                    { id: 'activeDays', label: 'Active Days' },
-                    { id: 'focusDepth', label: 'Focus Depth' },
-                    { id: 'weekdayBars', label: 'Weekday Bars' },
-                    { id: 'shelfTime', label: 'Shelf Time' },
-                    { id: 'powerHours', label: 'Power Hours' }
-                  ]
-                },
-                {
-                  group: 'Composition',
-                  cards: [
-                    { id: 'difficultyMix', label: 'Difficulty Mix' },
-                    { id: 'categoryDonut', label: 'Category Donut' },
-                    { id: 'topDifficulty', label: 'Top Difficulty' },
-                    { id: 'alignment', label: 'Alignment' },
-                    { id: 'momentum', label: 'Momentum' },
-                    { id: 'quietNudge', label: 'Quiet Nudge' }
-                  ]
-                }
-              ].map(g => (
+              {DASHBOARD_VIS_GROUPS.map(g => (
                 <div key={g.group} className="dash-vis-group">
                   <h4 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>{g.group}</h4>
                   {g.cards.map(c => {
