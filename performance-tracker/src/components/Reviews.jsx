@@ -4,6 +4,7 @@ import { calculateDayScore, parseDate, formatDate, groupTasksByDate } from '../u
 import ChronoStream from './ChronoStream'
 import StackedChart from './StackedChart'
 import HeatmapGrid from './HeatmapSkyline'
+import Dashboard from './Dashboard'
 import { toPng } from 'html-to-image'
 
 // Task Detail Popup Component
@@ -544,6 +545,12 @@ function Reviews({ data, onDayClick, onSave }) {
         <h2>Reviews</h2>
         <div className="review-tabs">
           <button 
+            className={`tab ${reviewType === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setReviewType('dashboard')}
+          >
+            Dashboard
+          </button>
+          <button 
             className={`tab ${reviewType === 'daily' ? 'active' : ''}`}
             onClick={() => setReviewType('daily')}
           >
@@ -571,6 +578,10 @@ function Reviews({ data, onDayClick, onSave }) {
       </div>
 
       <div className="review-content scrollable">
+        {reviewType === 'dashboard' && (
+          <Dashboard data={data} />
+        )}
+
         {reviewType === 'daily' && (
           <div className="daily-review">
             <div className="date-selector">
