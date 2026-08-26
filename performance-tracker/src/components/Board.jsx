@@ -239,27 +239,41 @@ function Board({ data, onSave }) {
   const [workingOnId, setWorkingOnId] = useState(null)
   const [dropIndicatorId, setDropIndicatorId] = useState(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [quickCatForm, setQuickCatForm] = useState(null) // { name, color } when creating from collapsed sidebar
+  const [quickCatForm, setQuickCatForm] = useState(null)
+  const [popoverPos, setPopoverPos] = useState(null)
   const dropIndicatorRef = useRef(null)
   const pointerYRef = useRef(0)
   const dragMoveListenerRef = useRef(null)
   const quickCatRef = useRef(null)
+  const addCatBtnRef = useRef(null)
 
   // Close quick cat popover on outside click
   useEffect(() => {
-    if (!quickCatForm) return
+    if (!quickCatForm) {
+      setPopoverPos(null)
+      return
+    }
     const handler = (e) => {
-      if (quickCatRef.current && !quickCatRef.current.contains(e.target)) {
+      if (quickCatRef.current && !quickCatRef.current.contains(e.target) &&
+          addCatBtnRef.current && !addCatBtnRef.current.contains(e.target)) {
         setQuickCatForm(null)
+        setPopoverPos(null)
       }
     }
-    // Slight delay to avoid the opening click immediately closing it
     const timer = setTimeout(() => document.addEventListener('pointerdown', handler), 0)
     return () => {
       clearTimeout(timer)
       document.removeEventListener('pointerdown', handler)
     }
   }, [quickCatForm])
+
+  const openQuickCatForm = useCallback(() => {
+    if (addCatBtnRef.current) {
+      const rect = addCatBtnRef.current.getBoundingClientRect()
+      setPopoverPos({ top: rect.bottom + 6, left: rect.right - 220 })
+    }
+    setQuickCatForm({ name: '', color: '#60a5fa' })
+  }, [])
 
   const setDropIndicator = (id) => {
     dropIndicatorRef.current = id
@@ -707,6 +721,7 @@ function Board({ data, onSave }) {
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
     setQuickCatForm(null)
+    setPopoverPos(null)
   }, [categories, data, onSave])
 
   const handleRandomizeTask = useCallback(() => {
@@ -1193,16 +1208,20 @@ function Board({ data, onSave }) {
                 onClick={handleRandomizeTask}
                 title="Pick a random task to work on"
               >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2" y="2" width="8" height="8" rx="2" />
-                  <rect x="14" y="2" width="8" height="8" rx="2" />
-                  <rect x="8" y="14" width="8" height="8" rx="2" />
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="3" />
+                  <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="8.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="15.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
                 </svg>
               </button>
               <button
                 type="button"
                 className="sidebar-icon-btn"
-                onClick={() => setQuickCatForm({ name: '', color: '#60a5fa' })}
+                ref={addCatBtnRef}
+                onClick={openQuickCatForm}
                 title="Add new category"
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1218,8 +1237,13 @@ function Board({ data, onSave }) {
                 </svg>
               </button>
 
-              {quickCatForm && (
-                <div className="quick-cat-popover" ref={quickCatRef} onClick={(e) => e.stopPropagation()}>
+              {quickCatForm && popoverPos && (
+                <div
+                  className="quick-cat-popover"
+                  ref={quickCatRef}
+                  style={{ top: `${popoverPos.top}px`, left: `${popoverPos.left}px` }}
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <input
                     type="text"
                     placeholder="Category name"
@@ -1231,6 +1255,7 @@ function Board({ data, onSave }) {
                         handleQuickCreateCategory(quickCatForm.name, quickCatForm.color)
                       } else if (e.key === 'Escape') {
                         setQuickCatForm(null)
+                        setPopoverPos(null)
                       }
                     }}
                   />
@@ -1269,10 +1294,13 @@ function Board({ data, onSave }) {
                 onClick={handleRandomizeTask}
                 title="Pick a random task to work on"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', verticalAlign: '-2px' }}>
-                  <rect x="2" y="2" width="8" height="8" rx="2" />
-                  <rect x="14" y="2" width="8" height="8" rx="2" />
-                  <rect x="8" y="14" width="8" height="8" rx="2" />
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', verticalAlign: '-2px' }}>
+                  <rect x="3" y="3" width="18" height="18" rx="3" />
+                  <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="8.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="15.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
                 </svg>
                 Randomizer
               </button>
