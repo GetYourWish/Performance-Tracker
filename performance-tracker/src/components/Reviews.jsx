@@ -7,14 +7,37 @@ import HeatmapGrid from './HeatmapSkyline'
 import { toPng } from 'html-to-image'
 
 // Task Detail Popup Component
-function TaskDetailPopup({ task, difficulty, category, onClose, onEditDate }) {
+function TaskDetailPopup({ task, difficulty, category, onClose, onEditDate, onSave }) {
   const completion = task.completion
-  
+  const [editingNote, setEditingNote] = useState(false)
+  const [noteValue, setNoteValue] = useState(completion.note || '')
+  const [editingTime, setEditingTime] = useState(false)
+  const [timeValue, setTimeValue] = useState(completion.completedAt ? completion.completedAt.slice(11, 16) : '12:00')
+
   if (!completion) return null
-  
+
   const completedDate = new Date(completion.completedDate)
   const completedTime = new Date(completion.completedAt)
-  
+
+  const handleSaveNote = () => {
+    onSave({
+      ...task,
+      completion: { ...completion, note: noteValue }
+    })
+    setEditingNote(false)
+  }
+
+  const handleSaveTime = () => {
+    const [hours, minutes] = timeValue.split(':').map(Number)
+    const oldDate = new Date(completion.completedAt)
+    oldDate.setHours(hours, minutes, 0, 0)
+    onSave({
+      ...task,
+      completion: { ...completion, completedAt: oldDate.toISOString() }
+    })
+    setEditingTime(false)
+  }
+
   return (
     <div 
       className="popup-overlay" 
@@ -24,103 +47,158 @@ function TaskDetailPopup({ task, difficulty, category, onClose, onEditDate }) {
       aria-modal="true"
       aria-labelledby="task-detail-title"
     >
-      <div className="completion-popup" onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h3 id="task-detail-title">Task Details</h3>
-          <button 
-            className="action-btn" 
-            onClick={onClose}
-            aria-label="Close"
-            style={{ background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer' }}
-          >
-            ✕
-          </button>
-        </div>
-        
-        <div className="task-text" style={{ marginBottom: '16px' }}>{task.text}</div>
-        
-        <div className="form-group">
-          <label>Completion Date</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ flex: 1, padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}>
-              {format(completedDate, 'EEEE, MMMM d, yyyy')}
+      <div className="completion-popup scrollable-popup" onClick={(e) => e.stopPropagation()}>
+        <div className="popup-scroll-area">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 id="task-detail-title">Task Details</h3>
+            <button 
+              className="action-btn" 
+              onClick={onClose}
+              aria-label="Close"
+              style={{ background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer' }}
+            >
+              ✕
+            </button>
+          </div>
+          
+          <div className="task-text" style={{ marginBottom: '16px' }}>{task.text}</div>
+          
+          <div className="form-group">
+            <label>Completion Date</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ flex: 1, padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}>
+                {format(completedDate, 'EEEE, MMMM d, yyyy')}
+              </div>
+              {onEditDate && (
+                <button 
+                  className="action-btn"
+                  onClick={() => onEditDate(task)}
+                  title="Edit completion date"
+                  style={{ padding: '8px 12px', fontSize: '13px' }}
+                >
+                  Edit Date
+                </button>
+              )}
             </div>
-            {onEditDate && (
-              <button 
-                className="action-btn"
-                onClick={() => onEditDate(task)}
-                title="Edit completion date"
-                style={{ padding: '8px 12px', fontSize: '13px' }}
+          </div>
+          
+          <div className="form-group">
+            <label>Completion Time</label>
+            {editingTime ? (
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="time"
+                  value={timeValue}
+                  onChange={(e) => setTimeValue(e.target.value)}
+                  className="date-input"
+                  style={{ flex: 1 }}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveTime()
+                    if (e.key === 'Escape') { setEditingTime(false); setTimeValue(completion.completedAt ? completion.completedAt.slice(11, 16) : '12:00') }
+                  }}
+                />
+                <button className="btn-confirm" onClick={handleSaveTime} style={{ padding: '8px 16px', fontSize: '13px' }}>Save</button>
+                <button className="btn-cancel" onClick={() => { setEditingTime(false); setTimeValue(completion.completedAt ? completion.completedAt.slice(11, 16) : '12:00') }} style={{ padding: '8px 16px', fontSize: '13px' }}>Cancel</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ flex: 1, padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}>
+                  {format(completedTime, 'h:mm a')}
+                </div>
+                <button
+                  className="action-btn"
+                  onClick={() => { setTimeValue(completion.completedAt ? completion.completedAt.slice(11, 16) : '12:00'); setEditingTime(true) }}
+                  title="Edit completion time"
+                  style={{ padding: '8px 12px', fontSize: '13px' }}
+                >
+                  Edit Time
+                </button>
+              </div>
+            )}
+          </div>
+          
+          {difficulty && (
+            <div className="form-group">
+              <label>Difficulty</label>
+              <div 
+                className="difficulty-badge"
+                style={{ 
+                  backgroundColor: difficulty.color, 
+                  display: 'inline-block',
+                  padding: '8px 16px',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontWeight: 500
+                }}
               >
-                Edit Date
-              </button>
+                {difficulty.label} ({difficulty.score})
+              </div>
+            </div>
+          )}
+          
+          <div className="form-group">
+            <label>Category</label>
+            {category ? (
+              <div 
+                className="category-badge"
+                style={{ 
+                  backgroundColor: category.color, 
+                  display: 'inline-block',
+                  padding: '8px 16px',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontWeight: 500
+                }}
+              >
+                {category.name}
+              </div>
+            ) : (
+              <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)' }}>
+                No category
+              </div>
+            )}
+          </div>
+          
+          <div className="form-group">
+            <label>Note</label>
+            {editingNote ? (
+              <div>
+                <textarea
+                  value={noteValue}
+                  onChange={(e) => setNoteValue(e.target.value)}
+                  className="note-input"
+                  rows={3}
+                  autoFocus
+                  maxLength={500}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') { setEditingNote(false); setNoteValue(completion.note || '') }
+                  }}
+                />
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
+                  <button className="btn-confirm" onClick={handleSaveNote} style={{ padding: '8px 16px', fontSize: '13px' }}>Save</button>
+                  <button className="btn-cancel" onClick={() => { setEditingNote(false); setNoteValue(completion.note || '') }} style={{ padding: '8px 16px', fontSize: '13px' }}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                <div style={{ flex: 1, padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: completion.note ? 'var(--text-primary)' : 'var(--text-muted)', whiteSpace: 'pre-wrap', minHeight: '40px' }}>
+                  {completion.note || 'No note'}
+                </div>
+                <button
+                  className="action-btn"
+                  onClick={() => { setNoteValue(completion.note || ''); setEditingNote(true) }}
+                  title="Edit note"
+                  style={{ padding: '8px 12px', fontSize: '13px', flexShrink: 0 }}
+                >
+                  Edit
+                </button>
+              </div>
             )}
           </div>
         </div>
-        
-        <div className="form-group">
-          <label>Completion Time</label>
-          <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}>
-            {format(completedTime, 'h:mm a')}
-          </div>
-        </div>
-        
-        {difficulty && (
-          <div className="form-group">
-            <label>Difficulty</label>
-            <div 
-              className="difficulty-badge"
-              style={{ 
-                backgroundColor: difficulty.color, 
-                display: 'inline-block',
-                padding: '8px 16px',
-                borderRadius: '12px',
-                color: '#fff',
-                fontWeight: 500
-              }}
-            >
-              {difficulty.label} ({difficulty.score})
-            </div>
-          </div>
-        )}
-        
-        <div className="form-group">
-          <label>Category</label>
-          {category ? (
-            <div 
-              className="category-badge"
-              style={{ 
-                backgroundColor: category.color, 
-                display: 'inline-block',
-                padding: '8px 16px',
-                borderRadius: '12px',
-                color: '#fff',
-                fontWeight: 500
-              }}
-            >
-              {category.name}
-            </div>
-          ) : (
-            <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)' }}>
-              No category
-            </div>
-          )}
-        </div>
-        
-        <div className="form-group">
-          <label>Note</label>
-          {completion.note ? (
-            <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
-              {completion.note}
-            </div>
-          ) : (
-            <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)' }}>
-              No note
-            </div>
-          )}
-        </div>
-        
-        <div className="popup-actions">
+
+        <div className="popup-actions popup-actions-sticky">
           <button className="btn-cancel" onClick={onClose}>Close</button>
         </div>
       </div>
@@ -708,6 +786,11 @@ function Reviews({ data, onDayClick, onSave }) {
           onEditDate={(task) => {
             setSelectedTask(null)
             setTaskToEdit(task)
+          }}
+          onSave={(updatedTask) => {
+            const updatedTasks = tasks.map(t => t.id === updatedTask.id ? updatedTask : t)
+            onSave({ ...data, tasks: updatedTasks, meta: { ...data.meta, updatedAt: new Date().toISOString() } })
+            setSelectedTask(updatedTask)
           }}
         />
       )}

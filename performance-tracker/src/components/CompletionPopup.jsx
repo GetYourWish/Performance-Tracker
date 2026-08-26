@@ -35,62 +35,64 @@ function CompletionPopup({ task, difficulties, onConfirm, onCancel }) {
       aria-modal="true"
       aria-labelledby="completion-popup-title"
     >
-      <div className="completion-popup">
-        <h3 id="completion-popup-title">Complete Task</h3>
-        
-        <div className="task-text">{task.text}</div>
+      <div className="completion-popup scrollable-popup">
+        <div className="popup-scroll-area">
+          <h3 id="completion-popup-title">Complete Task</h3>
+          
+          <div className="task-text">{task.text}</div>
 
-        <div className="form-group">
-          <label id="difficulty-label">Difficulty</label>
-          <div 
-            className="difficulty-selector"
-            role="radiogroup"
-            aria-labelledby="difficulty-label"
-          >
-            {activeDifficulties.map(difficulty => (
-              <button
-                key={difficulty.id}
-                className={`difficulty-chip ${selectedDifficulty === difficulty.id ? 'selected' : ''}`}
-                style={{ 
-                  backgroundColor: selectedDifficulty === difficulty.id ? difficulty.color : 'transparent',
-                  color: selectedDifficulty === difficulty.id ? '#fff' : difficulty.color,
-                  borderColor: difficulty.color
-                }}
-                onClick={() => setSelectedDifficulty(difficulty.id)}
-                role="radio"
-                aria-checked={selectedDifficulty === difficulty.id}
-              >
-                {difficulty.label} ({difficulty.score})
-              </button>
-            ))}
+          <div className="form-group">
+            <label id="difficulty-label">Difficulty</label>
+            <div 
+              className="difficulty-selector"
+              role="radiogroup"
+              aria-labelledby="difficulty-label"
+            >
+              {activeDifficulties.map(difficulty => (
+                <button
+                  key={difficulty.id}
+                  className={`difficulty-chip ${selectedDifficulty === difficulty.id ? 'selected' : ''}`}
+                  style={{ 
+                    backgroundColor: selectedDifficulty === difficulty.id ? difficulty.color : 'transparent',
+                    color: selectedDifficulty === difficulty.id ? '#fff' : difficulty.color,
+                    borderColor: difficulty.color
+                  }}
+                  onClick={() => setSelectedDifficulty(difficulty.id)}
+                  role="radio"
+                  aria-checked={selectedDifficulty === difficulty.id}
+                >
+                  {difficulty.label} ({difficulty.score})
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="completion-date">Date Completed</label>
+            <input
+              type="date"
+              id="completion-date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="date-input"
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="completion-note">Note (optional)</label>
+            <textarea
+              id="completion-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Add a short note..."
+              rows={2}
+              className="note-input"
+              maxLength={500}
+            />
           </div>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="completion-date">Date Completed</label>
-          <input
-            type="date"
-            id="completion-date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="date-input"
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="completion-note">Note (optional)</label>
-          <textarea
-            id="completion-note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Add a short note..."
-            rows={2}
-            className="note-input"
-            maxLength={500}
-          />
-        </div>
-
-        <div className="popup-actions">
+        <div className="popup-actions popup-actions-sticky">
           <button 
             className="btn-cancel"
             onClick={onCancel}

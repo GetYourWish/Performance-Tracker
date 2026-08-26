@@ -462,12 +462,34 @@
   border-radius: var(--radius-lg);
   width: 100%;
   max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
   box-shadow: var(--shadow-lg);
 }
 
 .completion-popup h3 {
   margin-bottom: 16px;
   color: var(--text-primary);
+}
+
+/* Scrollable popup variant — content scrolls, actions stay pinned */
+.scrollable-popup {
+  overflow: hidden;
+}
+
+.popup-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+  min-height: 0;
+}
+
+.popup-actions-sticky {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-color);
+  padding-top: 16px;
+  margin-top: 0;
 }
 
 .task-text {
