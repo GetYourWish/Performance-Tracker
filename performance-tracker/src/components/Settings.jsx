@@ -1,7 +1,10 @@
 import { useState } from 'react'
 
-function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder, onChangeDataLocation }) {
+function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder, onChangeDataFolder }) {
   const [activeTab, setActiveTab] = useState('data')
+  const [moveStatus, setMoveStatus] = useState(null) // null | 'choosing' | 'confirming' | 'moving'
+  const [pendingFolder, setPendingFolder] = useState(null)
+  const [error, setError] = useState('')
 
   const settings = data?.settings || {}
   const difficulties = data?.difficulties || []
@@ -111,6 +114,46 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
     })
   }
 
+  const handleChangeFolderClick = async () => {
+    setError('')
+    setMoveStatus('choosing')
+    try {
+      const result = await window.api.chooseDataFolder()
+      if (result) {
+        setPendingFolder(result.folder)
+        setMoveStatus('confirming')
+      } else {
+        setMoveStatus(null)
+      }
+    } catch (err) {
+      setError('Failed to choose folder: ' + (err.message || 'Unknown error'))
+      setMoveStatus(null)
+    }
+  }
+
+  const confirmMove = async () => {
+    if (!pendingFolder) return
+    setMoveStatus('moving')
+    setError('')
+    try {
+      const result = await onChangeDataFolder(pendingFolder)
+      if (result && result.success) {
+        setMoveStatus('success')
+        setPendingFolder(null)
+      }
+    } catch (err) {
+      setError('Failed to move data: ' + (err.message || 'Unknown error'))
+      setMoveStatus(null)
+      setPendingFolder(null)
+    }
+  }
+
+  const cancelMove = () => {
+    setMoveStatus(null)
+    setPendingFolder(null)
+    setError('')
+  }
+
   return (
     <div className="settings-container">
       <h2>Settings</h2>
@@ -159,8 +202,12 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
           <div className="settings-section">
             <h3>Data File</h3>
             <div className="setting-item">
-              <label>Current File Location</label>
-              <div className="file-path">{dataFile || 'Not set'}</div>
+              <label>Current Data Folder</label>
+              <div className="file-path">{dataFile ? dataFile.replace(/[\\/][^\\/]+$/, '') : 'Not set'}</div>
+            </div>
+            <div className="setting-item">
+              <label>Data File</label>
+              <div className="file-path" style={{ fontSize: '0.85em', opacity: 0.8 }}>{dataFile || 'Not set'}</div>
             </div>
             
             <div className="data-actions">
@@ -170,14 +217,43 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
               <button className="action-btn" onClick={onBackupNow}>
                 Backup Now
               </button>
-              <button className="action-btn danger" onClick={onChangeDataLocation}>
-                Change Data Location
+              <button 
+                className="action-btn" 
+                onClick={handleChangeFolderClick}
+                disabled={moveStatus === 'moving'}
+              >
+                {moveStatus === 'moving' ? 'Moving…' : 'Change Data Folder'}
               </button>
             </div>
+
+            {/* Folder picker confirmation dialog */}
+            {moveStatus === 'confirming' && pendingFolder && (
+              <div className="folder-confirm-dialog">
+                <p><strong>Move your data to:</strong></p>
+                <div className="file-path">{pendingFolder}</div>
+                <p className="setting-note">
+                  A backup will be created first. Your <code>tracker.json</code> will be copied to the new folder
+                  and the app will switch to using that location.
+                </p>
+                <div className="data-actions">
+                  <button className="action-btn" onClick={confirmMove}>Confirm Move</button>
+                  <button className="action-btn" onClick={cancelMove}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {/* Success message */}
+            {moveStatus === 'success' && (
+              <div className="folder-move-success">
+                Data moved successfully. The new location will take full effect on the next save.
+              </div>
+            )}
+
+            {error && <div className="error-message" style={{ marginTop: '8px' }}>{error}</div>}
             
             {conflicts && conflicts.length > 0 && (
               <div className="conflict-warning">
-                <strong>⚠️ Conflict Files Detected:</strong>
+                <strong>Conflict Files Detected:</strong>
                 <ul>
                   {conflicts.map((conflict, idx) => (
                     <li key={idx}>{conflict}</li>
@@ -190,7 +266,7 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
             )}
             
             <p className="setting-note">
-              The data file is synced with Syncthing. Keep it in your SyncThis folder for best results.
+              Choose any folder to store your data. If you use Syncthing, pick your synced folder for automatic cross-device sync.
             </p>
           </div>
         )}
