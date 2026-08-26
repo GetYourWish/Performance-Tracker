@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useCallback } from 'react'
+import { toPng } from 'html-to-image'
 
 function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, onClose, onCompleteTask }) {
   const [selectedTaskId, setSelectedTaskId] = useState(null)
@@ -25,6 +26,33 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
       onClose()
     }
   }
+
+  const [exporting, setExporting] = useState(false)
+  const tasksListRef = useRef(null)
+
+  const handleExportImage = useCallback(async () => {
+    const node = tasksListRef.current
+    if (!node) return
+
+    setExporting(true)
+    try {
+      const dataUrl = await toPng(node, {
+        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-primary').trim() || '#1a1a2e',
+        pixelRatio: 2,
+        style: {
+          // Ensure the captured element isn't clipped
+          overflow: 'visible',
+          maxHeight: 'none'
+        }
+      })
+      const date = new Date().toISOString().split('T')[0]
+      await window.api.saveImage(dataUrl, `working-on-${date}.png`)
+    } catch (err) {
+      console.error('Export failed:', err)
+    } finally {
+      setExporting(false)
+    }
+  }, [])
 
   // Helper to get category for a task based on board position (markers above/below)
   const getTaskCategory = (taskId) => {
@@ -83,6 +111,14 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
         <div className="popup-header">
           <h3 id="working-on-popup-title">Working On ({tasks.length})</h3>
           <button 
+            className="working-on-export-btn"
+            onClick={handleExportImage}
+            disabled={exporting || tasks.length === 0}
+            title="Export as image"
+          >
+            {exporting ? 'Saving...' : 'Export Image'}
+          </button>
+          <button 
             className="close-btn"
             onClick={onClose}
             aria-label="Close"
@@ -91,7 +127,7 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
           </button>
         </div>
         
-        <div className="working-on-tasks-list">
+        <div className="working-on-tasks-list" ref={tasksListRef}>
           {tasks.length === 0 ? (
             <p className="empty-state">No tasks currently being worked on.</p>
           ) : (
