@@ -7,7 +7,7 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [note, setNote] = useState('')
 
-  const activeDifficulties = difficulties.filter(d => d.active !== false)
+  const activeDifficulties = useMemo(() => difficulties.filter(d => d.active !== false), [difficulties])
 
   const handleComplete = () => {
     if (!selectedTaskId || !selectedDifficulty) return
@@ -54,50 +54,34 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
     }
   }, [])
 
-  // Helper to get category for a task based on board position (markers above/below)
-  const getTaskCategory = (taskId) => {
-    // Find task index in boardItems
-    const taskIndex = boardItems.findIndex(item => item.type === 'task' && item.taskId === taskId)
-    if (taskIndex === -1) return null
-    
-    // Find nearest marker above the task
-    let aboveMarker = null
-    for (let i = taskIndex - 1; i >= 0; i--) {
+  // Pre-compute category lookup for each working-on task
+  const taskCategoryMap = useMemo(() => {
+    const markerMap = new Map(markers.map(m => [m.id, m]))
+    const catMap = new Map(categories.map(c => [c.id, c]))
+    const map = new Map()
+    for (let i = 0; i < boardItems.length; i++) {
       const item = boardItems[i]
-      if (item && item.type === 'marker') {
-        aboveMarker = item
-        break
+      if (item.type !== 'task') continue
+      let aboveMarker = null
+      for (let j = i - 1; j >= 0; j--) {
+        if (boardItems[j].type === 'marker') { aboveMarker = boardItems[j]; break }
       }
+      let belowMarker = null
+      for (let j = i + 1; j < boardItems.length; j++) {
+        if (boardItems[j].type === 'marker') { belowMarker = boardItems[j]; break }
+      }
+      let category = null
+      if (aboveMarker && belowMarker) {
+        const aboveCat = markerMap.get(aboveMarker.markerId)?.categoryId
+        const belowCat = markerMap.get(belowMarker.markerId)?.categoryId
+        if (aboveCat && aboveCat === belowCat) {
+          category = catMap.get(aboveCat) || null
+        }
+      }
+      if (category) map.set(item.taskId, category)
     }
-    
-    // Find nearest marker below the task
-    let belowMarker = null
-    for (let i = taskIndex + 1; i < boardItems.length; i++) {
-      const item = boardItems[i]
-      if (item && item.type === 'marker') {
-        belowMarker = item
-        break
-      }
-    }
-    
-    // Task has a category ONLY if both markers exist AND they reference the same category
-    if (aboveMarker && belowMarker && aboveMarker.markerId === belowMarker.markerId) {
-      const marker = markers.find(m => m.id === aboveMarker.markerId)
-      if (marker) {
-        const category = categories.find(c => c.id === marker.categoryId)
-        return category || null
-      }
-    } else if (aboveMarker && belowMarker) {
-      const aboveMarkerObj = markers.find(m => m.id === aboveMarker.markerId)
-      const belowMarkerObj = markers.find(m => m.id === belowMarker.markerId)
-      if (aboveMarkerObj && belowMarkerObj && aboveMarkerObj.categoryId === belowMarkerObj.categoryId) {
-        const category = categories.find(c => c.id === aboveMarkerObj.categoryId)
-        return category || null
-      }
-    }
-    
-    return null
-  }
+    return map
+  }, [boardItems, markers, categories])
 
   return (
     <div 
@@ -132,7 +116,7 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
             <p className="empty-state">No tasks currently being worked on.</p>
           ) : (
             tasks.map(task => {
-              const category = getTaskCategory(task.id)
+              const category = taskCategoryMap.get(task.id) || null
               const backgroundColor = category ? `${category.color}22` : 'transparent'
               return (
                 <div 

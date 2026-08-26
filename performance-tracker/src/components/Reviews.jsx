@@ -389,17 +389,21 @@ function Reviews({ data, onDayClick, onSave }) {
   const categories = data?.categories || []
   const settings = data?.settings || {}
 
-  const completedTasks = tasks.filter(t => t.completion)
+  const completedTasks = useMemo(() => tasks.filter(t => t.completion), [tasks])
   
   // Pre-group completed tasks by date for O(1) lookup - MAJOR PERFORMANCE IMPROVEMENT
   const tasksByDate = useMemo(() => {
     return groupTasksByDate(completedTasks)
   }, [completedTasks])
   
-  // Create difficulty map for O(1) lookup
+  // Create difficulty and category maps for O(1) lookup
   const difficultyMap = useMemo(() => {
     return new Map(difficulties.map(d => [d.id, d]))
   }, [difficulties])
+
+  const categoryMap = useMemo(() => {
+    return new Map(categories.map(c => [c.id, c]))
+  }, [categories])
 
   // Handler for day click from heatmap or flow chart
   const handleDayClick = (date, dayTasks) => {
@@ -608,8 +612,8 @@ function Reviews({ data, onDayClick, onSave }) {
                 <p className="empty-state">No tasks completed on this date</p>
               ) : (
                 dailyData.tasks.map(task => {
-                  const difficulty = difficulties.find(d => d.id === task.completion.difficultyId)
-                  const category = categories.find(c => c.id === task.completion.categoryId)
+                  const difficulty = difficultyMap.get(task.completion.difficultyId)
+                  const category = task.completion.categoryId ? categoryMap.get(task.completion.categoryId) : null
                   
                   return (
                     <div 

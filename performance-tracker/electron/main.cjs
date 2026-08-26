@@ -2,7 +2,6 @@ const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } = require('ele
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
-const fse = require('fs-extra');
 const chokidar = require('chokidar');
 
 // Global variables
@@ -18,6 +17,10 @@ const ICON_THEMES = ['gradient', 'ember'];
 
 // App state file path
 const appStatePath = path.join(app.getPath('userData'), 'app-state.json');
+
+// In-memory caches to avoid repeated disk I/O
+let cachedAppState = null;
+let cachedIconThemes = null;
 
 /** Resolve the icon ICO path for a given theme, works in dev and packaged mode. */
 function getIconPathForTheme(theme) {
@@ -111,7 +114,6 @@ function debouncedSave(data) {
         isExternalWrite = true;
         await atomicSave(dataFilePath, data);
         isExternalWrite = false;
-        console.log(`Saved data to ${dataFilePath}`);
       }
     } catch (error) {
       console.error('Error during auto-save:', error);
@@ -185,8 +187,10 @@ async function setupWatcher() {
 
   watcher.on('change', async (changedPath) => {
     if (changedPath === dataFilePath && !isExternalWrite) {
-      // External change detected (not from our own write)
-      mainWindow.webContents.send('external-change', changedPath);
+      // Guard against sending to a destroyed window
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('external-change', changedPath);
+      }
     }
   });
 }
@@ -194,7 +198,6 @@ async function setupWatcher() {
 // Create main window
 function createWindow(iconTheme) {
   const iconPath = getAppIconPath(iconTheme);
-  console.log('App icon path:', iconPath);
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -202,7 +205,8 @@ function createWindow(iconTheme) {
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      spellcheck: false
     }
   });
 
@@ -335,11 +339,13 @@ ipcMain.handle('backup-now', async () => {
 });
 
 ipcMain.handle('get-app-state', async () => {
+  // Return cached state if available (written by set-app-state or reload-with-icon)
+  if (cachedAppState) return cachedAppState;
   try {
     const stateExists = await fs.access(appStatePath).then(() => true).catch(() => false);
     if (stateExists) {
-      const appState = JSON.parse(await fs.readFile(appStatePath, 'utf8'));
-      return appState;
+      cachedAppState = JSON.parse(await fs.readFile(appStatePath, 'utf8'));
+      return cachedAppState;
     }
   } catch (e) {
     console.error('Error loading app state:', e);
@@ -348,8 +354,8 @@ ipcMain.handle('get-app-state', async () => {
 });
 
 ipcMain.handle('set-app-state', async (event, newState) => {
-  const appState = { ...newState };
-  await fs.writeFile(appStatePath, JSON.stringify(appState, null, 2));
+  cachedAppState = { ...newState };
+  await fs.writeFile(appStatePath, JSON.stringify(cachedAppState, null, 2));
   if (newState.dataPath) {
     dataFilePath = newState.dataPath;
     await setupWatcher();
@@ -410,13 +416,15 @@ ipcMain.handle('save-image', async (event, { dataUrl, suggestedName }) => {
   return result.filePath;
 });
 
-// IPC: get available icon themes
+// IPC: get available icon themes (cached — paths are static for app lifetime)
 ipcMain.handle('get-icon-themes', () => {
-  return ICON_THEMES.map(theme => ({
+  if (cachedIconThemes) return cachedIconThemes;
+  cachedIconThemes = ICON_THEMES.map(theme => ({
     id: theme,
     name: theme.charAt(0).toUpperCase() + theme.slice(1),
     preview: getIconPathForTheme(theme).replace('.ico', '.png'),
   }));
+  return cachedIconThemes;
 });
 
 // IPC: reload the window with a new icon (called after user picks a different icon)
@@ -424,8 +432,9 @@ ipcMain.handle('reload-with-icon', async (event, iconTheme) => {
   if (!ICON_THEMES.includes(iconTheme)) return { success: false, error: 'Unknown theme' };
   // Save the icon theme preference to app state (survives data file changes)
   try {
-    const state = JSON.parse(await fs.readFile(appStatePath, 'utf8').catch(() => '{}'));
+    const state = cachedAppState || JSON.parse(await fs.readFile(appStatePath, 'utf8').catch(() => '{}'));
     state.iconTheme = iconTheme;
+    cachedAppState = state;
     await fs.writeFile(appStatePath, JSON.stringify(state, null, 2));
   } catch (e) {
     console.error('Failed to save icon theme:', e);
@@ -451,17 +460,25 @@ ipcMain.handle('reload-with-icon', async (event, iconTheme) => {
 
 // Initialize when ready
 app.whenReady().then(async () => {
-  await initializeDataPath();
-  await setupWatcher();
-
-  // Read saved icon theme preference
+  // Single read of app-state.json — extract both dataPath and iconTheme
   let savedIconTheme = 'gradient';
   try {
-    const state = JSON.parse(await fs.readFile(appStatePath, 'utf8').catch(() => '{}'));
+    const raw = await fs.readFile(appStatePath, 'utf8').catch(() => '{}');
+    const state = JSON.parse(raw);
+    cachedAppState = state;
+    if (state.dataPath) {
+      dataFilePath = state.dataPath;
+    }
     if (state.iconTheme && ICON_THEMES.includes(state.iconTheme)) {
       savedIconTheme = state.iconTheme;
     }
   } catch (e) { /* ignore */ }
+
+  // Only call initializeDataPath if we didn't get a path from app-state
+  if (!dataFilePath) {
+    await initializeDataPath();
+  }
+  await setupWatcher();
 
   createWindow(savedIconTheme);
 

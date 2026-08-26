@@ -14,7 +14,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState(false)
   const [conflicts, setConflicts] = useState([])
-  const [selectedDate, setSelectedDate] = useState(new Date())
+  // selectedDate is managed internally by Reviews — no need to lift it here
   const [showWorkingOnPopup, setShowWorkingOnPopup] = useState(false)
   
   // Debounce save to avoid constant disk writes
@@ -190,6 +190,39 @@ function App() {
     }
   }, [dataFile]);
 
+  const handleBackupNow = useCallback(async () => {
+    try {
+      const backupPath = await window.api.backupNow()
+      alert(`Backup created at: ${backupPath}`)
+    } catch (error) {
+      console.error('Failed to create backup:', error)
+      alert('Failed to create backup: ' + error.message)
+    }
+  }, [])
+
+  const handleOpenFolder = useCallback(async () => {
+    try {
+      await window.api.openDataFolder()
+    } catch (error) {
+      console.error('Failed to open folder:', error)
+      alert('Failed to open folder: ' + error.message)
+    }
+  }, [])
+
+  const handleChangeDataFolder = useCallback(async (folderPath) => {
+    try {
+      const result = await window.api.moveDataToFolder(folderPath)
+      if (result && result.filePath) {
+        setDataFile(result.filePath)
+      }
+      return result
+    } catch (error) {
+      console.error('Failed to move data:', error)
+      alert('Failed to move data: ' + error.message)
+      throw error
+    }
+  }, [])
+
   const handleSetupComplete = async (filePath) => {
     try {
       // Get default path from backend if no specific path selected
@@ -306,8 +339,6 @@ function App() {
         {currentView === 'reviews' && (
           <Reviews 
             data={data} 
-            selectedDate={selectedDate}
-            onDayClick={(date) => setSelectedDate(date)} 
             onSave={saveData}
           />
         )}
@@ -317,38 +348,9 @@ function App() {
             onSave={saveData}
             dataFile={dataFile}
             conflicts={conflicts}
-            onBackupNow={async () => {
-              try {
-                const backupPath = await window.api.backupNow()
-                console.log('Backup created:', backupPath)
-                alert(`Backup created at: ${backupPath}`)
-              } catch (error) {
-                console.error('Failed to create backup:', error)
-                alert('Failed to create backup: ' + error.message)
-              }
-            }}
-            onOpenFolder={async () => {
-              try {
-                await window.api.openDataFolder()
-              } catch (error) {
-                console.error('Failed to open folder:', error)
-                alert('Failed to open folder: ' + error.message)
-              }
-            }}
-            onChangeDataFolder={async (folderPath) => {
-              try {
-                const result = await window.api.moveDataToFolder(folderPath)
-                // Update the in-memory dataFile so the UI reflects the new path
-                if (result && result.filePath) {
-                  setDataFile(result.filePath)
-                }
-                return result
-              } catch (error) {
-                console.error('Failed to move data:', error)
-                alert('Failed to move data: ' + error.message)
-                throw error
-              }
-            }}
+            onBackupNow={handleBackupNow}
+            onOpenFolder={handleOpenFolder}
+            onChangeDataFolder={handleChangeDataFolder}
           />
         )}
       </main>

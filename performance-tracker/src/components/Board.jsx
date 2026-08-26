@@ -616,29 +616,22 @@ function Board({ data, onSave }) {
     setSelectedItems([])
   }, [])
 
-  const handleDragStart = (event) => {
+  const handleDragStart = useCallback((event) => {
     setDraggingItem(event.active)
     pointerYRef.current = event.activatorEvent?.clientY ?? 0
     const onMove = (e) => { pointerYRef.current = e.clientY }
     dragMoveListenerRef.current = onMove
     window.addEventListener('pointermove', onMove)
-    
-    // Debug logging
-    console.log('[DnD] Drag started for:', event.active.id, 'type:', event.active.data.current?.type)
-  }
+  }, [])
 
-  const handleDragMove = (event) => {
+  const handleDragMove = useCallback((event) => {
     const { active, over } = event
     if (!over) { 
-      console.log('[DnD] No over target')
       setDropIndicator(null)
       return 
     }
 
-    console.log('[DnD] Drag move - over:', over.id, 'type:', over.data.current?.type)
-
     if (over.data.current?.type === 'insertion-point') {
-      console.log('[DnD] Over insertion point:', over.id)
       setDropIndicator(over.id)
       return
     }
@@ -646,7 +639,6 @@ function Board({ data, onSave }) {
     // over is a row: highlight the gap ABOVE or BELOW it based on pointer Y
     const idx = boardItems.findIndex(item => (item.type === 'task' ? item.taskId : item.markerId) === over.id)
     if (idx === -1) { 
-      console.log('[DnD] Could not find index for:', over.id)
       setDropIndicator(null)
       return 
     }
@@ -657,19 +649,16 @@ function Board({ data, onSave }) {
 
     if (before) {
       if (idx === 0) {
-        console.log('[DnD] Setting drop indicator to insert-top')
         setDropIndicator('insert-top')
       } else {
         const prev = boardItems[idx - 1]
         const prevId = prev.type === 'task' ? prev.taskId : prev.markerId
-        console.log('[DnD] Setting drop indicator to previous item:', prevId)
         setDropIndicator(prevId)
       }
     } else {
-      console.log('[DnD] Setting drop indicator to current item:', over.id)
-      setDropIndicator(over.id) // gap right after the hovered row
+      setDropIndicator(over.id)
     }
-  }
+  }, [boardItems])
 
   const handleAddMarker = useCallback((category) => {
     const newMarker = {
@@ -685,6 +674,10 @@ function Board({ data, onSave }) {
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
   }, [data, markers, boardItems, onSave])
+
+  const handleCreateCategory = useCallback((updatedCategories) => {
+    onSave({ ...data, categories: updatedCategories, meta: { ...data.meta, updatedAt: new Date().toISOString() } })
+  }, [data, onSave])
 
   const handleNavigateToCategory = useCallback((category) => {
     // Find the first marker of this category on the board
@@ -837,11 +830,11 @@ function Board({ data, onSave }) {
     setSelectedItems([])
   }
 
-  const handleDragCancel = () => {
+  const handleDragCancel = useCallback(() => {
     setDraggingItem(null)
     setDropIndicator(null)
     cleanupDragListeners()
-  }
+  }, [cleanupDragListeners])
 
   const handleMarkerDrop = (categoryId, isNewCategory = false, insertionId = null, categoryObj = null, appendToEnd = false) => {
     // If this is a new category being created, we need to add it to categories first
@@ -1030,8 +1023,39 @@ function Board({ data, onSave }) {
     })
   }, [boardItems, tasks, markers])
 
+  // Pre-compute task→category lookup map for O(1) per task instead of O(n) getTaskCategory scans
+  const categoryLookup = useMemo(() => {
+    const map = new Map()
+    for (let i = 0; i < boardItems.length; i++) {
+      const item = boardItems[i]
+      if (item.type !== 'task') continue
+      const cat = getTaskCategory(i, boardItems, markers, categories)
+      if (cat) map.set(item.taskId, cat)
+    }
+    return map
+  }, [boardItems, markers, categories])
+
+  // Pre-compute task map for O(1) lookups
+  const taskMap = useMemo(() => {
+    const map = new Map()
+    for (const t of tasks) map.set(t.id, t)
+    return map
+  }, [tasks])
+
+  // Pre-compute marker map for O(1) lookups
+  const markerMap = useMemo(() => {
+    const map = new Map()
+    for (const m of markers) map.set(m.id, m)
+    return map
+  }, [markers])
+
+  // Memoize sortable item IDs
+  const sortableItemIds = useMemo(() =>
+    boardItems.map(i => i.type === 'task' ? i.taskId : i.markerId)
+  , [boardItems])
+
   // Render board rows with insertion points
-  const renderBoardRows = () => {
+  const renderBoardRows = useMemo(() => {
     const rows = []
     
     // Add insertion point at the top
@@ -1048,10 +1072,8 @@ function Board({ data, onSave }) {
       const prevItem = visibleBoardItems[index - 1]
       
       if (item.type === 'task') {
-        const task = tasks.find(t => t.id === item.taskId)
-
-        const taskIndex = boardItems.indexOf(item)
-        const category = getTaskCategory(taskIndex, boardItems, markers, categories)
+        const task = taskMap.get(item.taskId)
+        const category = categoryLookup.get(item.taskId) || null
 
         rows.push(
           <BoardRow
@@ -1089,7 +1111,7 @@ function Board({ data, onSave }) {
           />
         )
       } else if (item.type === 'marker') {
-        const marker = markers.find(m => m.id === item.markerId)
+        const marker = markerMap.get(item.markerId)
         if (!marker) return
 
         const category = categories.find(c => c.id === marker.categoryId)
@@ -1129,7 +1151,8 @@ function Board({ data, onSave }) {
     })
     
     return rows
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleBoardItems, editingTask, selectedItems, workingOnTasks, dropIndicatorId, categoryLookup, taskMap, markerMap, handleSelectItem, handleCompleteClick, handleDeleteTask, handleUpdateTask, handleDeleteMarker, handleMoveItem, handleAddTaskBelowMarker, handleMarkerDrop, handleUpdateMarkerNote, handleToggleWorkingOn, settings])
 
   return (
     <div className="board-container">
@@ -1165,7 +1188,7 @@ function Board({ data, onSave }) {
             onDragCancel={handleDragCancel}
           >
             <SortableContext
-              items={boardItems.map(i => i.type === 'task' ? i.taskId : i.markerId)}
+              items={sortableItemIds}
               strategy={verticalListSortingStrategy}
             >
               <div className="board-list" style={{ position: 'relative' }}>
@@ -1177,7 +1200,7 @@ function Board({ data, onSave }) {
                   />
                 )}
                 <AnimatePresence mode="popLayout">
-                  {renderBoardRows()}
+                  {renderBoardRows}
                 </AnimatePresence>
                 
                 {tasks.length === 0 && boardItems.length === 0 && (
@@ -1195,7 +1218,7 @@ function Board({ data, onSave }) {
                   {selectedItems.length > 1 
                     ? `Dragging ${selectedItems.length} items`
                     : draggingItem.data.current?.type === 'task' 
-                      ? tasks.find(t => t.id === draggingItem.id)?.text
+                      ? taskMap.get(draggingItem.id)?.text
                       : 'Category Marker'
                   }
                 </div>
@@ -1312,7 +1335,7 @@ function Board({ data, onSave }) {
               <div className="board-sidebar">
                 <CategorySidebar
                   categories={categories}
-                  onCreateCategory={(updatedCategories) => onSave({ ...data, categories: updatedCategories, meta: { ...data.meta, updatedAt: new Date().toISOString() } })}
+                  onCreateCategory={handleCreateCategory}
                   onAddMarker={handleAddMarker}
                   onNavigateToCategory={handleNavigateToCategory}
                 />
