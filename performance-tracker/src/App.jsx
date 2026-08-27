@@ -16,6 +16,8 @@ function App() {
   const [conflicts, setConflicts] = useState([])
   // selectedDate is managed internally by Reviews — no need to lift it here
   const [showWorkingOnPopup, setShowWorkingOnPopup] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [autoSync, setAutoSync] = useState(true)
   
   // Debounce save to avoid constant disk writes
   const saveTimeoutRef = useRef(null)
@@ -26,9 +28,17 @@ function App() {
     loadAppState()
   }, [])
 
-  // Watch for external file changes
+  // Sync watcher state from main process on mount
+  useEffect(() => {
+    window.api.getWatcherEnabled().then(enabled => {
+      setAutoSync(enabled)
+    }).catch(() => {})
+  }, [])
+
+  // Watch for external file changes (only when autoSync is on)
   useEffect(() => {
     if (!dataFile) return
+    if (!autoSync) return // no listener when manual mode
 
     let unsubscribeFn = null
     
@@ -49,7 +59,7 @@ function App() {
         unsubscribeFn()
       }
     }
-  }, [dataFile])
+  }, [dataFile, autoSync])
   
   // Check for conflict files
   const checkForConflicts = useCallback(async () => {
@@ -188,6 +198,35 @@ function App() {
     }
   }, [])
 
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      await flushSave()
+      const loadedData = await window.api.refreshData()
+      if (loadedData) {
+        const healedData = validateAndHealData(loadedData)
+        setData(healedData)
+      }
+    } catch (error) {
+      console.error('Refresh failed:', error)
+    } finally {
+      // Keep the spin animation visible for at least 400ms so it feels intentional
+      setTimeout(() => setRefreshing(false), 400)
+    }
+  }, [refreshing, flushSave])
+
+  const handleToggleAutoSync = useCallback(async (enabled) => {
+    setAutoSync(enabled)
+    try {
+      await window.api.setWatcherEnabled(enabled)
+      // Persist preference in app-state so it survives restarts
+      await window.api.setAppState({ watcherEnabled: enabled })
+    } catch (error) {
+      console.error('Failed to toggle auto-sync:', error)
+    }
+  }, [])
+
   const handleOpenFolder = useCallback(async () => {
     try {
       await window.api.openDataFolder()
@@ -313,6 +352,16 @@ function App() {
         >
           Settings
         </button>
+        <button 
+          className={`nav-refresh-btn ${refreshing ? 'spinning' : ''}`}
+          onClick={handleRefresh}
+          title={autoSync ? 'Refresh data' : 'Refresh data (auto-sync is off)'}
+          aria-label="Refresh data"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M13.65 2.35A7.96 7.96 0 0 0 8 0C3.58 0 0 3.58 0 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 8 14 6 6 0 1 1 8 2c1.66 0 3.14.69 4.22 1.78L9 7h7V0l-2.35 2.35z" fill="currentColor"/>
+          </svg>
+        </button>
         <div style={{ flex: 1 }}></div>
         <WorkingOnMarker 
           data={data} 
@@ -339,6 +388,8 @@ function App() {
             onBackupNow={handleBackupNow}
             onOpenFolder={handleOpenFolder}
             onChangeDataFolder={handleChangeDataFolder}
+            autoSync={autoSync}
+            onToggleAutoSync={handleToggleAutoSync}
           />
         )}
       </main>
