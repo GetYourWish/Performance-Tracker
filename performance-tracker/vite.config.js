@@ -13,7 +13,7 @@ export default defineConfig({
   resolve: {
     alias: {
       // DIAGNOSTIC: Route JSX through our sanitizer to catch bad style values
-      'react/jsx-runtime': './src/diag-jsx-runtime.js'
+      'react/jsx-runtime': '/home/z/my-project/Performance-Tracker/performance-tracker/src/diag-jsx-runtime.js'
     }
   },
   build: {
