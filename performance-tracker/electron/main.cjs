@@ -201,20 +201,24 @@ function createWindow(iconTheme) {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
 
-  // Auto-recover from renderer / GPU process crashes (blank screen on boot)
+  // Auto-recover from renderer process crashes only.
+  // NOTE: Do NOT auto-reload on gpu-process-crashed — the GPU process
+  // needs time to restart. An immediate reload races against the GPU
+  // recovery, causing a second crash and a permanently blank renderer.
+  // The user can manually reload (Ctrl+R) once the GPU process is ready.
+  let isReloading = false;
   mainWindow.webContents.on('render-process-gone', (event, details) => {
     console.error('Renderer process crashed:', details);
-    if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow && !mainWindow.isDestroyed() && !isReloading) {
+      isReloading = true;
       console.log('Attempting to reload after renderer crash...');
-      mainWindow.webContents.reload();
-    }
-  });
-
-  app.on('gpu-process-crashed', (event, killed) => {
-    console.error('GPU process crashed:', killed);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      console.log('Attempting to reload after GPU crash...');
-      mainWindow.webContents.reload();
+      // Delay reload slightly to avoid racing with GPU process recovery
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.reload();
+        }
+        isReloading = false;
+      }, 500);
     }
   });
 }
