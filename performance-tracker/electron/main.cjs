@@ -201,11 +201,19 @@ function createWindow(iconTheme) {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
 
-  // Auto-recover from GPU process crashes (blank page after backdrop-filter etc.)
+  // Auto-recover from renderer / GPU process crashes (blank screen on boot)
   mainWindow.webContents.on('render-process-gone', (event, details) => {
     console.error('Renderer process crashed:', details);
     if (mainWindow && !mainWindow.isDestroyed()) {
       console.log('Attempting to reload after renderer crash...');
+      mainWindow.webContents.reload();
+    }
+  });
+
+  app.on('gpu-process-crashed', (event, killed) => {
+    console.error('GPU process crashed:', killed);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      console.log('Attempting to reload after GPU crash...');
       mainWindow.webContents.reload();
     }
   });
