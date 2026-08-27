@@ -3,6 +3,42 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { format, eachDayOfInterval, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isAfter } from 'date-fns'
 import { formatDate, parseDate, groupTasksByDate } from '../utils/helpers'
 
+// Extracted outside parent to avoid remount on every render
+function StackedTooltip({ active, payload, label, chartData, categories }) {
+  if (!active || !payload || !payload.length) return null
+  const dayData = chartData.find(d => 
+    d.date === label || 
+    d.dayName === label || 
+    d.fullDate === label
+  )
+  if (dayData?.isFuture) return null
+  const categoryData = payload
+    .filter(p => p.value > 0)
+    .map(p => {
+      const catId = p.dataKey.replace('cat_', '')
+      const category = categories.find(c => c.id === catId)
+      return { name: category?.name || 'Unknown', color: category?.color || p.color, value: p.value }
+    })
+  return (
+    <div className="chart-tooltip-glass">
+      <div style={{ fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)', fontSize: '13px' }}>
+        {dayData?.fullDate || label}
+      </div>
+      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+        Total: {dayData?.total || 0} tasks
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        {categoryData.map((cat, idx) => (
+          <div key={idx} style={{ fontSize: '11px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', backgroundColor: cat.color }} />
+            {cat.name}: {cat.value}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function StackedChart({ tasks, categories, difficulties, range, weekStartsOn = 1, onDayClick }) {
   const [hoveredBar, setHoveredBar] = useState(null)
   
@@ -156,83 +192,7 @@ export default function StackedChart({ tasks, categories, difficulties, range, w
     return Array.from(catSet)
   }, [chartData, categories])
   
-  // Custom tooltip for dark theme
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      const dayData = chartData.find(d => 
-        d.date === label || 
-        d.dayName === label || 
-        d.fullDate === label
-      )
-      
-      // Don't show tooltip for future days
-      if (dayData?.isFuture) {
-        return null
-      }
-      
-      // Filter out zero values and organize by category
-      const categoryData = payload
-        .filter(p => p.value > 0)
-        .map(p => {
-          const catId = p.dataKey.replace('cat_', '')
-          const category = categories.find(c => c.id === catId)
-          return {
-            name: category?.name || 'Unknown',
-            color: category?.color || p.color,
-            value: p.value
-          }
-        })
-      
-      return (
-        <div style={{
-          background: 'var(--glass-bg)',
-          backdropFilter: 'blur(var(--glass-blur)) saturate(1.2)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: '12px',
-          minWidth: '150px',
-          boxShadow: 'var(--shadow-lg)'
-        }}>
-          <div style={{ 
-            fontWeight: 600, 
-            marginBottom: '8px',
-            color: 'var(--text-primary)',
-            fontSize: '13px'
-          }}>
-            {dayData?.fullDate || label}
-          </div>
-          <div style={{ 
-            fontSize: '12px', 
-            color: 'var(--text-secondary)',
-            marginBottom: '8px'
-          }}>
-            Total: {dayData?.total || 0} tasks
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {categoryData.map((cat, idx) => (
-              <div key={idx} style={{ 
-                fontSize: '11px', 
-                color: 'var(--text-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}>
-                <span style={{ 
-                  display: 'inline-block', 
-                  width: '10px', 
-                  height: '10px', 
-                  borderRadius: '2px',
-                  backgroundColor: cat.color 
-                }} />
-                {cat.name}: {cat.value}
-              </div>
-            ))}
-          </div>
-        </div>
-      )
-    }
-    return null
-  }
+
   
   // Generate bars for each category
   const renderBars = () => {
@@ -331,7 +291,7 @@ export default function StackedChart({ tasks, categories, difficulties, range, w
             interval="preserveStartEnd"
           />
           <YAxis hide />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<StackedTooltip chartData={chartData} categories={categories} />} />
           {renderBars()}
         </BarChart>
       </ResponsiveContainer>

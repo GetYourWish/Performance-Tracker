@@ -161,19 +161,12 @@ export default function HeatmapGrid({ heatmapData, categories, onDayClick }) {
       {/* Tooltip */}
       {hoveredCell && hoveredCell.cell.value > 0 && (
         <div
-          className="heatmap-tooltip"
+          className="chart-tooltip-glass"
           style={{
             position: 'fixed',
             left: hoveredCell.x,
             top: hoveredCell.y - 10,
             transform: 'translate(-50%, -100%)',
-            background: 'var(--glass-bg)',
-            backdropFilter: 'blur(var(--glass-blur)) saturate(1.2)',
-            border: '1px solid var(--glass-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: '10px 14px',
-            minWidth: '150px',
-            boxShadow: 'var(--shadow-lg)',
             zIndex: 1000,
             pointerEvents: 'none'
           }}
@@ -198,19 +191,12 @@ export default function HeatmapGrid({ heatmapData, categories, onDayClick }) {
       {/* Empty tooltip for zero-value cells */}
       {hoveredCell && hoveredCell.cell.value === 0 && (
         <div
-          className="heatmap-tooltip"
+          className="chart-tooltip-glass"
           style={{
             position: 'fixed',
             left: hoveredCell.x,
             top: hoveredCell.y - 10,
             transform: 'translate(-50%, -100%)',
-            background: 'var(--glass-bg)',
-            backdropFilter: 'blur(var(--glass-blur)) saturate(1.2)',
-            border: '1px solid var(--glass-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: '10px 14px',
-            minWidth: '150px',
-            boxShadow: 'var(--shadow-lg)',
             zIndex: 1000,
             pointerEvents: 'none'
           }}

@@ -3,6 +3,30 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { format, eachDayOfInterval, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addDays, isAfter, isBefore, isEqual } from 'date-fns'
 import { formatDate, parseDate, calculateDayScore, groupTasksByDate } from '../utils/helpers'
 
+// Extracted outside parent to avoid remount on every render
+function ChronoTooltip({ active, payload, label, chartData }) {
+  if (!active || !payload || !payload.length) return null
+  const dayData = chartData.find(d => 
+    d.date === label || 
+    d.dayName === label || 
+    d.fullDate === label
+  )
+  if (dayData?.score === null) return null
+  return (
+    <div className="chart-tooltip-glass">
+      <div style={{ fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)', fontSize: '13px' }}>
+        {dayData?.fullDate || label}
+      </div>
+      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+        Total Score: {(dayData?.score ?? 0).toFixed(1)}
+      </div>
+      <div style={{ fontSize: '11px', color: 'var(--text-primary)' }}>
+        Tasks Completed: {dayData?.count || 0}
+      </div>
+    </div>
+  )
+}
+
 export default function ChronoStream({ tasks, categories, difficulties, range, flowStateColor = '#8b5cf6', onDayClick, weekStartsOn = 1, isExporting = false, chartRef }) {
   const [hoverDay, setHoverDay] = useState(null)
   
@@ -103,58 +127,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
   // Use chartData directly - it already handles future dates with null scores
   const filteredData = chartData
   
-  // Custom tooltip for dark theme
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      // For month view, the label will be fullDate; for week view, it will be dayName
-      // We need to find the matching data by checking both fields
-      const dayData = filteredData.find(d => 
-        d.date === label || 
-        d.dayName === label || 
-        d.fullDate === label
-      )
-      
-      // Don't show tooltip for future days with null score
-      if (dayData?.score === null) {
-        return null
-      }
-      
-      return (
-        <div style={{
-          background: 'var(--glass-bg)',
-          backdropFilter: 'blur(var(--glass-blur)) saturate(1.2)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: '12px',
-          minWidth: '150px',
-          boxShadow: 'var(--shadow-lg)'
-        }}>
-          <div style={{ 
-            fontWeight: 600, 
-            marginBottom: '8px',
-            color: 'var(--text-primary)',
-            fontSize: '13px'
-          }}>
-            {dayData?.fullDate || label}
-          </div>
-          <div style={{ 
-            fontSize: '12px', 
-            color: 'var(--text-secondary)',
-            marginBottom: '4px'
-          }}>
-            Total Score: {(dayData?.score ?? 0).toFixed(1)}
-          </div>
-          <div style={{ 
-            fontSize: '11px', 
-            color: 'var(--text-primary)'
-          }}>
-            Tasks Completed: {dayData?.count || 0}
-          </div>
-        </div>
-      )
-    }
-    return null
-  }
+
   
   const chartColor = flowStateColor || '#8b5cf6'
   
@@ -334,7 +307,7 @@ export default function ChronoStream({ tasks, categories, difficulties, range, f
             interval="preserveStartEnd"
           />
           <YAxis hide domain={[0, 'auto']} />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<ChronoTooltip chartData={filteredData} />} />
           <Area
             type="monotone"
             dataKey="score"
