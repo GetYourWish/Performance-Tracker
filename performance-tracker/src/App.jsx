@@ -396,7 +396,7 @@ function App() {
 
       {showWorkingOnPopup && (
         <WorkingOnPopup
-          tasks={(data?.workingOn || []).map(id => data.tasks.find(t => t.id === id)).filter(Boolean)}
+          tasks={(data?.workingOn || []).map(id => data?.tasks?.find(t => t.id === id)).filter(Boolean)}
           boardItems={data?.board || []}
           markers={data?.markers || []}
           categories={data?.categories || []}
@@ -445,7 +445,7 @@ function App() {
             // Build the completed task object to compute score breakdown
             const completedTask = {
               id: taskId,
-              text: data.tasks.find(t => t.id === taskId)?.text || '',
+              text: data?.tasks?.find(t => t.id === taskId)?.text || '',
               completion: {
                 completedDate: date,
                 completedAt,
@@ -484,7 +484,7 @@ function App() {
               finalScore: breakdown.finalScore
             }
 
-            const updatedTasks = data.tasks.map(t => {
+            const updatedTasks = (data?.tasks || []).map(t => {
               if (t.id === taskId) {
                 return {
                   ...t,
@@ -504,21 +504,21 @@ function App() {
               !(item.type === 'task' && item.taskId === taskId)
             )
             
-            const updatedWorkingOn = (data.workingOn || []).filter(id => id !== taskId)
+            const updatedWorkingOn = (data?.workingOn || []).filter(id => id !== taskId)
 
             // Cap logs at 500 entries
-            const existingLogs = data.logs || []
+            const existingLogs = data?.logs || []
             const updatedLogs = existingLogs.length >= 500
               ? [...existingLogs.slice(existingLogs.length - 499), logEntry]
               : [...existingLogs, logEntry]
 
             saveData({
-              ...data,
+              ...(data || {}),
               tasks: updatedTasks,
               board: updatedBoard,
               workingOn: updatedWorkingOn,
               logs: updatedLogs,
-              meta: { ...data.meta, updatedAt: completedAt }
+              meta: { ...(data?.meta || {}), updatedAt: completedAt }
             })
 
             setShowWorkingOnPopup(false)
