@@ -13,8 +13,15 @@
     radial-gradient(circle at 20% 30%, var(--aurora-1) 0%, transparent 50%),
     radial-gradient(circle at 80% 70%, var(--aurora-2) 0%, transparent 50%),
     radial-gradient(circle at 40% 80%, var(--aurora-3) 0%, transparent 50%);
-  animation: aurora-drift 32s linear infinite;
-  transition: background 1.5s ease;
+  will-change: auto;
+  /* Animation only runs when user has no motion preference */
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .aurora-background {
+    animation: aurora-drift 32s linear infinite;
+    transition: background 1.5s ease;
+  }
 }
 
 @keyframes aurora-drift {
@@ -43,7 +50,7 @@
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   font-weight: 500;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast), transform var(--transition-fast);
 }
 
 .nav-item:hover {
@@ -68,7 +75,7 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast), transform var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -120,7 +127,7 @@
   height: 8px;
   margin: 0;
   border-radius: 4px;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
   background-color: transparent;
   position: relative;
   z-index: 10;

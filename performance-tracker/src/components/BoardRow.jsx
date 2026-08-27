@@ -77,9 +77,9 @@ const BoardRow = memo(function BoardRow({
     return (
       <motion.div 
         ref={setNodeRef}
-        initial={{ opacity: 0, scaleY: 0 }}
-        animate={{ opacity: 1, scaleY: 1 }}
-        transition={{ type: 'spring', stiffness: 280, damping: 24 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.2 }}
         style={style}
         className={`board-row marker-row ${isSelected ? 'selected' : ''} ${isConsecutiveMarker ? 'consecutive-marker' : ''}`}
         role="listitem"
@@ -299,8 +299,8 @@ const BoardRow = memo(function BoardRow({
       ref={setNodeRef}
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96, rotateX: 90 }}
-      transition={{ type: 'spring', stiffness: 170, damping: 26 }}
+      exit={{ opacity: 0, y: 4 }}
+      transition={{ duration: 0.2 }}
       style={style}
       className={`board-row task-row ${isEditing ? 'editing' : ''} ${isSelected ? 'selected' : ''} ${isWorkingOn ? 'working-on' : ''}`}
       role="listitem"
