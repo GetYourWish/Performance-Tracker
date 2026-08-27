@@ -2,8 +2,8 @@
 // Catches object values that trigger React error #62 in setValueForStyles.
 // This intercepts at the JSX level BEFORE React processes the style.
 
-import { jsx as _jsx, jsxs as _jsxs } from 'react/jsx-runtime'
-import { Fragment } from 'react'
+// Direct path import to avoid Vite alias circular dependency
+import { jsx as _jsx, jsxs as _jsxs, Fragment } from '../node_modules/react/jsx-runtime.js'
 
 function sanitizeStyle(style, componentName) {
   if (!style || typeof style !== 'object') return style
