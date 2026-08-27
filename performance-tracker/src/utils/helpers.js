@@ -329,5 +329,14 @@ export function validateAndHealData(data) {
     return task && !task.completion
   })
 
+  // Sanitize all task text fields to ensure they're strings (prevent React error #62)
+  healed.tasks = healed.tasks.map(task => {
+    if (!task) return task
+    return {
+      ...task,
+      text: typeof task.text === 'string' ? task.text : String(task.text ?? '')
+    }
+  })
+
   return healed
 }
