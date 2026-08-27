@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { getCurrentDate } from '../utils/helpers'
+import { getCurrentDate } from '@performance-tracker/core'
 
 function CompletionPopup({ task, difficulties, onConfirm, onCancel }) {
   const [selectedDifficulty, setSelectedDifficulty] = useState(null)

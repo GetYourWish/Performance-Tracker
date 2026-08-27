@@ -27,16 +27,16 @@ let cachedIconThemes = null;
 // prevents pointless rewrites and Syncthing sync loops).
 let lastSerializedTracker = null;
 
-// Guard: refuse files written by a NEWER app version. Mirrors
-// checkSchemaVersion() in src/utils/helpers.js (which cannot be required
-// here pre-monorepo because helpers.js is ESM while this file is CJS).
-// After the monorepo restructure this delegates to @performance-tracker/core.
+// Guard: refuse files written by a NEWER app version. Delegates to the shared
+// core package — the single authority on schema rules (zero drift principle).
+const { checkSchemaVersion } = require('@performance-tracker/core');
+
 function assertLoadableSchema(parsed) {
-  const sv = parsed && typeof parsed === 'object' ? parsed.schemaVersion : undefined;
-  if (typeof sv === 'number' && sv > 1) {
-    const err = new Error(`SCHEMA_VERSION_TOO_NEW:${sv}`);
+  const check = checkSchemaVersion(parsed);
+  if (!check.ok) {
+    const err = new Error(check.message);
     err.code = 'SCHEMA_VERSION_TOO_NEW';
-    err.schemaVersion = sv;
+    err.schemaVersion = check.schemaVersion;
     throw err;
   }
 }

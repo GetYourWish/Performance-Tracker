@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { subDays, startOfWeek, format, differenceInDays, startOfMonth, getYear, startOfYear } from 'date-fns'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import MomentumRing from './MomentumRing'
-import { calculateTaskScoreBreakdown, formatDate, parseDate, groupTasksByDate } from '../utils/helpers'
+import { calculateTaskScoreBreakdown, formatDate, parseDate, groupTasksByDate } from '@performance-tracker/core'
 
 const RANGE_OPTIONS = [
   { key: '30d', label: '30d' },

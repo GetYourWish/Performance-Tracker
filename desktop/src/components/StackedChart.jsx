@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import { format, eachDayOfInterval, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isAfter } from 'date-fns'
-import { formatDate, parseDate, groupTasksByDate } from '../utils/helpers'
+import { formatDate, parseDate, groupTasksByDate } from '@performance-tracker/core'
 
 // Extracted outside parent to avoid remount on every render
 function StackedTooltip({ active, payload, label, chartData, categories }) {

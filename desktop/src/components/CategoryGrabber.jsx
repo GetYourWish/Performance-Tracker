@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { generateId } from '../utils/helpers'
+import { generateId } from '@performance-tracker/core'
 
 function CategoryGrabber({ categories, onDrop }) {
   const [isCreating, setIsCreating] = useState(false)

@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, getYear, startOfYear, endOfYear } from 'date-fns'
-import { calculateDayScore, parseDate, formatDate, groupTasksByDate } from '../utils/helpers'
+import { calculateDayScore, parseDate, formatDate, groupTasksByDate } from '@performance-tracker/core'
 import ChronoStream from './ChronoStream'
 import StackedChart from './StackedChart'
 import HeatmapGrid from './HeatmapSkyline'

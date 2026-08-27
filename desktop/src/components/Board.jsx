@@ -17,7 +17,7 @@ import {
 } from '@dnd-kit/sortable'
 import CompletionPopup from './CompletionPopup'
 import BoardRow from './BoardRow'
-import { generateId, getCurrentDate, getTaskCategory, calculateTaskScoreBreakdown } from '../utils/helpers'
+import { generateId, getCurrentDate, getTaskCategory, calculateTaskScoreBreakdown } from '@performance-tracker/core'
 
 // Simple category chip with + button to add marker
 function CategoryChip({ category, onAddMarker, onNavigateToMarker }) {
