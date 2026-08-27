@@ -45,11 +45,11 @@ const BoardRow = memo(function BoardRow({
     }
   })
   
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1
-  }
+  // Diagnostic: completely bypass inline style to isolate React #62 source
+  // If error persists, the style prop is NOT the cause — it's elsewhere in the tree
+  const style = undefined
+  void transform // prevent unused var warning
+  void transition
 
   // Determine if we should enable drag on the row body (for multi-select)
   // Only when this item is selected AND there are multiple items selected
@@ -76,7 +76,6 @@ const BoardRow = memo(function BoardRow({
     return (
       <div 
         ref={setNodeRef}
-        style={style}
         className={`board-row marker-row row-enter-scale ${isSelected ? 'selected' : ''} ${isConsecutiveMarker ? 'consecutive-marker' : ''}`}
         role="listitem"
         aria-label={`Category marker: ${String(category?.name ?? '')}`}
@@ -293,7 +292,6 @@ const BoardRow = memo(function BoardRow({
   return (
     <div 
       ref={setNodeRef}
-      style={style}
       className={`board-row task-row row-enter-slide ${isEditing ? 'editing' : ''} ${isSelected ? 'selected' : ''} ${isWorkingOn ? 'working-on' : ''}`}
       role="listitem"
       aria-label={`Task: ${String(task?.text ?? '')}`}
