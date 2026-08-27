@@ -5,17 +5,25 @@ import ErrorBoundary from './components/ErrorBoundary'
 import './index.css'
 import './components/components.css'
 
-// Capture full error details before React minification hides them
+// DIAGNOSTIC: Capture React errors with full development-mode messages
+// This build uses React development builds to reveal object keys in error #62
 window.addEventListener('error', (event) => {
   const msg = event.error?.message || event.message || ''
-  if (msg.includes('Objects are not valid') || msg.includes('error #62')) {
-    console.error('%c[FULL ERROR]', 'color:red;font-size:16px', event.error)
-    console.error('%c[ERROR MESSAGE]', 'color:orange', event.error?.message)
-    console.error('%c[ERROR STACK]', 'color:yellow', event.error?.stack)
-    // Try to extract object keys from the error message
-    const keysMatch = event.error?.message?.match(/keys\s*\{([^}]+)\}/)
+  if (msg.includes('Objects are not valid') || msg.includes('error #62') || msg.includes('setValueForStyles')) {
+    console.error('%c╔══════════════════════════════════════════════════════════╗', 'color:red;font-size:14px')
+    console.error('%c║  REACT STYLE ERROR — FULL DIAGNOSTIC                 ║', 'color:red;font-size:14px')
+    console.error('%c╚══════════════════════════════════════════════════════════╝', 'color:red;font-size:14px')
+    console.error('%c[FULL MESSAGE]', 'color:orange;font-size:16px;font-weight:bold', event.error?.message)
+    console.error('%c[STACK]', 'color:yellow', event.error?.stack)
+    // In dev mode, the message contains "object with keys {x, y, ...}"
+    const keysMatch = event.error?.message?.match(/object with keys \{([^}]+)\}/)
     if (keysMatch) {
-      console.error('%c[OBJECT KEYS]', 'color:red;font-size:14px', keysMatch[1])
+      console.error('%c[FOUND OBJECT KEYS] ' + keysMatch[1], 'color:red;font-size:18px;font-weight:bold;background:yellow')
+    }
+    // Also try to catch the value from "found: object" 
+    const foundMatch = event.error?.message?.match(/found: ([^\.]+)/i)
+    if (foundMatch) {
+      console.error('%c[FOUND TYPE] ' + foundMatch[1], 'color:red;font-size:16px')
     }
   }
 })
