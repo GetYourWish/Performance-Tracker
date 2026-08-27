@@ -327,14 +327,19 @@ function Board({ data, onSave }) {
     root.style.setProperty('--consecutive-marker-margin', consecutiveMarkerMargin)
   }, [settings.theme, settings.multiSelectModifier, settings.consecutiveMarkerMargin])
 
-  const sensors = useMemo(() => useSensors(
+  // dnd-kit sensors — hooks must be called unconditionally at the top level.
+  // (Previously wrapped in useMemo(() => useSensors(...), []) which violated
+  // the Rules of Hooks: on updates the memo factory was skipped, so the inner
+  // useSensor hooks never ran and shifted every subsequent hook, crashing
+  // areHookInputsEqual with "Cannot read properties of undefined (reading 'length')".)
+  const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 }
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates
     })
-  ), [])
+  )
 
   const handleCreateTask = useCallback(() => {
     if (!newTaskText.trim()) return
