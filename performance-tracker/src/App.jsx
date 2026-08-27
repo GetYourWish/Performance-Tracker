@@ -4,7 +4,7 @@ import Reviews from './components/Reviews'
 import Settings from './components/Settings'
 import SetupScreen from './components/SetupScreen'
 import { WorkingOnMarker, WorkingOnPopup } from './components/WorkingOnMarker'
-import { validateAndHealData, generateId, calculateTaskScoreBreakdown } from './utils/helpers'
+import { validateAndHealData, generateId, calculateTaskScoreBreakdown, checkSchemaVersion } from './utils/helpers'
 import './App.css'
 
 function App() {
@@ -18,10 +18,15 @@ function App() {
   const [showWorkingOnPopup, setShowWorkingOnPopup] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [autoSync, setAutoSync] = useState(true)
-  
+  // Set when the data file was written by a newer app version (schemaVersion > 1)
+  const [schemaError, setSchemaError] = useState(null)
+
   // Debounce save to avoid constant disk writes
   const saveTimeoutRef = useRef(null)
   const pendingSaveRef = useRef(null)
+  // Serialized form of the last content known to be on disk. Saves identical
+  // to this are skipped — no-change-no-write (prevents Syncthing churn).
+  const lastPersistedRef = useRef(null)
 
   // Load app state and data file path on mount
   useEffect(() => {
@@ -112,9 +117,19 @@ function App() {
         setLoading(false);
         return;
       }
+
+      // Refuse files from newer app versions (never heal them downgraded).
+      // Primary guard lives in the main process; this is defense in depth.
+      const schemaCheck = checkSchemaVersion(loadedData);
+      if (!schemaCheck.ok) {
+        setSchemaError(schemaCheck.schemaVersion);
+        setLoading(false);
+        return;
+      }
       
       // Validate and heal data on load
       const healedData = validateAndHealData(loadedData);
+      lastPersistedRef.current = JSON.stringify(healedData);
       
       // Only update state if data actually changed (for external changes)
       if (isExternalChange && data) {
@@ -124,6 +139,13 @@ function App() {
         setData(healedData);
       }
     } catch (error) {
+      const msg = String(error?.message || error);
+      const tooNew = msg.match(/SCHEMA_VERSION_TOO_NEW:(\d+)/);
+      if (tooNew) {
+        setSchemaError(parseInt(tooNew[1], 10));
+        setLoading(false);
+        return;
+      }
       console.error('Failed to load data:', error);
       // Corrupt file or other error - trigger setup to let user choose a new location
       setSetupRequired(true);
@@ -146,9 +168,14 @@ function App() {
     saveTimeoutRef.current = setTimeout(async () => {
       if (pendingSaveRef.current && dataFile) {
         try {
-          window.api.saveData(pendingSaveRef.current).catch(err => {
-            console.error('Failed to save data:', err);
-          });
+          const incoming = JSON.stringify(pendingSaveRef.current);
+          // No-change-no-write: identical content must never hit the disk
+          if (lastPersistedRef.current === null || incoming !== lastPersistedRef.current) {
+            window.api.saveData(pendingSaveRef.current).catch(err => {
+              console.error('Failed to save data:', err);
+            });
+            lastPersistedRef.current = incoming;
+          }
           
           // Update UI state immediately for responsive feel
           setData(pendingSaveRef.current);
@@ -205,7 +232,13 @@ function App() {
       await flushSave()
       const loadedData = await window.api.refreshData()
       if (loadedData) {
+        const schemaCheck = checkSchemaVersion(loadedData)
+        if (!schemaCheck.ok) {
+          setSchemaError(schemaCheck.schemaVersion)
+          return
+        }
         const healedData = validateAndHealData(loadedData)
+        lastPersistedRef.current = JSON.stringify(healedData)
         setData(healedData)
       }
     } catch (error) {
@@ -314,6 +347,18 @@ function App() {
       <div className="loading-screen">
         <div className="loading-spinner"></div>
         <p>Loading...</p>
+      </div>
+    )
+  }
+
+  if (schemaError !== null) {
+    return (
+      <div className="loading-screen">
+        <h2>Data file is from a newer version</h2>
+        <p className="error-message">
+          This tracker.json uses schemaVersion {schemaError}, but this app supports schemaVersion 1.
+        </p>
+        <p>The file was not modified. Update this app to a version that supports schema {schemaError}.</p>
       </div>
     )
   }
