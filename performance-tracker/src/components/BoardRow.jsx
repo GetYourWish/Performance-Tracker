@@ -83,7 +83,7 @@ const BoardRow = memo(function BoardRow({
         style={style}
         className={`board-row marker-row ${isSelected ? 'selected' : ''} ${isConsecutiveMarker ? 'consecutive-marker' : ''}`}
         role="listitem"
-        aria-label={`Category marker: ${category.name}`}
+        aria-label={`Category marker: ${String(category?.name ?? '')}`}
         data-board-item-id={id}
         onClick={(e) => {
           // Marker rows should NEVER be selected by clicking on them
@@ -125,15 +125,15 @@ const BoardRow = memo(function BoardRow({
           >
             i
           </div>
-          <span>/{category.name}</span>
+          <span>/{String(category.name)}</span>
           <button 
             className="add-task-marker-btn"
             onClick={(e) => {
               e.stopPropagation() // Prevent row selection
               onAddTaskBelow && onAddTaskBelow()
             }}
-            title={`Add task below ${category.name}`}
-            aria-label={`Add task below ${category.name}`}
+            title={`Add task below ${String(category.name)}`}
+            aria-label={`Add task below ${String(category.name)}`}
           >
             +
           </button>
@@ -153,10 +153,10 @@ const BoardRow = memo(function BoardRow({
                 // View mode - similar to completion popup structure
                 <div className="category-note-view-content">
                   <h3 id="category-note-popup-title">Category Note</h3>
-                  <div className="category-name-display">{category.name}</div>
+                  <div className="category-name-display">{String(category.name)}</div>
                   <div className="category-note-text">
-                    {marker.note && marker.note.trim() !== '' ? (
-                      marker.note
+                    {marker.note && String(marker.note).trim() !== '' ? (
+                      String(marker.note)
                     ) : (
                       <span className="no-note-message">No note added</span>
                     )}
@@ -189,7 +189,7 @@ const BoardRow = memo(function BoardRow({
                 // Edit mode
                 <div className="category-note-edit-content">
                   <h3 id="category-note-popup-title">Edit Category Note</h3>
-                  <div className="category-name-display">{category.name}</div>
+                  <div className="category-name-display">{String(category.name)}</div>
                   <textarea
                     value={categoryNoteEdit}
                     onChange={(e) => setCategoryNoteEdit(e.target.value)}
@@ -262,7 +262,7 @@ const BoardRow = memo(function BoardRow({
         <button 
           className="delete-marker-btn"
           onClick={onDelete}
-          aria-label={`Delete ${category.name} marker`}
+          aria-label={`Delete ${String(category.name)} marker`}
         >
           ✕
         </button>
@@ -304,7 +304,7 @@ const BoardRow = memo(function BoardRow({
       style={style}
       className={`board-row task-row ${isEditing ? 'editing' : ''} ${isSelected ? 'selected' : ''} ${isWorkingOn ? 'working-on' : ''}`}
       role="listitem"
-      aria-label={`Task: ${task.text}`}
+      aria-label={`Task: ${String(task?.text ?? '')}`}
       data-board-item-id={id}
       onClick={(e) => {
         // Check if clicking on the task text with modifier key - should toggle selection, not edit
@@ -410,7 +410,7 @@ const BoardRow = memo(function BoardRow({
             }
           }}
         >
-          {task.text}
+          {String(task?.text ?? '')}
         </div>
       )}
 
@@ -429,7 +429,7 @@ const BoardRow = memo(function BoardRow({
         <button 
           className="action-btn complete-btn"
           onClick={onComplete}
-          aria-label={`Complete task: ${task.text}`}
+          aria-label={`Complete task: ${String(task?.text ?? '')}`}
           title="Complete"
         >
           ✓
@@ -455,7 +455,7 @@ const BoardRow = memo(function BoardRow({
         <button 
           className="action-btn delete-btn"
           onClick={() => onConfirmDelete(task)}
-          aria-label={`Delete task: ${task.text}`}
+          aria-label={`Delete task: ${String(task?.text ?? '')}`}
           title="Delete"
         >
           🗑

@@ -1237,7 +1237,7 @@ function Board({ data, onSave }) {
                   {selectedItems.length > 1 
                     ? `Dragging ${selectedItems.length} items`
                     : draggingItem.data.current?.type === 'task' 
-                      ? taskMap.get(draggingItem.id)?.text
+                      ? String(taskMap.get(draggingItem.id)?.text ?? '')
                       : 'Category Marker'
                   }
                 </div>
@@ -1398,7 +1398,7 @@ function Board({ data, onSave }) {
               </button>
             </div>
             <div className="popup-content">
-              <p className="task-text">{deleteTask.text}</p>
+              <p className="task-text">{String(deleteTask?.text ?? '')}</p>
               <p className="warning-text">This cannot be undone.</p>
             </div>
             <div className="popup-actions">

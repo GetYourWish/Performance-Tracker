@@ -136,7 +136,7 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
                         title={category.name}
                       ></span>
                     )}
-                    <span className="working-on-task-text">{task.text}</span>
+                    <span className="working-on-task-text">{String(task?.text ?? '')}</span>
                   </div>
                 </div>
               )
