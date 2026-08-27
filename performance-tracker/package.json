@@ -11,7 +11,8 @@
     "start": "electron .",
     "build:icon": "node scripts/gen-icons.cjs && cp build/icons/gradient.svg build/icon.svg && cp build/icons/gradient.png build/icon.png && cp build/icons/gradient.ico build/icon.ico",
     "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win portable nsis"
+    "dist:win": "npm run build && electron-builder --win portable nsis",
+    "test": "vitest run"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -34,7 +35,9 @@
     "cross-env": "^7.0.3",
     "electron": "^26.1.0",
     "electron-builder": "^24.6.3",
+    "jsdom": "^30.0.1",
     "vite": "^8.2.1",
+    "vitest": "^4.1.11",
     "wait-on": "^9.1.0"
   },
   "build": {

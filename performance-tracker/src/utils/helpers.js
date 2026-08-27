@@ -268,7 +268,27 @@ export function createDefaultData() {
   }
 }
 
-// Validate and heal data
+// Schema version gate. Returns { ok: true } when the file may be loaded, or
+// { ok: false, schemaVersion, message } when it was written by a NEWER app
+// version. A newer file must never be silently healed downgraded.
+// Missing / non-number schemaVersion is treated as 1 (legacy files).
+export function checkSchemaVersion(data) {
+  const sv = data && typeof data === 'object' ? data.schemaVersion : undefined
+  if (typeof sv === 'number' && sv > 1) {
+    return {
+      ok: false,
+      schemaVersion: sv,
+      message: `SCHEMA_VERSION_TOO_NEW:${sv}`
+    }
+  }
+  return { ok: true }
+}
+
+// Validate and heal data.
+// NOTE: healing must be idempotent — healing an already-valid file returns a
+// deep-equal structure. In particular meta.updatedAt is NOT touched here:
+// bumping it on every load caused a rewrite on every start (and endless
+// Syncthing churn). Mutating actions bump updatedAt explicitly when saving.
 export function validateAndHealData(data) {
   if (!data) {
     return createDefaultData()
@@ -285,9 +305,6 @@ export function validateAndHealData(data) {
   if (!healed.markers) healed.markers = []
   if (!healed.board) healed.board = []
   if (!healed.tasks) healed.tasks = []
-
-  // Update timestamp
-  healed.meta.updatedAt = new Date().toISOString()
 
   // Heal board: ensure all active tasks are on board
   const activeTasks = healed.tasks.filter(t => !t.completion)

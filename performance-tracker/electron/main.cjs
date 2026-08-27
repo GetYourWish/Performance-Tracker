@@ -22,6 +22,25 @@ const appStatePath = path.join(app.getPath('userData'), 'app-state.json');
 let cachedAppState = null;
 let cachedIconThemes = null;
 
+// Serialized form of the last known tracker content (load or save).
+// Used to skip disk writes when incoming content is identical (anti-churn:
+// prevents pointless rewrites and Syncthing sync loops).
+let lastSerializedTracker = null;
+
+// Guard: refuse files written by a NEWER app version. Mirrors
+// checkSchemaVersion() in src/utils/helpers.js (which cannot be required
+// here pre-monorepo because helpers.js is ESM while this file is CJS).
+// After the monorepo restructure this delegates to @performance-tracker/core.
+function assertLoadableSchema(parsed) {
+  const sv = parsed && typeof parsed === 'object' ? parsed.schemaVersion : undefined;
+  if (typeof sv === 'number' && sv > 1) {
+    const err = new Error(`SCHEMA_VERSION_TOO_NEW:${sv}`);
+    err.code = 'SCHEMA_VERSION_TOO_NEW';
+    err.schemaVersion = sv;
+    throw err;
+  }
+}
+
 /** Resolve the icon ICO path for a given theme, works in dev and packaged mode. */
 function getIconPathForTheme(theme) {
   const fname = `${theme}.ico`;
@@ -231,28 +250,40 @@ ipcMain.handle('load-data', async () => {
   
   try {
     const data = await fs.readFile(dataFilePath, 'utf8');
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    assertLoadableSchema(parsed);
+    lastSerializedTracker = JSON.stringify(parsed);
+    return parsed;
   } catch (error) {
     if (error.code === 'ENOENT') {
       // File doesn't exist - return null to signal caller to create default data
+      lastSerializedTracker = null;
       return null;
     }
-    // Corrupt JSON or other error - throw to signal problem
+    // Corrupt JSON, too-new schema or other error - throw to signal problem
     throw error;
   }
 });
 
 // save-data: The renderer already debounces saves (100ms), so we save immediately here.
 // No additional debounce needed — avoids double-timer overhead.
+// Anti-churn: skip the disk write entirely when content is identical to the
+// last known content (no-change-no-write).
 ipcMain.handle('save-data', async (event, data) => {
   if (!dataFilePath) {
     await initializeDataPath();
   }
   try {
+    const incoming = JSON.stringify(data);
+    if (lastSerializedTracker !== null && incoming === lastSerializedTracker) {
+      return { skipped: true };
+    }
     isExternalWrite = true;
     await atomicSave(dataFilePath, data);
+    lastSerializedTracker = incoming;
     isExternalWrite = false;
   } catch (error) {
+    isExternalWrite = false;
     console.error('Error during save:', error);
   }
 });
@@ -356,7 +387,10 @@ ipcMain.handle('refresh-data', async () => {
   }
   try {
     const raw = await fs.readFile(dataFilePath, 'utf8');
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    assertLoadableSchema(parsed);
+    lastSerializedTracker = JSON.stringify(parsed);
+    return parsed;
   } catch (error) {
     if (error.code === 'ENOENT') return null;
     throw error;
