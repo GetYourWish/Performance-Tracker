@@ -1,0 +1,19 @@
+{
+  "name": "performance-tracker-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Local-first performance tracker for desktop & Android — track what you accomplished",
+  "workspaces": [
+    "packages/*",
+    "desktop",
+    "mobile"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace desktop",
+    "start": "npm run start --workspace desktop",
+    "build": "npm run build --workspace desktop",
+    "dist:win": "npm run dist:win --workspace desktop",
+    "test": "npm run test --workspace @performance-tracker/core && npm run test --workspace desktop"
+  },
+  "license": "MIT"
+}
