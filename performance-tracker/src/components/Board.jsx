@@ -15,7 +15,6 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy
 } from '@dnd-kit/sortable'
-import { AnimatePresence } from 'framer-motion'
 import CompletionPopup from './CompletionPopup'
 import BoardRow from './BoardRow'
 import { generateId, getCurrentDate, getTaskCategory, calculateTaskScoreBreakdown } from '../utils/helpers'
@@ -1221,9 +1220,7 @@ function Board({ data, onSave }) {
                     boardItems={boardItems}
                   />
                 )}
-                <AnimatePresence mode="sync">
-                  {renderBoardRows}
-                </AnimatePresence>
+                {renderBoardRows}
                 
                 {tasks.length === 0 && boardItems.length === 0 && (
                   <div className="board-empty-state">
