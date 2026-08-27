@@ -27,8 +27,8 @@
   /* Glass effect */
   --glass-bg: rgba(255,255,255,0.55);
   --glass-border: rgba(255,255,255,0.6);
-  --glass-blur: 8px;
-  --glass-shadow: 0 12px 32px -12px rgba(15,23,42,0.2);
+  --glass-blur: 16px;
+  --glass-shadow: 0 24px 60px -20px rgba(15,23,42,0.25);
   /* Row backgrounds */
   --row-fill: rgba(15,23,42,0.04);
   --row-fill-hover: rgba(15,23,42,0.08);
@@ -60,8 +60,8 @@
   /* Glass effect */
   --glass-bg: rgba(17,20,28,0.55);
   --glass-border: rgba(255,255,255,0.08);
-  --glass-blur: 8px;
-  --glass-shadow: 0 12px 32px -12px rgba(0,0,0,0.5);
+  --glass-blur: 16px;
+  --glass-shadow: 0 24px 60px -20px rgba(0,0,0,0.6);
   /* Row backgrounds */
   --row-fill: rgba(255,255,255,0.04);
   --row-fill-hover: rgba(255,255,255,0.08);
