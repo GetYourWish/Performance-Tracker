@@ -10,6 +10,12 @@ export default defineConfig({
       ignored: ['**/.vs/**', '**/node_modules/**', '**/dist/**', '**/out/**', '**/release/**', '**/.git/**', '**/.backups/**']
     }
   },
+  resolve: {
+    alias: {
+      // DIAGNOSTIC: Route JSX through our sanitizer to catch bad style values
+      'react/jsx-runtime': './src/diag-jsx-runtime.js'
+    }
+  },
   build: {
     outDir: 'dist',
     minify: false
