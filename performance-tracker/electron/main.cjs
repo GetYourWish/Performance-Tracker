@@ -200,6 +200,15 @@ function createWindow(iconTheme) {
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
+
+  // Auto-recover from GPU process crashes (blank page after backdrop-filter etc.)
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error('Renderer process crashed:', details);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      console.log('Attempting to reload after renderer crash...');
+      mainWindow.webContents.reload();
+    }
+  });
 }
 
 // IPC handlers

@@ -1846,8 +1846,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2893,6 +2892,39 @@
   padding: 12px;
   min-width: 150px;
   box-shadow: var(--shadow-lg);
+}
+
+/* Error Boundary — must be visible in both themes */
+.error-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 40px;
+  text-align: center;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+.error-boundary h2 {
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+.error-boundary .error-message {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.error-boundary .reset-btn {
+  padding: 10px 24px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+.error-boundary .reset-btn:hover {
+  background: var(--border-color);
 }
 
 /* Disable infinite animations for users who prefer reduced motion */
