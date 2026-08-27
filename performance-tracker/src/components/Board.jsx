@@ -15,7 +15,6 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy
 } from '@dnd-kit/sortable'
-import { AnimatePresence } from 'framer-motion'
 import CompletionPopup from './CompletionPopup'
 import BoardRow from './BoardRow'
 import { generateId, getCurrentDate, getTaskCategory, calculateTaskScoreBreakdown } from '../utils/helpers'
@@ -1176,39 +1175,6 @@ function Board({ data, onSave }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleBoardItems, editingTask, selectedItems, workingOnTasks, dropIndicatorId, categoryLookup, taskMap, markerMap, handleSelectItem, handleCompleteClick, handleDeleteTask, handleUpdateTask, handleDeleteMarker, handleMoveItem, handleAddTaskBelowMarker, handleMarkerDrop, handleUpdateMarkerNote, handleToggleWorkingOn, settings])
 
-  // === DIAGNOSTIC: Remove after debugging ===
-  useEffect(() => {
-    const log = (msg) => console.log('%c[DIAG]', 'color:lime;font-weight:bold', msg)
-    log('Board mounted. Testing pointer events...')
-
-    const onDown = (e) => log(`pointerdown on: ${e.target.tagName}.${e.target.className} (button=${e.button})`)
-    const onClick = (e) => log(`click on: ${e.target.tagName}.${e.target.className}`)
-    const onKey = (e) => log(`keydown: ${e.key} on: ${e.target.tagName}`)
-    const onFocus = (e) => log(`focus on: ${e.target.tagName}.${e.target.className}`)
-
-    document.addEventListener('pointerdown', onDown, true)
-    document.addEventListener('click', onClick, true)
-    document.addEventListener('keydown', onKey, true)
-    document.addEventListener('focusin', onFocus, true)
-
-    // Check computed styles of board container
-    setTimeout(() => {
-      const board = document.querySelector('.board-container')
-      if (board) {
-        const cs = window.getComputedStyle(board)
-        log(`board-container computed styles: pointer-events=${cs.pointerEvents}, opacity=${cs.opacity}, visibility=${cs.visibility}, display=${cs.display}`)
-      }
-    }, 1000)
-
-    return () => {
-      document.removeEventListener('pointerdown', onDown, true)
-      document.removeEventListener('click', onClick, true)
-      document.removeEventListener('keydown', onKey, true)
-      document.removeEventListener('focusin', onFocus, true)
-    }
-  }, [])
-  // === END DIAGNOSTIC ===
-
   return (
     <div className="board-container">
       <div 
@@ -1223,12 +1189,6 @@ function Board({ data, onSave }) {
         <div className="board-main">
           <div className="board-header">
             <h2>Board</h2>
-            {/* === DIAGNOSTIC: Remove after debugging === */}
-            <button
-              style={{ padding: '4px 12px', background: '#f00', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
-              onClick={() => console.log('%c[DIAG]', 'color:lime;font-weight:bold', 'TEST BUTTON CLICKED!')}
-            >DIAG TEST</button>
-            {/* === END DIAGNOSTIC === */}
             <input
               type="text"
               className="new-task-input header-input"
@@ -1260,9 +1220,7 @@ function Board({ data, onSave }) {
                     boardItems={boardItems}
                   />
                 )}
-                <AnimatePresence mode="sync">
-                  {renderBoardRows}
-                </AnimatePresence>
+                {renderBoardRows}
                 
                 {tasks.length === 0 && boardItems.length === 0 && (
                   <div className="board-empty-state">

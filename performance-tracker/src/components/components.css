@@ -4,12 +4,19 @@
   flex-direction: column;
   height: 100%;
   padding: 20px;
-  /* Solid background — backdrop-filter inside overflow:hidden parent
-     breaks pointer-event hit-testing in Chromium/Electron 26 */
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-md);
+  /* Glass effect - only persistent element with backdrop-filter */
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
   border-radius: 16px;
+  /* Fade-in on mount to mask first-paint backdrop-filter flash */
+  animation: board-fade-in 200ms ease-out;
+}
+
+@keyframes board-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .board-header {
