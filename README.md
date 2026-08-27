@@ -1,6 +1,3 @@
-
-
-```markdown
 # 🚀 Performance Tracker
 
 A personal local-first desktop performance tracker for Windows. Track your tasks, visualize your productivity, and build a satisfying history of what you've accomplished.
@@ -258,4 +255,4 @@ https://github.com/GetYourWish/Performance-Tracker
 <div align="center">
   <p>Made with ❤️ for productivity enthusiasts</p>
 </div>
-```
+
