@@ -1221,7 +1221,7 @@ function Board({ data, onSave }) {
                     boardItems={boardItems}
                   />
                 )}
-                <AnimatePresence mode="popLayout">
+                <AnimatePresence mode="sync">
                   {renderBoardRows}
                 </AnimatePresence>
                 
