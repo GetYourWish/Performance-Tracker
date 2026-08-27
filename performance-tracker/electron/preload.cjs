@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('api', {
   saveImage: (dataUrl, suggestedName) => ipcRenderer.invoke('save-image', { dataUrl, suggestedName }),
   getIconThemes: () => ipcRenderer.invoke('get-icon-themes'),
   reloadWithIcon: (iconTheme) => ipcRenderer.invoke('reload-with-icon', iconTheme),
+  refreshData: () => ipcRenderer.invoke('refresh-data'),
+  setWatcherEnabled: (enabled) => ipcRenderer.invoke('set-watcher-enabled', enabled),
+  getWatcherEnabled: () => ipcRenderer.invoke('get-watcher-enabled'),
   onExternalChange: (callback) => {
     const listener = (event, payload) => callback({ payload });
     ipcRenderer.on('external-change', listener);

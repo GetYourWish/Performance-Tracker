@@ -59,7 +59,7 @@ const ICON_PREVIEWS = [
   },
 ]
 
-function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder, onChangeDataFolder }) {
+function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder, onChangeDataFolder, autoSync, onToggleAutoSync }) {
   const [activeTab, setActiveTab] = useState('data')
   const [moveStatus, setMoveStatus] = useState(null) // null | 'choosing' | 'confirming' | 'moving'
   const [pendingFolder, setPendingFolder] = useState(null)
@@ -370,6 +370,25 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
 
             {error && <div className="error-message" style={{ marginTop: '8px' }}>{error}</div>}
             
+            <div className="setting-item" style={{ marginTop: '16px', flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
+              <label className="sync-toggle-label">
+                <span>Auto-Sync File Watching</span>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={autoSync}
+                    onChange={(e) => onToggleAutoSync(e.target.checked)}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+              </label>
+              <p className="setting-note">
+                {autoSync
+                  ? 'The app watches the data file for external changes and updates automatically. This uses more CPU resources due to polling.'
+                  : 'The app does not watch for external changes. Use the refresh button in the navigation bar to fetch updates manually. This saves CPU resources.'}
+              </p>
+            </div>
+
             {conflicts && conflicts.length > 0 && (
               <div className="conflict-warning">
                 <strong>Conflict Files Detected:</strong>

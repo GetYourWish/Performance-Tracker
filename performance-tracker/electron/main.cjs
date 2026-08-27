@@ -9,6 +9,7 @@ let mainWindow;
 let dataFilePath = null;
 let watcher = null;
 let isExternalWrite = false;
+let watcherEnabled = true; // default: auto-sync ON (backward compat)
 const FILE_POLL_INTERVAL_MS = 15_000;
 
 // Available icon themes
@@ -248,7 +249,7 @@ ipcMain.handle('choose-data-location', async () => {
   if (!result.canceled && result.filePath) {
     dataFilePath = result.filePath;
     await saveDataPath(dataFilePath);
-    await setupWatcher();
+    if (watcherEnabled) await setupWatcher();
     return dataFilePath;
   }
   
@@ -303,7 +304,7 @@ ipcMain.handle('move-data-to-folder', async (event, { newFolderPath }) => {
     // Update the active path
     dataFilePath = newFilePath;
     await saveDataPath(dataFilePath);
-    await setupWatcher();
+    if (watcherEnabled) await setupWatcher();
 
     return { success: true, filePath: dataFilePath, moved: true };
   } catch (error) {
@@ -327,6 +328,36 @@ ipcMain.handle('backup-now', async () => {
   return await createBackup();
 });
 
+// Manual refresh: re-read the data file and push to renderer
+ipcMain.handle('refresh-data', async () => {
+  if (!dataFilePath) {
+    await initializeDataPath();
+  }
+  try {
+    const raw = await fs.readFile(dataFilePath, 'utf8');
+    return JSON.parse(raw);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+});
+
+// Enable / disable the file watcher at runtime
+ipcMain.handle('set-watcher-enabled', async (event, enabled) => {
+  watcherEnabled = !!enabled;
+  if (watcherEnabled) {
+    await setupWatcher();
+  } else {
+    await stopWatcher();
+  }
+  return watcherEnabled;
+});
+
+// Query current watcher state
+ipcMain.handle('get-watcher-enabled', () => {
+  return watcherEnabled;
+});
+
 ipcMain.handle('get-app-state', async () => {
   // Return cached state if available (written by set-app-state or reload-with-icon)
   if (cachedAppState) return cachedAppState;
@@ -343,11 +374,13 @@ ipcMain.handle('get-app-state', async () => {
 });
 
 ipcMain.handle('set-app-state', async (event, newState) => {
-  cachedAppState = { ...newState };
+  cachedAppState = { ...cachedAppState, ...newState };
   await fs.writeFile(appStatePath, JSON.stringify(cachedAppState, null, 2));
   if (newState.dataPath) {
     dataFilePath = newState.dataPath;
-    await setupWatcher();
+    if (watcherEnabled) {
+      await setupWatcher();
+    }
   }
 });
 
@@ -447,6 +480,14 @@ ipcMain.handle('reload-with-icon', async (event, iconTheme) => {
   return { success: true };
 });
 
+// Stop the file watcher (if running)
+async function stopWatcher() {
+  if (watcher) {
+    await watcher.close();
+    watcher = null;
+  }
+}
+
 // Initialize when ready
 app.whenReady().then(async () => {
   // Single read of app-state.json — extract both dataPath and iconTheme
@@ -461,13 +502,20 @@ app.whenReady().then(async () => {
     if (state.iconTheme && ICON_THEMES.includes(state.iconTheme)) {
       savedIconTheme = state.iconTheme;
     }
+    // Restore watcher preference (default: true)
+    if (typeof state.watcherEnabled === 'boolean') {
+      watcherEnabled = state.watcherEnabled;
+    }
   } catch (e) { /* ignore */ }
 
   // Only call initializeDataPath if we didn't get a path from app-state
   if (!dataFilePath) {
     await initializeDataPath();
   }
-  await setupWatcher();
+  // Only start watcher if the user hasn't opted out
+  if (watcherEnabled) {
+    await setupWatcher();
+  }
 
   createWindow(savedIconTheme);
 
