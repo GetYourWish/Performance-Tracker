@@ -121,6 +121,37 @@
   gap: 0;
 }
 
+@keyframes rowEnterScale {
+  from {
+    opacity: 0;
+    transform: scaleY(0);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes rowEnterSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.row-enter-scale {
+  animation: rowEnterScale 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: top center;
+}
+
+.row-enter-slide {
+  animation: rowEnterSlide 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .board-row {
   display: flex;
   align-items: center;

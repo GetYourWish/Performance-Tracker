@@ -1,7 +1,6 @@
 import { memo, useState, useEffect } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { motion } from 'framer-motion'
 
 const BoardRow = memo(function BoardRow({ 
   id, 
@@ -75,13 +74,10 @@ const BoardRow = memo(function BoardRow({
 
   if (marker) {
     return (
-      <motion.div 
+      <div 
         ref={setNodeRef}
-        initial={{ opacity: 0, scaleY: 0 }}
-        animate={{ opacity: 1, scaleY: 1 }}
-        transition={{ type: 'spring', stiffness: 280, damping: 24 }}
         style={style}
-        className={`board-row marker-row ${isSelected ? 'selected' : ''} ${isConsecutiveMarker ? 'consecutive-marker' : ''}`}
+        className={`board-row marker-row row-enter-scale ${isSelected ? 'selected' : ''} ${isConsecutiveMarker ? 'consecutive-marker' : ''}`}
         role="listitem"
         aria-label={`Category marker: ${String(category?.name ?? '')}`}
         data-board-item-id={id}
@@ -266,7 +262,7 @@ const BoardRow = memo(function BoardRow({
         >
           ✕
         </button>
-      </motion.div>
+      </div>
     )
   }
 
@@ -295,14 +291,10 @@ const BoardRow = memo(function BoardRow({
   }
 
   return (
-    <motion.div 
+    <div 
       ref={setNodeRef}
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96, rotateX: 90 }}
-      transition={{ type: 'spring', stiffness: 170, damping: 26 }}
       style={style}
-      className={`board-row task-row ${isEditing ? 'editing' : ''} ${isSelected ? 'selected' : ''} ${isWorkingOn ? 'working-on' : ''}`}
+      className={`board-row task-row row-enter-slide ${isEditing ? 'editing' : ''} ${isSelected ? 'selected' : ''} ${isWorkingOn ? 'working-on' : ''}`}
       role="listitem"
       aria-label={`Task: ${String(task?.text ?? '')}`}
       data-board-item-id={id}
@@ -461,7 +453,7 @@ const BoardRow = memo(function BoardRow({
           🗑
         </button>
       </div>
-    </motion.div>
+    </div>
   )
 })
 
