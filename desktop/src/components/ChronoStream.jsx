@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList } from 'recharts'
 import { format, eachDayOfInterval, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addDays, isAfter, isBefore, isEqual } from 'date-fns'
-import { formatDate, parseDate, calculateDayScore, groupTasksByDate } from '../utils/helpers'
+import { formatDate, parseDate, calculateDayScore, groupTasksByDate } from '@performance-tracker/core'
 
 // Extracted outside parent to avoid remount on every render
 function ChronoTooltip({ active, payload, label, chartData }) {

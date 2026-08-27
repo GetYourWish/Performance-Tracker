@@ -4,7 +4,7 @@ import Reviews from './components/Reviews'
 import Settings from './components/Settings'
 import SetupScreen from './components/SetupScreen'
 import { WorkingOnMarker, WorkingOnPopup } from './components/WorkingOnMarker'
-import { validateAndHealData, generateId, calculateTaskScoreBreakdown, checkSchemaVersion } from './utils/helpers'
+import { validateAndHealData, generateId, calculateTaskScoreBreakdown, checkSchemaVersion } from '@performance-tracker/core'
 import './App.css'
 
 function App() {

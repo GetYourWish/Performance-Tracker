@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { checkSchemaVersion, validateAndHealData, createDefaultData } from '../helpers'
+import { checkSchemaVersion, validateAndHealData, createDefaultData } from '../index.js'
 
 describe('checkSchemaVersion (Phase 2: refuse future schema files)', () => {
   it('refuses a numeric schemaVersion > 1', () => {
