@@ -15,7 +15,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "uuid": "^11.0.0"
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "vitest": "^4.1.11"
