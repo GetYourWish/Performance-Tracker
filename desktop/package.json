@@ -47,7 +47,7 @@
   },
   "build": {
     "productName": "Performance Tracker",
-    "appId": "com.example.performance-tracker",
+    "appId": "com.getyourwish.performance-tracker",
     "directories": {
       "output": "release"
     },
@@ -76,5 +76,9 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GetYourWish/Performance-Tracker.git"
   }
 }
