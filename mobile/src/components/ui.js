@@ -270,7 +270,7 @@ export function TextButton({ theme, label, onPress, disabled, destructive }) {
 const ACCENT_DANGER = '#dc2626'
 
 // M3 filled button
-export function FilledButton({ theme, label, onPress, disabled, destructive, style }) {
+export function FilledButton({ theme, label, icon, onPress, disabled, destructive, style }) {
   return (
     <Pressable
       onPress={onPress}
@@ -278,6 +278,10 @@ export function FilledButton({ theme, label, onPress, disabled, destructive, sty
       android_ripple={{ color: 'rgba(255,255,255,0.2)' }}
       style={({ pressed }) => [
         {
+          flexDirection: icon ? 'row' : undefined,
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: SPACING.sm,
           backgroundColor: disabled
             ? theme.rowFillSelected
             : destructive
@@ -291,6 +295,7 @@ export function FilledButton({ theme, label, onPress, disabled, destructive, sty
         style
       ]}
     >
+      {icon ? <Icon name={icon} size={18} color={disabled ? theme.textMuted : '#ffffff'} /> : null}
       <Text style={{ color: disabled ? theme.textMuted : '#ffffff', fontWeight: '600', fontSize: 15, textAlign: 'center' }}>
         {label}
       </Text>

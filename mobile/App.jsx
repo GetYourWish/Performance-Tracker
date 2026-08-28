@@ -1,9 +1,10 @@
 // App root — theme resolution, screen switching, bottom navigation.
 // Mirrors desktop App.jsx: loading → schema gate → setup → (board | settings).
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback } from 'react'
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native'
 import { useColorScheme } from 'react-native'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { buildTheme, SPACING } from './src/theme.js'
 import { useTracker } from './src/hooks/useTracker.js'
@@ -86,31 +87,34 @@ export default function App() {
   }
 
   return (
-    <View style={[styles.fill, { backgroundColor: theme.canvas[0] }]}>
-      <AuroraBackground theme={theme} />
-      <View style={{ flex: 1 }}>
-        {tab === 'board' ? (
-          <BoardScreen
+    <GestureHandlerRootView style={[styles.fill, { backgroundColor: theme.canvas[0] }]}>
+      <View style={[styles.fill, { backgroundColor: theme.canvas[0] }]}>
+        <AuroraBackground theme={theme} />
+        <View style={{ flex: 1 }}>
+          {tab === 'board' ? (
+            <BoardScreen
+              theme={theme}
+              state={state}
+              store={store}
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              onShowConflictInfo={() => setTab('settings')}
+            />
+          ) : (
+            <SettingsPlaceholder theme={theme} />
+          )}
+          <BottomNav
             theme={theme}
-            state={state}
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            onShowConflictInfo={() => setTab('settings')}
+            active={tab}
+            onChange={setTab}
+            tabs={[
+              { key: 'board', label: 'Board', icon: 'view-dashboard-outline', iconActive: 'view-dashboard' },
+              { key: 'settings', label: 'Settings', icon: 'cog-outline', iconActive: 'cog' }
+            ]}
           />
-        ) : (
-          <SettingsPlaceholder theme={theme} />
-        )}
-        <BottomNav
-          theme={theme}
-          active={tab}
-          onChange={setTab}
-          tabs={[
-            { key: 'board', label: 'Board', icon: 'view-dashboard-outline', iconActive: 'view-dashboard' },
-            { key: 'settings', label: 'Settings', icon: 'cog-outline', iconActive: 'cog' }
-          ]}
-        />
+        </View>
       </View>
-    </View>
+    </GestureHandlerRootView>
   )
 }
 

@@ -1,29 +1,82 @@
-// BoardScreen — the main tab. M1 renders the board read-only with the
-// desktop-identical score summary; interactivity (drag, complete flow,
-// editing) is layered on in M2 without changing this file's structure.
+// BoardScreen — the main tab, desktop Board.jsx parity on Android:
+//  - DraggableFlatList over visible board items (markers + active tasks) in
+//    board order; long-press the handle to drag (desktop: drag handle)
+//  - today summary card scored by core calculateDayScore (identical numbers)
+//  - FAB → add task (desktop header input); rows: star/check/trash
+//  - marker pills: note (i), add-task-below (+), delete (✕)
+//  - category sheet ≙ desktop category sidebar (place marker / create)
+//  - pull-to-refresh + 15 s polling reload the file when Syncthing lands a
+//    desktop edit (external change → full re-gate + heal + repaint)
+// Every mutation flows through store.mutate → rebase → no-change-no-write.
 
 import React, { useMemo, useState, useCallback } from 'react'
-import { View, Text, FlatList, RefreshControl } from 'react-native'
+import { View, Text, RefreshControl } from 'react-native'
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { DraggableFlatList, ScaleDecorator } from 'react-native-draggable-flatlist'
 import {
   calculateDayScore,
   getCurrentDate,
   getTaskCategory
 } from '@performance-tracker/core'
-import { TopAppBar, GlassCard, IconBtn, Snackbar } from './ui.js'
+import { TopAppBar, GlassCard, IconBtn, Fab, Snackbar } from './ui.js'
 import { TaskRow, MarkerRow } from './rows.js'
-import { RADIUS, SPACING } from '../theme.js'
+import {
+  TaskTextDialog,
+  CompleteDialog,
+  ConfirmDialog,
+  MarkerNoteDialog
+} from './dialogs.js'
+import { CategorySheet } from './CategorySheet.js'
+import {
+  createTask,
+  updateTaskText,
+  deleteTask,
+  completeTask,
+  toggleWorkingOn,
+  addMarker,
+  deleteMarker,
+  addTaskBelowMarker,
+  updateMarkerNote,
+  createCategory,
+  reorderBoard
+} from '../actions.js'
+import { SPACING } from '../theme.js'
 
-export function BoardScreen({ theme, state, refreshing, onRefresh, onShowConflictInfo }) {
+export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShowConflictInfo }) {
   const insets = useSafeAreaInsets()
   const [snack, setSnack] = useState(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState(null) // task object
+  const [completingTask, setCompletingTask] = useState(null) // task object
+  const [deletingTask, setDeletingTask] = useState(null) // task object
+  const [deletingMarker, setDeletingMarker] = useState(null) // marker object
+  const [notingMarker, setNotingMarker] = useState(null) // marker object
+  const [addingBelowMarker, setAddingBelowMarker] = useState(null) // marker object
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   const data = state.data
 
-  // Desktop Board derives: tasks = active only; board items filtered to
-  // those that actually render (visibleBoardItems) so marker adjacency
-  // works — same logic here.
+  const run = useCallback(
+    async (buildNext, successMessage) => {
+      try {
+        await store.mutate(buildNext)
+        if (successMessage) setSnack(successMessage)
+      } catch (e) {
+        if (e && e.code === 'SCHEMA_VERSION_TOO_NEW') {
+          setSnack(`File is now schema ${e.schemaVersion} — update this app first`)
+        } else if (e instanceof SyntaxError) {
+          setSnack('File on disk is not valid JSON — nothing was changed')
+        } else {
+          setSnack('Save failed: ' + (e.message || e))
+        }
+      }
+    },
+    [store]
+  )
+
+  // --- derived data (desktop Board memo parity) ---------------------------
+
   const tasksById = useMemo(() => {
     const map = new Map()
     for (const t of data?.tasks || []) map.set(t.id, t)
@@ -72,7 +125,6 @@ export function BoardScreen({ theme, state, refreshing, onRefresh, onShowConflic
     return out
   }, [data?.board, tasksById, markersById])
 
-  // Today summary — desktop-identical scoring via core
   const today = getCurrentDate()
   const todaySummary = useMemo(() => {
     const settings = data?.settings || {}
@@ -92,24 +144,94 @@ export function BoardScreen({ theme, state, refreshing, onRefresh, onShowConflic
   const workingOnSet = useMemo(() => new Set(data?.workingOn || []), [data?.workingOn])
   const flowStateColor = data?.settings?.flowStateColor || '#8b5cf6'
 
+  // --- handlers (desktop-identical outcomes) ------------------------------
+
+  const handleAddTask = text => {
+    setAddOpen(false)
+    run((d, now) => createTask(d, text, now))
+  }
+
+  const handleSaveEdit = text => {
+    const task = editingTask
+    setEditingTask(null)
+    if (!task || text === task.text) return
+    run((d, now) => updateTaskText(d, task.id, text, now))
+  }
+
+  const handleConfirmComplete = ({ difficultyId, date, note }) => {
+    const task = completingTask
+    setCompletingTask(null)
+    if (!task || !difficultyId) return
+    run(
+      (d, now) => completeTask(d, { taskId: task.id, difficultyId, date, note }, now),
+      `+${task.text.length > 22 ? task.text.slice(0, 22) + '…' : task.text} completed`
+    )
+  }
+
+  const handleDeleteTask = () => {
+    const task = deletingTask
+    setDeletingTask(null)
+    if (!task) return
+    run((d, now) => deleteTask(d, task.id, now), 'Task deleted')
+  }
+
+  const handleDeleteMarker = () => {
+    const marker = deletingMarker
+    setDeletingMarker(null)
+    if (!marker) return
+    run((d, now) => deleteMarker(d, marker.id, now), 'Marker removed')
+  }
+
+  const handleDragEnd = useCallback(
+    ({ data: ordered }) => {
+      const orderedIds = ordered.map(item => item.key)
+      const sameOrder =
+        orderedIds.length === visibleItems.length &&
+        orderedIds.every((id, i) => id === visibleItems[i].key)
+      if (sameOrder) return
+      run((d, now) => reorderBoard(d, orderedIds, now))
+    },
+    [run, visibleItems]
+  )
+
   const renderItem = useCallback(
-    ({ item }) => {
+    ({ item, drag, isActive }) => {
+      const dragProps = { drag, isActive }
       if (item.kind === 'task') {
         return (
-          <TaskRow
-            theme={theme}
-            task={item.task}
-            category={categoryLookup.get(item.key) || null}
-            isWorkingOn={workingOnSet.has(item.key)}
-            flowStateColor={flowStateColor}
-          />
+          <ScaleDecorator>
+            <TaskRow
+              theme={theme}
+              task={item.task}
+              category={categoryLookup.get(item.key) || null}
+              isWorkingOn={workingOnSet.has(item.key)}
+              flowStateColor={flowStateColor}
+              onOpen={() => setEditingTask(item.task)}
+              onComplete={() => setCompletingTask(item.task)}
+              onDelete={() => setDeletingTask(item.task)}
+              onToggleWorkingOn={() => run((d, now) => toggleWorkingOn(d, item.key, now))}
+              {...dragProps}
+            />
+          </ScaleDecorator>
         )
       }
       const marker = item.marker
       const category = categoriesById.get(marker.categoryId)
-      return <MarkerRow theme={theme} marker={marker} category={category} />
+      return (
+        <ScaleDecorator>
+          <MarkerRow
+            theme={theme}
+            marker={marker}
+            category={category}
+            onNote={() => setNotingMarker(marker)}
+            onAddBelow={() => setAddingBelowMarker(marker)}
+            onDelete={() => setDeletingMarker(marker)}
+            {...dragProps}
+          />
+        </ScaleDecorator>
+      )
     },
-    [theme, categoryLookup, workingOnSet, flowStateColor, categoriesById]
+    [theme, categoryLookup, workingOnSet, flowStateColor, categoriesById, run]
   )
 
   const scoreText =
@@ -122,25 +244,40 @@ export function BoardScreen({ theme, state, refreshing, onRefresh, onShowConflic
       <TopAppBar
         theme={theme}
         title="Board"
-        subtitle={state.conflicts.length > 0 ? `${state.conflicts.length} sync conflict file(s) detected` : null}
+        subtitle={
+          state.conflicts.length > 0
+            ? `${state.conflicts.length} sync conflict file(s) detected`
+            : null
+        }
         actions={
-          <IconBtn
-            name={refreshing ? 'loading' : 'refresh'}
-            color={theme.textSecondary}
-            onPress={onRefresh}
-            accessibilityLabel="Refresh data"
-          />
+          <>
+            <IconBtn
+              name="tag-multiple-outline"
+              color={theme.textSecondary}
+              onPress={() => setSheetOpen(true)}
+              accessibilityLabel="Categories"
+            />
+            <IconBtn
+              name={refreshing ? 'loading' : 'refresh'}
+              color={theme.textSecondary}
+              onPress={onRefresh}
+              accessibilityLabel="Refresh data"
+            />
+          </>
         }
       />
 
-      <FlatList
+      <DraggableFlatList
         data={visibleItems}
         keyExtractor={item => item.key}
         renderItem={renderItem}
+        onDragEnd={handleDragEnd}
+        activationDistance={6}
+        containerStyle={{ flex: 1 }}
         contentContainerStyle={{
           paddingHorizontal: SPACING.lg,
           paddingTop: SPACING.md,
-          paddingBottom: insets.bottom + 120
+          paddingBottom: insets.bottom + 140
         }}
         ListHeaderComponent={
           <>
@@ -215,15 +352,97 @@ export function BoardScreen({ theme, state, refreshing, onRefresh, onShowConflic
                     paddingHorizontal: SPACING.xl
                   }}
                 >
-                  Add tasks on the desktop or here — they sync through the shared tracker.json.
+                  Tap + to add your first task and start tracking your performance!
                 </Text>
               </View>
             ) : null}
           </>
         }
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.textSecondary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.textSecondary}
+          />
         }
+      />
+
+      <Fab theme={theme} icon="plus" label="Task" onPress={() => setAddOpen(true)} />
+
+      {/* --- dialogs --- */}
+      <TaskTextDialog
+        theme={theme}
+        visible={addOpen}
+        title="New task"
+        onSubmit={handleAddTask}
+        onClose={() => setAddOpen(false)}
+      />
+      <TaskTextDialog
+        theme={theme}
+        visible={!!editingTask}
+        title="Edit task"
+        initialText={editingTask?.text || ''}
+        onSubmit={handleSaveEdit}
+        onClose={() => setEditingTask(null)}
+      />
+      <CompleteDialog
+        theme={theme}
+        task={completingTask}
+        difficulties={data?.difficulties || []}
+        onConfirm={handleConfirmComplete}
+        onClose={() => setCompletingTask(null)}
+      />
+      <ConfirmDialog
+        theme={theme}
+        visible={!!deletingTask}
+        title="Delete task?"
+        body={`${String(deletingTask?.text ?? '')}\n\nThis cannot be undone.`}
+        onConfirm={handleDeleteTask}
+        onClose={() => setDeletingTask(null)}
+      />
+      <ConfirmDialog
+        theme={theme}
+        visible={!!deletingMarker}
+        title="Remove marker?"
+        body={`The "${String(categoriesById.get(deletingMarker?.categoryId)?.name ?? '')}" marker will be removed from the board. The category itself is kept.`}
+        confirmLabel="Remove"
+        onConfirm={handleDeleteMarker}
+        onClose={() => setDeletingMarker(null)}
+      />
+      <MarkerNoteDialog
+        theme={theme}
+        visible={!!notingMarker}
+        categoryName={categoriesById.get(notingMarker?.categoryId)?.name}
+        initialNote={notingMarker?.note || ''}
+        onSave={note => {
+          const marker = notingMarker
+          setNotingMarker(null)
+          if (!marker) return
+          run((d, now) => updateMarkerNote(d, marker.id, note, now), 'Note saved')
+        }}
+        onClose={() => setNotingMarker(null)}
+      />
+      <TaskTextDialog
+        theme={theme}
+        visible={!!addingBelowMarker}
+        title="New task below marker"
+        onSubmit={text => {
+          const marker = addingBelowMarker
+          setAddingBelowMarker(null)
+          if (!marker) return
+          run((d, now) => addTaskBelowMarker(d, marker.id, text, now))
+        }}
+        onClose={() => setAddingBelowMarker(null)}
+      />
+      <CategorySheet
+        theme={theme}
+        visible={sheetOpen}
+        categories={data?.categories || []}
+        onAddMarker={categoryId => run((d, now) => addMarker(d, categoryId, now), 'Marker added')}
+        onCreateCategory={({ name, color }) =>
+          run((d, now) => createCategory(d, { name, color }, now), 'Category created')
+        }
+        onClose={() => setSheetOpen(false)}
       />
 
       <Snackbar theme={theme} message={snack} onDone={() => setSnack(null)} />
