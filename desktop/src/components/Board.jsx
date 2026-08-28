@@ -53,7 +53,7 @@ function DropIndicator({ activeId }) {
     const isInsertTop = activeId === 'insert-top'
     
     // Find the element to position relative to
-    let targetElement = null
+    let targetElement
     if (isInsertTop) {
       targetElement = document.querySelector('.board-list')
     } else {

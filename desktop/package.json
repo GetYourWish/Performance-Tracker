@@ -12,7 +12,8 @@
     "build:icon": "node scripts/gen-icons.cjs && cp build/icons/gradient.svg build/icon.svg && cp build/icons/gradient.png build/icon.png && cp build/icons/gradient.ico build/icon.ico",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win portable nsis",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
