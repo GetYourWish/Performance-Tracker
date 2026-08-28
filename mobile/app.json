@@ -23,6 +23,7 @@
       "allowBackup": false
     },
     "platforms": ["android"],
+    "plugins": ["./plugins/with-gradle-version"],
     "extra": {
       "schemaVersionSupported": 1
     }
