@@ -132,10 +132,22 @@ theme.
   Settings — never auto-loaded, never auto-deleted
 
 ```bash
-npm run start --workspace @performance-tracker/mobile   # Expo dev server
-npm run android --workspace @performance-tracker/mobile # build + run on device
+# Build the APK (primary flow — native project is generated, then Gradle builds it):
+npm run prebuild --workspace @performance-tracker/mobile  # regenerates mobile/android from scratch; pins Gradle via mobile/plugins/
+cd mobile/android
+.\gradlew assembleDebug                                   # Windows (./gradlew assembleDebug on macOS/Linux)
+# APK lands in mobile/android/app/build/outputs/apk/debug/app-debug.apk
+
+# Alternatives:
+npm run start --workspace @performance-tracker/mobile   # Expo dev server (fast JS iteration)
+npm run android --workspace @performance-tracker/mobile # live build + install on a connected device
 npm run test:core:rn                                    # Hermes drift guard
 ```
+
+> `mobile/android/` is generated output and gitignored — never edit it by hand.
+> It is rebuilt by `npm run prebuild` (which passes `--clean`), and build
+> customizations like the Gradle version are enforced by the config plugins in
+> [`mobile/plugins/`](mobile/plugins).
 
 See [`docs/SYNC-DESIGN.md`](docs/SYNC-DESIGN.md) for how the two apps share one
 file safely, and [`mobile/`](mobile) for the app source.
