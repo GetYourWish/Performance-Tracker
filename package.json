@@ -15,5 +15,8 @@
     "dist:win": "npm run dist:win --workspace desktop",
     "test": "npm run test --workspace @performance-tracker/core && npm run test --workspace desktop"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "globals": "^17.11.0"
+  }
 }

@@ -5,32 +5,32 @@
 const globals = require('globals')
 
 const FORBIDDEN_IMPORTS = {
-  paths: {
+  paths: [
     // Node builtins & runtime
-    fs: 'core must not import Node builtins',
-    path: 'core must not import Node builtins',
-    os: 'core must not import Node builtins',
-    util: 'core must not import Node builtins',
-    crypto: 'core must not import Node builtins (use the uuid dependency)',
-    child_process: 'core must not import Node builtins',
-    http: 'core must not import Node builtins',
-    https: 'core must not import Node builtins',
-    net: 'core must not import Node builtins',
-    url: 'core must not import Node builtins',
-    stream: 'core must not import Node builtins',
-    zlib: 'core must not import Node builtins',
-    electron: 'core must not import Electron',
+    { name: 'fs', message: 'core must not import Node builtins' },
+    { name: 'path', message: 'core must not import Node builtins' },
+    { name: 'os', message: 'core must not import Node builtins' },
+    { name: 'util', message: 'core must not import Node builtins' },
+    { name: 'crypto', message: 'core must not import Node builtins (use the uuid dependency)' },
+    { name: 'child_process', message: 'core must not import Node builtins' },
+    { name: 'http', message: 'core must not import Node builtins' },
+    { name: 'https', message: 'core must not import Node builtins' },
+    { name: 'net', message: 'core must not import Node builtins' },
+    { name: 'url', message: 'core must not import Node builtins' },
+    { name: 'stream', message: 'core must not import Node builtins' },
+    { name: 'zlib', message: 'core must not import Node builtins' },
+    { name: 'electron', message: 'core must not import Electron' },
     // UI / platform frameworks
-    react: 'core must not import React',
-    'react-dom': 'core must not import React DOM',
-    'react-native': 'core must not import React Native',
-    expo: 'core must not import Expo',
-    'expo-file-system': 'core must not import Expo modules',
-    '@dnd-kit/core': 'core must not import UI libraries',
-    recharts: 'core must not import UI libraries',
-    'framer-motion': 'core must not import UI libraries',
-    'html-to-image': 'core must not import UI libraries'
-  },
+    { name: 'react', message: 'core must not import React' },
+    { name: 'react-dom', message: 'core must not import React DOM' },
+    { name: 'react-native', message: 'core must not import React Native' },
+    { name: 'expo', message: 'core must not import Expo' },
+    { name: 'expo-file-system', message: 'core must not import Expo modules' },
+    { name: '@dnd-kit/core', message: 'core must not import UI libraries' },
+    { name: 'recharts', message: 'core must not import UI libraries' },
+    { name: 'framer-motion', message: 'core must not import UI libraries' },
+    { name: 'html-to-image', message: 'core must not import UI libraries' }
+  ],
   patterns: [
     {
       group: ['node:*'],
@@ -68,7 +68,7 @@ module.exports = [
     },
     rules: {
       'no-restricted-imports': ['error', FORBIDDEN_IMPORTS],
-      'no-restricted-globals': ['error', FORBIDDEN_GLOBALS],
+      'no-restricted-globals': ['error', ...FORBIDDEN_GLOBALS],
       eqeqeq: ['error', 'smart'],
       'no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
     }
@@ -76,10 +76,26 @@ module.exports = [
   {
     // Test tooling (this folder) runs in Node and MAY use fs/path to load
     // fixtures — the purity contract applies to shipped package code only.
-    files: ['tests/**/*.js', 'tests/**/*.cjs', 'scripts/**/*.cjs', 'scripts/**/*.mjs'],
+    files: ['tests/**', 'scripts/**'],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'commonjs',
+      globals: {
+        ...globals.commonjs,
+        ...globals.node
+      }
+    },
+    rules: {
+      'no-restricted-imports': 'off',
+      'no-restricted-globals': 'off'
+    }
+  },
+  {
+    // ESM test files (Vitest wrappers + unit tests use import/export)
+    files: ['tests/*.test.js', 'tests/*.test.mjs'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'module',
       globals: {
         ...globals.commonjs,
         ...globals.node
