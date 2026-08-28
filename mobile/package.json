@@ -6,6 +6,7 @@
   "license": "MIT",
   "main": "index.js",
   "scripts": {
+    "postinstall": "node plugins/patch-expo-gradle-kotlin.js",
     "start": "expo start",
     "android": "expo run:android",
     "prebuild": "expo prebuild -p android --clean",
