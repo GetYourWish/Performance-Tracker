@@ -111,28 +111,66 @@ The app is designed to work seamlessly with Syncthing:
 
 ---
 
+## 📱 Android App
+
+The `mobile/` workspace is an Expo / React Native app that reads and writes the
+**same `tracker.json`** through the same `@performance-tracker/core` — identical
+scores, identical healing, identical schema gate. Android-native UX (Material
+ripples, bottom navigation, FAB, edge-to-edge) on the desktop app's aurora-glass
+theme.
+
+- **Storage**: the folder is picked once via Android's Storage Access Framework
+  (your Syncthing folder — no broad storage permission); permission can be
+  re-granted from the setup screen if Android revokes it
+- **Writes**: rebased on the freshest file before every save, skipped when
+  content is unchanged, written to a verified temp document first, with a
+  rolling backup window (20) in the app's private storage
+- **Sync detection**: 15-second polling (same cadence as the desktop watcher)
+  plus an immediate check when the app returns to the foreground and
+  pull-to-refresh
+- **Conflicts**: Syncthing `-conflict-` copies are surfaced on the board and in
+  Settings — never auto-loaded, never auto-deleted
+
+```bash
+npm run start --workspace @performance-tracker/mobile   # Expo dev server
+npm run android --workspace @performance-tracker/mobile # build + run on device
+npm run test:core:rn                                    # Hermes drift guard
+```
+
+See [`docs/SYNC-DESIGN.md`](docs/SYNC-DESIGN.md) for how the two apps share one
+file safely, and [`mobile/`](mobile) for the app source.
+
+---
+
 ## 🛠️ Installation & Development
 
 ### Prerequisites
 - Node.js 18+
-- npm or yarn
+- npm (workspaces power the monorepo)
 
 ### Install Dependencies
 ```bash
-cd performance-tracker
-npm install
+npm install          # at the repo root — installs all workspaces
 ```
 
-### Development Mode
+### Development Mode (desktop)
 Runs the Vite dev server and opens the Electron app:
 ```bash
 npm run dev
 ```
 
 ### Build Windows Executable
-Creates a portable `.exe` and NSIS installer in the `release/` folder:
+Creates a portable `.exe` and NSIS installer in `desktop/release/`:
 ```bash
 npm run dist:win
+```
+
+### Tests & checks
+```bash
+npm test              # core (Vitest/Node) + desktop (RTL) suites
+npm run test:core:rn  # the SAME fixture contract under jest-expo/Hermes
+npm run lint          # ESLint across the monorepo
+npm run check:core-pin  # drift guard: exact core pin in both apps
 ```
 
 ---
@@ -140,18 +178,22 @@ npm run dist:win
 ## 📁 Project Structure
 
 ```
-performance-tracker/
-├── src/                    # React frontend
-│   ├── components/         # UI components (Board, Reviews, Settings, etc.)
-│   ├── utils/              # Utility functions (helpers.js)
-│   ├── App.jsx             # Main app component
-│   └── index.css           # Global styles
-├── electron/               # Electron backend (Node.js)
-│   ├── main.cjs            # Main process (File I/O, Backups, Window management)
-│   └── preload.cjs         # Context bridge (IPC API)
-├── dist/                   # Built frontend assets
-├── package.json            # Node dependencies & build scripts
-└── vite.config.js          # Vite configuration
+Performance-Tracker/          # npm workspaces monorepo
+├── packages/core/             # @performance-tracker/core — the ONE
+│   │                          #   implementation of scoring, schema gate,
+│   │                          #   healing, dates, ids (pure JS, no platform)
+│   ├── fixtures/              # golden fixtures — the drift contract
+│   └── SCHEMA.md              # normative tracker.json format
+├── desktop/                   # Electron app (React + Vite frontend)
+│   ├── src/                   # UI components (Board, Reviews, Settings, …)
+│   ├── electron/              # main process (file I/O, watcher, backups)
+│   └── build/                 # app icons
+├── mobile/                    # Expo / React Native Android app
+│   ├── src/storage/           # SAF adapter + tracker store (rebase, backups)
+│   ├── src/screens/           # Board, Settings, setup & schema screens
+│   └── __tests__/             # Node tests + dual-runtime fixture contract
+├── docs/                      # SYNC-DESIGN.md, parked CI workflows
+└── scripts/                   # drift guard (check-core-pin.cjs)
 ```
 
 ---

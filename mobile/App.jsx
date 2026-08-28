@@ -8,9 +8,10 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { buildTheme, SPACING } from './src/theme.js'
 import { useTracker } from './src/hooks/useTracker.js'
-import { AuroraBackground, GlassCard, BottomNav, TopAppBar } from './src/components/ui.js'
+import { AuroraBackground, GlassCard, BottomNav } from './src/components/ui.js'
 import { BoardScreen } from './src/components/BoardScreen.js'
 import { SetupScreen, SchemaErrorScreen } from './src/screens/SetupScreen.js'
+import { SettingsScreen } from './src/screens/SettingsScreen.js'
 
 export default function App() {
   const scheme = useColorScheme()
@@ -18,7 +19,7 @@ export default function App() {
   const [tab, setTab] = useState('board')
   const [refreshing, setRefreshing] = useState(false)
 
-  const { store, state, folderUri, booted, pickFolder, refresh } = useTracker()
+  const { store, state, folderUri, autoSync, booted, pickFolder, setAutoSync, refresh, forgetFolder } = useTracker()
 
   // theme preference follows data.settings.theme (desktop parity)
   const preference = state.data?.settings?.theme || 'system'
@@ -101,7 +102,15 @@ export default function App() {
               onShowConflictInfo={() => setTab('settings')}
             />
           ) : (
-            <SettingsPlaceholder theme={theme} />
+            <SettingsScreen
+              theme={theme}
+              state={state}
+              store={store}
+              folderUri={folderUri}
+              autoSync={autoSync}
+              onSetAutoSync={setAutoSync}
+              onPickFolder={pickFolder}
+            />
           )}
           <BottomNav
             theme={theme}
@@ -115,21 +124,6 @@ export default function App() {
         </View>
       </View>
     </GestureHandlerRootView>
-  )
-}
-
-// M1 placeholder — the real Settings screen lands in M3.
-function SettingsPlaceholder({ theme }) {
-  return (
-    <View style={{ flex: 1 }}>
-      <TopAppBar theme={theme} title="Settings" />
-      <GlassCard theme={theme} style={{ margin: SPACING.lg, padding: SPACING.xl }}>
-        <Text style={{ color: theme.textPrimary, fontWeight: '600' }}>Settings</Text>
-        <Text style={{ color: theme.textSecondary, fontSize: 14, marginTop: SPACING.sm }}>
-          Sync controls, theme and scoring settings are coming in the next milestone.
-        </Text>
-      </GlassCard>
-    </View>
   )
 }
 
