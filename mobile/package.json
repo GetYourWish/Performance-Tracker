@@ -2,21 +2,35 @@
   "name": "@performance-tracker/mobile",
   "version": "1.0.0",
   "private": true,
-  "description": "Performance Tracker for Android (Expo / React Native). Phase 9 will add the app; today this workspace hosts the dual-runtime drift guard: the SAME golden-fixture contract that runs under Node/Vitest must produce identical results under jest-expo (Hermes).",
+  "description": "Performance Tracker for Android (Expo / React Native). Reads and writes the SAME tracker.json as the desktop app through @performance-tracker/core, synced via Syncthing. This workspace also hosts the dual-runtime drift guard: the SAME golden-fixture contract that runs under Node/Vitest must produce identical results under jest-expo (Hermes).",
   "license": "MIT",
   "main": "index.js",
   "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "bundle:check": "expo export --platform android --output-dir .bundle-check",
     "test": "jest"
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
     "@performance-tracker/core": "1.0.0",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "57.0.17",
+    "expo-file-system": "~57.0.6",
+    "expo-linear-gradient": "~57.0.1",
     "react": "19.2.8",
-    "react-native": "0.87.1"
+    "react-native": "0.87.1",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-get-random-values": "~1.11.0",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-worklets": "0.10.1",
+    "react-native-draggable-flatlist": "^4.0.3"
   },
   "devDependencies": {
-    "expo": "57.0.17",
+    "@react-native/assets-registry": "0.87.1",
     "jest": "^29.7.0",
     "jest-expo": "57.0.5",
-    "@react-native/assets-registry": "0.87.1"
+    "@react-native/jest-preset": "0.87.1"
   }
 }

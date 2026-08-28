@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Performance Tracker",
+    "slug": "performance-tracker",
+    "version": "1.0.0",
+    "scheme": "performance-tracker",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#EEF2FF",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#EEF2FF"
+    },
+    "android": {
+      "package": "com.getyourwish.performancetracker",
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#EEF2FF"
+      },
+      "allowBackup": false
+    },
+    "platforms": ["android"],
+    "extra": {
+      "schemaVersionSupported": 1
+    }
+  }
+}

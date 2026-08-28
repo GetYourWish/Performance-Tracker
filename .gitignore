@@ -37,3 +37,5 @@ htmlcov/
 # System files
 .DS_Store
 Thumbs.db
+# expo export smoke-test output
+mobile/.bundle-check/
