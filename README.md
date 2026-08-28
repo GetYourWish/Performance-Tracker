@@ -83,19 +83,22 @@ All your data lives in a single JSON file (`tracker.json` by default).
 - Fallback: `Documents/PerformanceTracker/SyncThis/tracker.json`
 
 ### JSON Structure
+The complete, normative field-by-field format lives in
+**[`packages/core/SCHEMA.md`](packages/core/SCHEMA.md)** — the schema
+contract shared by the desktop app and the Android app. Quick outline:
+
 ```json
 {
   "schemaVersion": 1,
-  "meta": {
-    "createdAt": "2025-01-01T00:00:00Z",
-    "updatedAt": "2025-01-01T00:00:00Z"
-  },
+  "meta": { "createdAt": "…", "updatedAt": "…" },
   "settings": { ... },
   "difficulties": [ ... ],
   "categories": [ ... ],
   "markers": [ ... ],
   "board": [ ... ],
-  "tasks": [ ... ]
+  "tasks": [ ... ],
+  "workingOn": [ ... ],
+  "logs": [ ... ]
 }
 ```
 
