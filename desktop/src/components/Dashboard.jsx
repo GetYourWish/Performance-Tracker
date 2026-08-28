@@ -650,6 +650,11 @@ const RhythmPanel = memo(function RhythmPanel({ tasks: allCompleted, rangeTasks,
 })
 
 const CompositionPanel = memo(function CompositionPanel({ tasks, rangeTasks, difficulties, categories, settings, scoreCache }) {
+  // Hooks MUST run before any early return — when rangeTasks toggles between
+  // empty/non-empty this component used to change its hook count (the same
+  // crash class as the Board useSensors bug). Caught by react-hooks/rules-of-hooks.
+  const [donutMode, setDonutMode] = useState('tasks')
+
   const hasData = rangeTasks.length > 0
   if (!hasData) return <EmptyCard />
 
@@ -668,8 +673,6 @@ const CompositionPanel = memo(function CompositionPanel({ tasks, rangeTasks, dif
     const count = diffCounts.get(d.label) || 0
     return { label: d.label, pct: totalTasks > 0 ? (count / totalTasks) * 100 : 0, color: d.color, count }
   })
-
-  const [donutMode, setDonutMode] = useState('tasks')
 
   // Use pre-computed score cache — O(1) per task instead of O(N)
   const catByTasks = new Map()

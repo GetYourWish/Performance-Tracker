@@ -477,7 +477,7 @@ function Reviews({ data, onDayClick, onSave }) {
       const dateStr = formatDate(day)
       const daysTasks = tasksByDate.get(dateStr) || []
       
-      let value = 0
+      let value
       if (settings.heatmapMode === 'count') {
         value = daysTasks.length
       } else {
