@@ -39,3 +39,7 @@ htmlcov/
 Thumbs.db
 # expo export smoke-test output
 mobile/.bundle-check/
+# Expo native generation (expo prebuild / expo run:android output)
+mobile/.expo/
+mobile/android/
+mobile/ios/
