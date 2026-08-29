@@ -26,6 +26,12 @@
  *    The two included builds compile from source at build time, so patching
  *    their Kotlin sources fixes the runtime failures.
  *
+ * 3. worklets 0.12 compat (only when react-native-worklets >= 0.12):
+ *    expo-modules-core's C++ glue (WorkletJSCallInvoker.cpp) calls
+ *    WorkletRuntime.executeSync, which worklets 0.12 renamed to runSync,
+ *    failing the C++ build with "no member named 'executeSync' in
+ *    'worklets::WorkletRuntime'".
+ *
  * Runs in TWO places so the flow is order-proof:
  *   1. npm postinstall of @performance-tracker/mobile — `npm install` restores
  *      pristine files, this immediately re-applies the patch
@@ -303,6 +309,45 @@ function patchExpoAutolinkingPluginAgp9(contents, label, filePath) {
   return contents.replace(old, patched);
 }
 
+/** react-native-worklets version from the candidate node_modules list, or null. */
+function readWorkletsVersion(nodeModulesList) {
+  for (const nm of nodeModulesList) {
+    const pkgPath = path.join(nm, 'react-native-worklets', 'package.json');
+    if (!fs.existsSync(pkgPath)) continue;
+    try {
+      return JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * worklets 0.12 renamed WorkletRuntime.executeSync -> runSync; expo's glue
+ * still calls the old name. A pure rename at the single call site: runSync
+ * is a drop-in template overload taking the same (jsi::Runtime&) -> jsi::Value
+ * job. Returns updated contents, unchanged contents (already patched), or
+ * null after printing a loud warning when neither symbol is found.
+ */
+function patchWorkletsExecuteSync(contents, label, filePath) {
+  if (!/->\s*executeSync\s*\(/.test(contents)) {
+    if (/->\s*runSync\s*\(/.test(contents)) {
+      console.log(`${TAG} ok: ${label} already uses runSync (worklets 0.12 API)`);
+      return contents;
+    }
+    console.warn(
+      `${TAG} WARNING: ${label} contains neither executeSync nor runSync — ` +
+        `upstream layout changed, patch NOT applied (${filePath}). If the C++ build fails with ` +
+        `"no member named 'executeSync' in 'worklets::WorkletRuntime'", ` +
+        `plugins/patch-expo-gradle-kotlin.js needs an update.`
+    );
+    return null;
+  }
+  console.log(`${TAG} patched ${label}: WorkletRuntime.executeSync -> runSync (renamed in worklets 0.12)`);
+  return contents.replace(/->\s*executeSync\s*\(/g, '->runSync(');
+}
+
 /**
  * Apply patchFns to the target file in EVERY candidate node_modules that has
  * it (patching all copies avoids guessing which copy the Gradle build will
@@ -439,6 +484,25 @@ function patchExpoGradleKotlin(startDir) {
       ) && allFound;
   } else if (agpMajor !== null) {
     console.log(`${TAG} react-native catalog pins AGP ${agpMajor}.x < 9 -> AGP 9 patches skipped`);
+  }
+
+  // worklets 0.12 runtime-compat patch (source patch to expo-modules-core's
+  // C++ glue, which recompiles at build time). Only when the installed
+  // react-native-worklets is >= 0.12 — otherwise the file works as shipped.
+  const workletsVersion = readWorkletsVersion(candidates);
+  if (workletsVersion !== null && !isOlderThan(workletsVersion, [0, 12])) {
+    console.log(
+      `${TAG} react-native-worklets ${workletsVersion} >= 0.12 -> applying WorkletRuntime API patch`
+    );
+    allFound =
+      patchTarget(
+        candidates,
+        ['expo-modules-core', 'android', 'src', 'main', 'cpp', 'worklets', 'WorkletJSCallInvoker.cpp'],
+        'expo-modules-core/.../WorkletJSCallInvoker.cpp',
+        [patchWorkletsExecuteSync]
+      ) && allFound;
+  } else if (workletsVersion !== null) {
+    console.log(`${TAG} react-native-worklets ${workletsVersion} < 0.12 -> WorkletRuntime API patch skipped`);
   }
 
   return allFound;
