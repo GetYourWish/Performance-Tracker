@@ -144,6 +144,23 @@ npm run android --workspace @performance-tracker/mobile # live build + install o
 npm run test:core:rn                                    # Hermes drift guard
 ```
 
+#### Android SDK prerequisites
+
+`gradlew assembleDebug` needs an Android SDK (the Gradle build auto-installs
+missing platform 37 / build-tools 37 / NDK 27.1 as long as one SDK root exists
+and its licenses were accepted — Android Studio's first-run wizard does both).
+
+Point the build at your SDK with either:
+- **`ANDROID_HOME` environment variable** (recommended — survives prebuilds):
+  `setx ANDROID_HOME "%LOCALAPPDATA%\Android\Sdk"` (Windows), or
+- **`mobile/android/local.properties`** containing `sdk.dir=C:/Users/<you>/AppData/Local/Android/Sdk`
+
+Because `expo prebuild --clean` deletes the whole `android/` folder,
+`npm run prebuild` is wrapped by [`mobile/scripts/expo-prebuild-safe.js`](mobile/scripts/expo-prebuild-safe.js):
+it restores an existing `local.properties` after the clean, or auto-writes one
+from `ANDROID_HOME` / the default SDK locations, and prints exact fix
+instructions when no SDK is found.
+
 > `mobile/android/` is generated output and gitignored — never edit it by hand.
 > It is rebuilt by `npm run prebuild` (which passes `--clean`), and build
 > customizations like the Gradle version are enforced by the config plugins in
