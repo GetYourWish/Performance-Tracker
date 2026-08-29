@@ -132,11 +132,18 @@ theme.
   Settings — never auto-loaded, never auto-deleted
 
 ```bash
-# Build the APK (primary flow — native project is generated, then Gradle builds it):
+# Build the standalone APK (primary flow — JS bundle is embedded, no Metro needed):
 npm run prebuild --workspace @performance-tracker/mobile  # regenerates mobile/android from scratch; pins Gradle via mobile/plugins/
 cd mobile/android
-.\gradlew assembleDebug                                   # Windows (./gradlew assembleDebug on macOS/Linux)
-# APK lands in mobile/android/app/build/outputs/apk/debug/app-debug.apk
+.\gradlew assembleRelease                                 # Windows (./gradlew assembleRelease on macOS/Linux)
+# APK lands in mobile/android/app/build/outputs/apk/release/app-release.apk
+# (Expo's template signs release with the debug keystore by default — fine for personal
+#  use and sideloading; generate a real keystore before any store/public release)
+
+# ⚠️ Debug builds contain no JavaScript: `gradlew assembleDebug` produces an APK that
+# loads its JS live from Metro. To run a debug APK on a USB device:
+adb reverse tcp:8081 tcp:8081                             # forward the Metro port
+npm run start --workspace @performance-tracker/mobile    # then relaunch the app on the device
 
 # Alternatives:
 npm run start --workspace @performance-tracker/mobile   # Expo dev server (fast JS iteration)
