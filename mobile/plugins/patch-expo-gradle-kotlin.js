@@ -2,20 +2,29 @@
 'use strict';
 
 /**
- * Patches Expo's pinned Kotlin Gradle Plugin (KGP) versions so Expo's included
- * Gradle builds compile under Gradle 9.4.1, which the Android Gradle Plugin in
- * the RN 0.87 template requires (see plugins/with-gradle-version.js).
+ * Patches expo's Gradle tooling inside node_modules for the RN 0.87 toolchain:
  *
- * Why: Gradle 9.4.1 ships kotlin-stdlib 2.3.0 on its own classpath. Expo's
- * included Gradle builds pin KGP 2.1.20, whose compiler only reads Kotlin
- * metadata up to 2.2.0, so every compileKotlin of those plugins fails with:
+ * 1. Kotlin Gradle Plugin pins (expo-modules-autolinking expo-gradle-plugin +
+ *    expo-modules-core expo-module-gradle-plugin): Gradle 9.4.1 (required by
+ *    AGP 9.2.1 in RN 0.87.1's version catalog) ships kotlin-stdlib 2.3.0 on
+ *    its classpath, while expo pins KGP 2.1.20, whose compiler only reads
+ *    Kotlin metadata up to 2.2.0 -> every compileKotlin of those plugins
+ *    fails with "Incompatible classes were found in dependencies".
+ *    Fix: bump the pins to KGP 2.3.0 (and migrate the removed
+ *    `kotlinOptions` DSL in the shared subproject).
  *
- *   e: Incompatible classes were found in dependencies. Remove them from the
- *   classpath or use '-Xskip-metadata-version-check' to suppress errors
- *
- * No upstream release fixes this yet (expo-modules-autolinking 57.0.12 is the
- * latest and pins 2.1.20), so the pinned versions inside node_modules are
- * patched in place.
+ * 2. AGP 9 runtime compatibility (only when react-native's catalog pins
+ *    AGP >= 9): expo's prebuild-era plugin sources call APIs that AGP 9
+ *    removed:
+ *      - LibraryDefaultConfig.setTargetSdk (libraries no longer own targetSdk)
+ *      - LibraryExtension.lintOptions (replaced by the lint block)
+ *      - buildConfig feature is disabled by default (expo modules add
+ *        custom BuildConfig fields)
+ *      - automatic SoftwareComponent creation (components.release) gone,
+ *        breaking the publishing setup
+ *      - srcDirs(Provider) forbidden in the SourceSet DSL
+ *    The two included builds compile from source at build time, so patching
+ *    their Kotlin sources fixes the runtime failures.
  *
  * Runs in TWO places so the flow is order-proof:
  *   1. npm postinstall of @performance-tracker/mobile — `npm install` restores
@@ -25,9 +34,9 @@
  * Every decision is logged with the [with-expo-gradle-kotlin] tag so build
  * output always shows whether and where the patch was applied.
  *
- * Idempotent and version-gated: pins >= 2.2.0 (compilers that can read Kotlin
- * 2.3 metadata) are left untouched, so this becomes a no-op once Expo pins a
- * compatible Kotlin.
+ * Idempotent and version-gated: KGP pins >= 2.2.0 and AGP < 9 are left
+ * untouched, so each patch becomes a no-op once upstream ships a compatible
+ * version.
  */
 
 const fs = require('fs');
@@ -135,6 +144,165 @@ function patchKotlinOptionsDsl(contents, label, filePath) {
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * AGP 9 runtime-compat patches (see the docblock, section 2).
+ * Each is gated on react-native's catalog pinning AGP >= 9 and is
+ * idempotent via its [with-agp9-compat] marker comment.
+ * ------------------------------------------------------------------ */
+
+const AGP9_MARKER = '[with-agp9-compat]';
+
+/** AGP major version pinned by react-native's gradle/libs.versions.toml, or null. */
+function readCatalogAgpMajor(nodeModulesList) {
+  for (const nm of nodeModulesList) {
+    const tomlPath = path.join(nm, 'react-native', 'gradle', 'libs.versions.toml');
+    if (!fs.existsSync(tomlPath)) continue;
+    const m = fs.readFileSync(tomlPath, 'utf8').match(/^agp\s*=\s*"(\d+)\./m);
+    if (m) return parseInt(m[1], 10);
+  }
+  return null;
+}
+
+/** Drop targetSdk from library defaultConfig + enable the buildConfig feature. */
+function patchAndroidLibraryExtensionAgp9(contents, label, filePath) {
+  if (contents.includes(`${AGP9_MARKER} LibraryDefaultConfig`)) {
+    console.log(`${TAG} ok: ${label} already carries the AGP 9 buildConfig/targetSdk patch`);
+    return contents;
+  }
+  const sdkVersionsOld = [
+    '  defaultConfig {',
+    '    this@defaultConfig.minSdk = minSdk',
+    '    this@defaultConfig.targetSdk = targetSdk',
+    '  }',
+    '}',
+  ].join('\n');
+  const sdkVersionsNew = [
+    '  defaultConfig {',
+    '    this@defaultConfig.minSdk = minSdk',
+    `    // ${AGP9_MARKER} LibraryDefaultConfig.setTargetSdk(Integer) was removed in AGP 9;`,
+    '    // a library\'s targetSdk is ignored by the app manifest merge anyway.',
+    '  }',
+    `  // ${AGP9_MARKER} AGP 9 disables the buildConfig feature by default,`,
+    '  // but expo modules add custom BuildConfig fields.',
+    '  buildFeatures { buildConfig = true }',
+    '}',
+  ].join('\n');
+  if (!contents.includes(sdkVersionsOld)) {
+    console.warn(
+      `${TAG} WARNING: ${label} does not match the expected applySDKVersions shape — ` +
+        `AGP 9 targetSdk/buildConfig patch NOT applied (${filePath}). The build will fail with ` +
+        `"'void com.android.build.api.dsl.LibraryDefaultConfig.setTargetSdk"' until this script is updated.`
+    );
+    return null;
+  }
+  let out = contents.replace(sdkVersionsOld, sdkVersionsNew);
+
+  const lintOld = [
+    'internal fun LibraryExtension.applyLinterOptions() {',
+    '  lintOptions.isAbortOnError = false',
+    '}',
+  ].join('\n');
+  const lintNew = [
+    'internal fun LibraryExtension.applyLinterOptions() {',
+    `  // ${AGP9_MARKER} lintOptions was removed in AGP 9; debug builds do not run lint.`,
+    '}',
+  ].join('\n');
+  if (!out.includes(lintOld)) {
+    console.warn(
+      `${TAG} WARNING: ${label} does not match the expected applyLinterOptions shape — ` +
+        `lint patch NOT applied (${filePath}). The build may fail with a lintOptions error.`
+    );
+    return null;
+  }
+  out = out.replace(lintOld, lintNew);
+  console.log(
+    `${TAG} patched ${label}: dropped library targetSdk + lintOptions (removed in AGP 9), enabled buildConfig`
+  );
+  return out;
+}
+
+/** Skip expo's publishing setup (AGP 9 removed automatic SoftwareComponents). */
+function patchProjectConfigurationAgp9(contents, label, filePath) {
+  if (contents.includes(`${AGP9_MARKER} AGP 9 removed automatic SoftwareComponent`)) {
+    console.log(`${TAG} ok: ${label} already carries the AGP 9 publishing patch`);
+    return contents;
+  }
+  const old = [
+    'internal fun Project.applyPublishing(expoModulesExtension: ExpoModuleExtension) {',
+    '  if (!expoModulesExtension.canBePublished) {',
+    '    createEmptyExpoPublishTask()',
+    '    createEmptyExpoPublishToMavenLocalTask()',
+    '    return',
+    '  }',
+  ].join('\n');
+  const patched = [
+    'internal fun Project.applyPublishing(expoModulesExtension: ExpoModuleExtension) {',
+    `  // ${AGP9_MARKER} AGP 9 removed automatic SoftwareComponent creation`,
+    '  // (components.release); publishing is irrelevant for consuming app builds.',
+    '  createEmptyExpoPublishTask()',
+    '  createEmptyExpoPublishToMavenLocalTask()',
+    '  return',
+    '  if (!expoModulesExtension.canBePublished) {',
+    '    createEmptyExpoPublishTask()',
+    '    createEmptyExpoPublishToMavenLocalTask()',
+    '    return',
+    '  }',
+  ].join('\n');
+  if (!contents.includes(old)) {
+    console.warn(
+      `${TAG} WARNING: ${label} does not match the expected applyPublishing shape — ` +
+        `AGP 9 publishing patch NOT applied (${filePath}). The build will fail with ` +
+        `"SoftwareComponent with name 'release' not found" until this script is updated.`
+    );
+    return null;
+  }
+  console.log(`${TAG} patched ${label}: publishing path disabled under AGP 9 (empty publish tasks)`);
+  return contents.replace(old, patched);
+}
+
+/** Resolve the Providers passed to srcDirs — forbidden by AGP 9's SourceSet DSL. */
+function patchExpoAutolinkingPluginAgp9(contents, label, filePath) {
+  if (contents.includes(`${AGP9_MARKER} AGP 9 forbids adding Provider instances`)) {
+    console.log(`${TAG} ok: ${label} already carries the AGP 9 srcDirs patch`);
+    return contents;
+  }
+  const old = [
+    '    // Adds the generated file to the source set.',
+    '    project.extensions.getByType(AndroidComponentsExtension::class.java).finalizeDsl { ext ->',
+    '      ext',
+    '        .sourceSets',
+    '        .getByName("main")',
+    '        .java',
+    '        .srcDirs(getPackageListDir(project), getInlineModulesDir(project))',
+    '    }',
+  ].join('\n');
+  const patched = [
+    '    // Adds the generated file to the source set.',
+    `    // ${AGP9_MARKER} AGP 9 forbids adding Provider instances to the SourceSet`,
+    '    // DSL, so resolve the build-directory Providers to plain files first.',
+    '    project.extensions.getByType(AndroidComponentsExtension::class.java).finalizeDsl { ext ->',
+    '      ext',
+    '        .sourceSets',
+    '        .getByName("main")',
+    '        .java',
+    '        .srcDirs(',
+    '          getPackageListDir(project).get().asFile,',
+    '          getInlineModulesDir(project).get().asFile',
+    '        )',
+    '    }',
+  ].join('\n');
+  if (!contents.includes(old)) {
+    console.warn(
+      `${TAG} WARNING: ${label} does not match the expected srcDirs shape — ` +
+        `AGP 9 srcDirs patch NOT applied (${filePath}). The build will fail with ` +
+        `"You cannot add Provider instances to the Android SourceSet API" until this script is updated.`
+    );
+    return null;
+  }
+  console.log(`${TAG} patched ${label}: srcDirs(Provider) -> srcDirs(File) for AGP 9`);
+  return contents.replace(old, patched);
+}
+
 /**
  * Apply patchFns to the target file in EVERY candidate node_modules that has
  * it (patching all copies avoids guessing which copy the Gradle build will
@@ -206,6 +374,72 @@ function patchExpoGradleKotlin(startDir) {
       'expo-module-gradle-plugin/build.gradle.kts',
       [(c, l, f) => replaceVersionPin(c, 'jvm', l, f)]
     ) && allFound;
+
+  // AGP 9 runtime-compat patches (source patches to the included builds,
+  // which recompile at build time). Only when react-native's catalog pins
+  // AGP >= 9 — otherwise these files work as shipped.
+  const agpMajor = readCatalogAgpMajor(candidates);
+  if (agpMajor !== null && agpMajor >= 9) {
+    console.log(`${TAG} react-native catalog pins AGP ${agpMajor}.x -> applying AGP 9 runtime patches`);
+    allFound =
+      patchTarget(
+        candidates,
+        [
+          'expo-modules-core',
+          'expo-module-gradle-plugin',
+          'src',
+          'main',
+          'kotlin',
+          'expo',
+          'modules',
+          'plugin',
+          'android',
+          'AndroidLibraryExtension.kt',
+        ],
+        'expo-module-gradle-plugin/.../AndroidLibraryExtension.kt',
+        [patchAndroidLibraryExtensionAgp9]
+      ) && allFound;
+
+    allFound =
+      patchTarget(
+        candidates,
+        [
+          'expo-modules-core',
+          'expo-module-gradle-plugin',
+          'src',
+          'main',
+          'kotlin',
+          'expo',
+          'modules',
+          'plugin',
+          'ProjectConfiguration.kt',
+        ],
+        'expo-module-gradle-plugin/.../ProjectConfiguration.kt',
+        [patchProjectConfigurationAgp9]
+      ) && allFound;
+
+    allFound =
+      patchTarget(
+        candidates,
+        [
+          'expo-modules-autolinking',
+          'android',
+          'expo-gradle-plugin',
+          'expo-autolinking-plugin',
+          'src',
+          'main',
+          'kotlin',
+          'expo',
+          'modules',
+          'plugin',
+          'ExpoAutolinkingPlugin.kt',
+        ],
+        'expo-gradle-plugin/expo-autolinking-plugin/.../ExpoAutolinkingPlugin.kt',
+        [patchExpoAutolinkingPluginAgp9]
+      ) && allFound;
+  } else if (agpMajor !== null) {
+    console.log(`${TAG} react-native catalog pins AGP ${agpMajor}.x < 9 -> AGP 9 patches skipped`);
+  }
 
   return allFound;
 }
