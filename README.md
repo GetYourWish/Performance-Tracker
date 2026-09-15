@@ -165,8 +165,8 @@ asset first on cold start, in every build type. So:
 
 | Build | JS bundle inside the APK? | Runs without Metro? | `adb shell dumpsys package com.getyourwish.performancetracker` shows |
 |---|---|---|---|
-| `assembleDebug` | **No** — by design; it loads its code live from Metro on your PC | ❌ | `versionName 1.0.0-debug` |
-| `assembleRelease` | **Yes** (~2.8 MB Hermes bytecode) | ✅ standalone | `versionName 1.0.0` |
+| `assembleDebug` | **No** — by design; it loads its code live from Metro on your PC | ❌ | `versionName 1.0.1-debug` |
+| `assembleRelease` | **Yes** (~2.8 MB Hermes bytecode) | ✅ standalone | `versionName 1.0.1` |
 
 The debug buildType is marked with a `versionNameSuffix "-debug"` (injected by
 `mobile/plugins/with-standalone-release.js`), so you can always tell which
@@ -193,6 +193,34 @@ npm run start --workspace @performance-tracker/mobile    # then relaunch the app
 npm run start --workspace @performance-tracker/mobile   # Expo dev server (fast JS iteration)
 npm run test:core:rn                                    # Hermes drift guard
 ```
+
+#### If the app crashes right when you open it
+
+A release APK has no red box — an unhandled JS error during startup kills the
+process instantly and looks like "the app just closes". Since v1.0.1 the app
+carries its own crash reporter (`mobile/src/diagnostics.js`):
+
+- A **fatal JS error is recorded on-device** and the **next launch** shows a
+  dark screen — *"The app hit an error last time"* — with the error name,
+  message and stack. Screenshot that screen and send it; tap **Continue to
+  the app** to dismiss and carry on.
+- The in-app report covers JavaScript failures. For anything lower-level
+  (native crash, missing `.so`), 30 seconds of logcat gives the answer:
+
+```powershell
+# Windows — phone plugged in, USB debugging on
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" logcat -c
+#  → open the app, let it crash
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" logcat -d AndroidRuntime:E > "$env:USERPROFILE\Desktop\crash.txt"
+```
+
+History: the v1.0.0 release APK crashed on launch because `App` called
+`useSafeAreaInsets()` with **no `<SafeAreaProvider>` ancestor** — Expo's
+`registerRootComponent` registers the root component as-is. The first render
+threw, and a release build turns that into an instant crash. `App` now mounts
+the provider itself (with `initialWindowMetrics`), and two boot smoke tests
+(`mobile/__tests__/app-boot*.test.js`) mount the **full** component tree in
+CI so a broken first render can never reach an APK again.
 
 #### Android SDK prerequisites
 
