@@ -1,23 +1,56 @@
 // App root — theme resolution, screen switching, bottom navigation.
 // Mirrors desktop App.jsx: loading → schema gate → setup → (board | settings).
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native'
 import { useColorScheme } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaProvider, useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context'
 import { buildTheme, SPACING } from './src/theme.js'
 import { useTracker } from './src/hooks/useTracker.js'
+import { readLastCrash, clearLastCrash } from './src/diagnostics.js'
 import { AuroraBackground, GlassCard, BottomNav } from './src/components/ui.js'
 import { BoardScreen } from './src/components/BoardScreen.js'
 import { SetupScreen, SchemaErrorScreen } from './src/screens/SetupScreen.js'
 import { SettingsScreen } from './src/screens/SettingsScreen.js'
+import { CrashReportScreen } from './src/screens/CrashReportScreen.js'
 
+// Root: mounts SafeAreaProvider BEFORE anything calls useSafeAreaInsets.
+// Expo's registerRootComponent() registers the component as-is (no provider
+// wrapper) — without this, the very first render threw 'No safe area value
+// available' and release builds crashed instantly on launch.
+// initialWindowMetrics hands the provider the insets measured natively at
+// startup so the first frame is already laid out correctly.
 export default function App() {
+  return (
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <AppShell />
+    </SafeAreaProvider>
+  )
+}
+
+function AppShell() {
   const scheme = useColorScheme()
   const insets = useSafeAreaInsets()
   const [tab, setTab] = useState('board')
   const [refreshing, setRefreshing] = useState(false)
+  // undefined = not checked yet, null = no crash recorded, object = report
+  const [crashReport, setCrashReport] = useState(undefined)
+
+  useEffect(() => {
+    let alive = true
+    readLastCrash().then(report => {
+      if (alive) setCrashReport(report)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const handleCrashDismiss = useCallback(async () => {
+    await clearLastCrash()
+    setCrashReport(null)
+  }, [])
 
   const { store, state, folderUri, autoSync, booted, pickFolder, setAutoSync, refresh, forgetFolder } = useTracker()
 
@@ -35,6 +68,11 @@ export default function App() {
       setTimeout(() => setRefreshing(false), 400)
     }
   }, [refresh, refreshing])
+
+  // last session recorded a fatal JS error → show it before anything else
+  if (crashReport) {
+    return <CrashReportScreen report={crashReport} onDismiss={handleCrashDismiss} />
+  }
 
   if (!booted) {
     return (
