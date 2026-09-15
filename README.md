@@ -131,23 +131,66 @@ theme.
 - **Conflicts**: Syncthing `-conflict-` copies are surfaced on the board and in
   Settings — never auto-loaded, never auto-deleted
 
+#### Building the standalone APK (release) — the only APK that works without Metro
+
 ```bash
-# Build the standalone APK (primary flow — JS bundle is embedded, no Metro needed):
 npm run prebuild --workspace @performance-tracker/mobile  # regenerates mobile/android from scratch; pins Gradle via mobile/plugins/
 cd mobile/android
 .\gradlew assembleRelease                                 # Windows (./gradlew assembleRelease on macOS/Linux)
 # APK lands in mobile/android/app/build/outputs/apk/release/app-release.apk
-# (Expo's template signs release with the debug keystore by default — fine for personal
-#  use and sideloading; generate a real keystore before any store/public release)
+```
 
-# ⚠️ Debug builds contain no JavaScript: `gradlew assembleDebug` produces an APK that
-# loads its JS live from Metro. To run a debug APK on a USB device:
+A successful release build now ends with this gate (added by
+`mobile/plugins/with-standalone-release.js`):
+
+```
+[with-standalone-release] STANDALONE APK VERIFIED - assets/index.android.bundle present (2.8 MB)
+[with-standalone-release] Install it on the device with:
+[with-standalone-release]     adb install -r "...app-release.apk"
+```
+
+If the embedded bundle were missing, the BUILD fails with a clear reason — you
+never see a red screen on the phone. Release APKs are signed with the debug
+keystore by default (fine for personal use and sideloading; generate a real
+keystore before any store/public release).
+
+#### Why an APK says "Unable to load script" (debug vs release)
+
+React Native apps ship their JavaScript **inside the APK**
+(`assets/index.android.bundle`) — but only in **release** builds. Verified
+against react-native 0.87.1 sources: the Gradle plugin registers the bundling
+task (`createBundleReleaseJsAndAssets`) only for non-debuggable variants, and
+the app's JS loader (`ExpoReactHostFactory`) always tries to read that embedded
+asset first on cold start, in every build type. So:
+
+| Build | JS bundle inside the APK? | Runs without Metro? | `adb shell dumpsys package com.getyourwish.performancetracker` shows |
+|---|---|---|---|
+| `assembleDebug` | **No** — by design; it loads its code live from Metro on your PC | ❌ | `versionName 1.0.0-debug` |
+| `assembleRelease` | **Yes** (~2.8 MB Hermes bytecode) | ✅ standalone | `versionName 1.0.0` |
+
+The debug buildType is marked with a `versionNameSuffix "-debug"` (injected by
+`mobile/plugins/with-standalone-release.js`), so you can always tell which
+build is installed: Android → Settings → Apps → Performance Tracker.
+
+- The red screen's mention of "Metro", "localhost:8081" and `adb reverse` is
+  boilerplate from React Native's script loader — it is **not** the app trying
+  to sync or reach the internet. The app's own code (Syncthing-folder sync)
+  never even started, because its JavaScript never loaded.
+- Traps that put a debug build on your phone:
+  - `npm run android` / `npx expo run:android` (mobile workspace) — builds and
+    installs the **debug** variant
+  - Android Studio's green Run button — always installs the **debug** variant
+  - installing `app-debug.apk` instead of `app-release.apk`
+- Escape hatch for a debug APK on a USB device (development only):
+
+```bash
 adb reverse tcp:8081 tcp:8081                             # forward the Metro port
 npm run start --workspace @performance-tracker/mobile    # then relaunch the app on the device
+```
 
-# Alternatives:
+```bash
+# Other useful commands:
 npm run start --workspace @performance-tracker/mobile   # Expo dev server (fast JS iteration)
-npm run android --workspace @performance-tracker/mobile # live build + install on a connected device
 npm run test:core:rn                                    # Hermes drift guard
 ```
 
