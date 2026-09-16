@@ -140,6 +140,21 @@ cd mobile/android
 # APK lands in mobile/android/app/build/outputs/apk/release/app-release.apk
 ```
 
+If `assembleRelease` dies on
+`ninja: error: manifest 'build.ninja' still dirty after 100 tries`
+(the `:react-native-reanimated:buildCMakeRelWithDebInfo` task), run this once
+after `git pull`, then retry the gradle command — do **not** re-run prebuild:
+
+```bash
+npm run clean:native --workspace @performance-tracker/mobile
+cd mobile/android
+.\gradlew assembleRelease
+```
+
+That script patches Reanimated/Worklets CMake for Windows (so ninja stops
+regenerating forever) and deletes the stale `.cxx` caches from the failed
+run. Details under **Android build troubleshooting** below.
+
 A successful release build now ends with this gate (added by
 `mobile/plugins/with-standalone-release.js`):
 
@@ -251,30 +266,36 @@ npm run clean:native --workspace @performance-tracker/mobile  # repair Windows C
 
 The release build compiles two libraries that contain C++ code
 (`react-native-reanimated`, `react-native-worklets`) with the CMake + ninja
-toolchain. That error means ninja regenerated its build manifest and it *still*
-looked out-of-date, 100 times in a row — a Windows-specific toolchain hiccup,
-**not** a bug in the app's code. Documented triggers, in order of likelihood:
+toolchain. On Windows, those libraries' `file(GLOB_RECURSE … CONFIGURE_DEPENDS)`
+makes ninja regenerate `build.ninja` forever and then fail with that error —
+a toolchain loop, **not** a bug in the app's code.
 
-1. **Stale CMake scratch state** from an interrupted build (Ctrl+C, laptop
-   sleep, a previous failed run). Fix with the one-command repair script:
+The repo now patches those CMakeLists (and the libraries' Gradle cmake
+arguments) at `npm install`, at prebuild, and as part of `clean:native`.
+After a `git pull` of this fix you still have to wipe the **already-written**
+`.cxx` scratch from the failed run, otherwise ninja keeps the old looping
+manifest:
 
-   ```bash
-   npm run clean:native --workspace @performance-tracker/mobile
-   cd mobile/android && gradlew assembleRelease
-   ```
+```bash
+npm run clean:native --workspace @performance-tracker/mobile
+cd mobile/android && gradlew assembleRelease
+```
 
-   The script stops the Gradle daemons (they hold file locks), deletes the
-   `.cxx` scratch dirs and build caches of the two C++ libraries plus the app's
-   build outputs, and touches nothing else. Sources and downloads stay put.
+`clean:native` (1) re-applies the CMake patch so you do not need to re-run
+prebuild, (2) stops the Gradle daemons that hold file locks, (3) deletes the
+`.cxx` scratch dirs and build caches of the two C++ libraries plus the app's
+build outputs. Sources and downloads stay put.
 
-2. **Windows Defender (or another antivirus) re-scanning freshly written
-   build files**, changing their timestamps behind ninja's back. If the same
-   error comes straight back after a clean rebuild, this is your cause:
+If the **same** ninja error comes straight back after that patched rebuild,
+it is no longer the CMakeLists loop. Remaining environmental causes:
+
+1. **Windows Defender (or another antivirus) re-scanning freshly written
+   build files**, changing their timestamps behind ninja's back:
    Windows Security → Virus & threat protection → Manage settings →
    Exclusions → *Add an exclusion* → **Folder** → add the whole repo folder
    (`C:\Users\...\Performance-Tracker`), then clean-rebuild once more.
 
-3. **System clock drift** (ninja compares file timestamps): make sure Windows
+2. **System clock drift** (ninja compares file timestamps): make sure Windows
    time sync is on (Settings → Time & language). Rare, but documented.
 
 #### The app says "No tracker.json in this folder"

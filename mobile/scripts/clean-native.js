@@ -7,23 +7,36 @@
 //
 // What that error actually is: ninja regenerated its build manifest and the
 // manifest STILL looked out of date on the next check, 100 times in a row.
-// Documented triggers (ninja/cmake issue trackers, CMake discourse):
+//
+// Two things have to happen for assembleRelease to get past it:
+//   1. Patch reanimated/worklets CMakeLists so ninja stops regenerating
+//      forever (CONFIGURE_DEPENDS + Windows). See plugins/patch-windows-cmake.js.
+//      That patch is also applied by npm postinstall and by prebuild; it is
+//      re-applied here so `git pull` + this script + assembleRelease is
+//      enough — you do not have to re-run prebuild.
+//   2. Wipe the already-generated .cxx scratch dirs. A dirty build.ninja
+//      left by a previous failed run will keep failing until it is deleted,
+//      even after the CMakeLists patch.
+//
+// Other documented triggers (ninja/cmake issue trackers, CMake discourse)
+// that wiping also covers:
 //   1. a stale / half-written .cxx scratch dir left by an interrupted build
 //      (Ctrl+C, laptop sleep, OOM) — the most common first-offender,
 //   2. antivirus real-time scanning re-writing file timestamps the moment
 //      ninja creates them (Windows Defender on the project folder),
 //   3. system clock jumps (unsynced RTC / fast startup).
-// (1) and (2) are addressed by wiping the scratch dirs + stopping the Gradle
-// daemons that hold file locks; if the error comes straight back, the README
-// ("Android build troubleshooting") has the Defender-exclusion ladder.
+// If the error comes straight back AFTER a patched + wiped rebuild, the
+// README ("Android build troubleshooting") has the Defender-exclusion ladder.
 //
-// Scope is deliberately surgical: ONLY cache/output directories are deleted
-// (build outputs and CMake scratch dirs of the two C++ autolinked libraries).
-// Nothing downloaded, nothing source-controlled, nothing user-authored.
+// Scope is deliberately surgical: the CMakeLists/gradle.kts patches are
+// in-place edits of two autolinked libraries, and ONLY cache/output
+// directories are deleted. Nothing downloaded, nothing source-controlled,
+// nothing user-authored.
 
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
+const { patchWindowsCmake } = require('../plugins/patch-windows-cmake')
 
 // The only autolinked libraries in this workspace that compile C/C++ through
 // CMake+ninja (their android/ folders carry CMakeLists.txt). Every other
@@ -108,6 +121,17 @@ function main() {
   const androidRoot = path.join(MOBILE_ROOT, 'android')
   console.log('[clean-native] mobile root: ' + MOBILE_ROOT)
 
+  // Apply the CMakeLists patch first so the NEXT cmake configure (after we
+  // wipe .cxx) writes a ninja manifest that does not loop.
+  const cmake = patchWindowsCmake(MOBILE_ROOT)
+  if (cmake.patched > 0) {
+    console.log('[clean-native] Windows CMake ninja fix applied to ' + cmake.patched + ' file(s)')
+  } else if (cmake.alreadyOk > 0) {
+    console.log('[clean-native] Windows CMake ninja fix already present')
+  } else if (cmake.missing.length > 0) {
+    console.log('[clean-native] CMake patch skipped (not installed: ' + cmake.missing.join(', ') + ')')
+  }
+
   const stop = stopGradleDaemons(androidRoot)
   console.log('[clean-native] ' + stop.note)
 
@@ -115,7 +139,7 @@ function main() {
   if (targets.length === 0) {
     console.log('[clean-native] nothing to clean — native caches are already empty')
     console.log('[clean-native] If the ninja error still appears on a fresh build, see the README:')
-    console.log('[clean-native]   "Android build troubleshooting" (antivirus exclusion ladder)')
+    console.log('[clean-native]   "Android build troubleshooting"')
     return 0
   }
   for (const t of targets) console.log('[clean-native] removing [' + t.kind + '] ' + t.path)
