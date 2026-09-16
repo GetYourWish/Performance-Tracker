@@ -142,8 +142,12 @@ cd mobile/android
 
 If `assembleRelease` dies on
 `ninja: error: manifest 'build.ninja' still dirty after 100 tries`
-(the `:react-native-reanimated:buildCMakeRelWithDebInfo` task), run this once
-after `git pull`, then retry the gradle command — do **not** re-run prebuild:
+(the `:react-native-reanimated:buildCMakeRelWithDebInfo` task)
+**or** on
+`ninja: error: mkdir(CMakeFiles/worklets.dir/C_/Users/…/Common)`
+(the `:react-native-worklets:buildCMakeRelWithDebInfo` task — Windows
+`MAX_PATH`), run this once after `git pull`, then retry the gradle
+command — do **not** re-run prebuild:
 
 ```bash
 npm run clean:native --workspace @performance-tracker/mobile
@@ -152,8 +156,9 @@ cd mobile/android
 ```
 
 That script patches Reanimated/Worklets CMake for Windows (so ninja stops
-regenerating forever) and deletes the stale `.cxx` caches from the failed
-run. Details under **Android build troubleshooting** below.
+regenerating forever, and so object-file paths stay under `MAX_PATH`) and
+deletes the stale `.cxx` caches from the failed run. Details under
+**Android build troubleshooting** below.
 
 If instead Gradle dies on
 `Task ':expo:releaseSourcesJar' uses this output of task ':expo:generatePackagesList'`,
@@ -272,19 +277,28 @@ npm run test:core:rn                                    # Hermes drift guard
 npm run clean:native --workspace @performance-tracker/mobile  # repair Windows C++ build caches
 ```
 
-#### Android build troubleshooting — `ninja: error: manifest 'build.ninja' still dirty after 100 tries`
+#### Android build troubleshooting — ninja C++ failures on Windows
 
 The release build compiles two libraries that contain C++ code
 (`react-native-reanimated`, `react-native-worklets`) with the CMake + ninja
-toolchain. On Windows, those libraries' `file(GLOB_RECURSE … CONFIGURE_DEPENDS)`
-makes ninja regenerate `build.ninja` forever and then fail with that error —
-a toolchain loop, **not** a bug in the app's code.
+toolchain. On Windows two toolchain failures show up, neither of which is
+a bug in the app's code:
+
+1. `ninja: error: manifest 'build.ninja' still dirty after 100 tries` —
+   those libraries' `file(GLOB_RECURSE … CONFIGURE_DEPENDS)` makes ninja
+   regenerate `build.ninja` forever.
+2. `ninja: error: mkdir(CMakeFiles/worklets.dir/C_/Users/…/Common)` —
+   CMake encoded an absolute `C:\Users\…` source path into the object-file
+   directory. A high `CMAKE_OBJECT_PATH_MAX` (1024) disabled hashing, so
+   the path exceeded Windows `MAX_PATH` (260) and ninja's mkdir failed.
 
 The repo now patches those CMakeLists (and the libraries' Gradle cmake
 arguments) at `npm install`, at prebuild, and as part of `clean:native`.
+The patch strips `CONFIGURE_DEPENDS`, sets `CMAKE_SUPPRESS_REGENERATION`,
+and keeps `CMAKE_OBJECT_PATH_MAX=128` so CMake hash-shortens object paths.
 After a `git pull` of this fix you still have to wipe the **already-written**
-`.cxx` scratch from the failed run, otherwise ninja keeps the old looping
-manifest:
+`.cxx` scratch from the failed run, otherwise ninja keeps the old manifest
+and the old long object paths:
 
 ```bash
 npm run clean:native --workspace @performance-tracker/mobile

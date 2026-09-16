@@ -4,12 +4,15 @@
 /**
  * Windows CMake/ninja fix for react-native-reanimated + react-native-worklets.
  *
- * Symptom (assembleRelease on Windows):
+ * Symptoms (assembleRelease on Windows):
  *
- *   Task :react-native-reanimated:buildCMakeRelWithDebInfo[arm64-v8a][reanimated] FAILED
- *   C/C++: ninja: error: manifest 'build.ninja' still dirty after 100 tries
+ *   1. Task :react-native-reanimated:buildCMakeRelWithDebInfo[arm64-v8a][reanimated] FAILED
+ *      C/C++: ninja: error: manifest 'build.ninja' still dirty after 100 tries
  *
- * Root cause, verified against reanimated 4.6.0 / worklets 0.12.1 CMakeLists.txt:
+ *   2. Task :react-native-worklets:buildCMakeRelWithDebInfo[arm64-v8a][worklets] FAILED
+ *      ninja: error: mkdir(CMakeFiles/worklets.dir/C_/Users/…/Common): No such file or directory
+ *
+ * Root cause (1), verified against reanimated 4.6.0 / worklets 0.12.1 CMakeLists.txt:
  * both libraries glob their C++ sources with
  *
  *   file(GLOB_RECURSE … CONFIGURE_DEPENDS "…/*.cpp")
@@ -20,14 +23,22 @@
  * then gives up. This is a CMake+Ninja+Windows toolchain loop, not an app
  * bug. CMake issue #21106 / ninja "still dirty after 100 tries".
  *
+ * Root cause (2): worklets (and reanimated) glob sources under an absolute
+ * path (`${CMAKE_SOURCE_DIR}/../Common/cpp`). CMake encodes `C:\Users\…` as
+ * `C_/Users/…` inside the object-file directory. A high CMAKE_OBJECT_PATH_MAX
+ * (1024) disables CMake's hash-shortening, so ninja tries to mkdir a path
+ * that exceeds Windows MAX_PATH (260) and fails. CMake 3.22.1's ninja (the
+ * Android SDK default) does not use the `\\?\` long-path prefix. The Windows
+ * default CMAKE_OBJECT_PATH_MAX is 250 for this reason — keep it LOW so
+ * CMake hashes `C_/Users/…` down to a short directory name.
+ *
  * Fix (idempotent, version-tolerant string surgery on the two libraries):
  *   1. Strip CONFIGURE_DEPENDS from the GLOB_RECURSE calls — the source
  *      list of a third-party library does not change during a Gradle build.
  *   2. set(CMAKE_SUPPRESS_REGENERATION ON) so ninja never gets a RERUN_CMAKE
  *      rule (belt-and-suspenders for any other restat loop).
- *   3. set(CMAKE_OBJECT_PATH_MAX 1024) so CMake does not hash-rewrite object
- *      paths when the Windows 250-char default is exceeded (that rewrite is
- *      another way the manifest keeps looking dirty).
+ *   3. set(CMAKE_OBJECT_PATH_MAX 128) so CMake hash-shortens object paths
+ *      well before Windows MAX_PATH. (A previous 1024 value caused symptom 2.)
  *   4. Pass the same two -D flags through each library's Gradle cmake
  *      arguments() so they apply even if CMakeLists is later restored.
  *
@@ -47,7 +58,10 @@ const path = require('path');
 const TAG = '[with-windows-cmake]';
 const MARKER = '>>> with-windows-cmake';
 const CMAKE_SUPPRESS = '-DCMAKE_SUPPRESS_REGENERATION=ON';
-const CMAKE_OBJMAX = '-DCMAKE_OBJECT_PATH_MAX=1024';
+// Low on purpose — 1024 disabled hashing and blew past Windows MAX_PATH.
+const CMAKE_OBJMAX_VALUE = '128';
+const CMAKE_OBJMAX = `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`;
+const CMAKE_OBJMAX_SET = `set(CMAKE_OBJECT_PATH_MAX ${CMAKE_OBJMAX_VALUE})`;
 
 const NATIVE_LIBS = [
   { name: 'react-native-reanimated', files: ['CMakeLists.txt', 'build.gradle.kts'] },
@@ -78,7 +92,10 @@ function cmakeFixBlock(eol) {
     `# so ninja re-runs CMake 100 times and fails with`,
     `# "manifest 'build.ninja' still dirty after 100 tries".`,
     `set(CMAKE_SUPPRESS_REGENERATION ON)`,
-    `set(CMAKE_OBJECT_PATH_MAX 1024)`,
+    `# Keep object paths short. A high limit (1024) disabled hashing and made`,
+    `# ninja fail with mkdir(CMakeFiles/…/C_/Users/…/Common): No such file`,
+    `# or directory — the encoded absolute source path exceeds MAX_PATH (260).`,
+    CMAKE_OBJMAX_SET,
     `# <<< with-windows-cmake`,
   ].join(eol);
 }
@@ -89,15 +106,18 @@ function cmakeFixBlock(eol) {
  */
 function patchCMakeListsText(contents) {
   const globDepends = /\bfile\s*\(\s*GLOB[_A-Z]*\s+\S+\s+CONFIGURE_DEPENDS\b/;
-  if (contents.includes(MARKER) && !globDepends.test(contents)) {
-    return { contents, changed: false };
-  }
-
   const eol = detectEOL(contents);
   let next = contents;
   // Only strip the keyword from file(GLOB[_RECURSE] VAR CONFIGURE_DEPENDS …)
   // — never from comments or other text.
   next = next.replace(/(file\s*\(\s*GLOB[_A-Z]*\s+\S+)\s+CONFIGURE_DEPENDS\b/g, '$1');
+
+  // Migrate a previously-injected high limit (1024 disabled hashing).
+  next = next.replace(/set\(CMAKE_OBJECT_PATH_MAX\s+\d+\)/g, CMAKE_OBJMAX_SET);
+
+  if (next.includes(MARKER) && !globDepends.test(next) && next.includes(CMAKE_OBJMAX_SET)) {
+    return { contents: next, changed: next !== contents };
+  }
 
   if (!next.includes(MARKER)) {
     const block = cmakeFixBlock(eol);
@@ -118,19 +138,21 @@ function patchCMakeListsText(contents) {
  * @returns {{ contents: string, changed: boolean, missing: boolean }}
  */
 function patchGradleKtsText(contents) {
-  if (contents.includes(CMAKE_SUPPRESS) && contents.includes(CMAKE_OBJMAX)) {
-    return { contents, changed: false, missing: false };
+  // Migrate a previously-injected high limit without duplicating the flag.
+  let next = contents.replace(/-DCMAKE_OBJECT_PATH_MAX=\d+/g, `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`);
+  if (next.includes(CMAKE_SUPPRESS) && next.includes(CMAKE_OBJMAX)) {
+    return { contents: next, changed: next !== contents, missing: false };
   }
   const needle = '"-DANDROID_STL=c++_shared"';
-  const idx = contents.indexOf(needle);
+  const idx = next.indexOf(needle);
   if (idx === -1) {
-    return { contents, changed: false, missing: true };
+    return { contents: next, changed: next !== contents, missing: true };
   }
-  const lineStart = contents.lastIndexOf('\n', idx) + 1;
-  const indent = contents.slice(lineStart, idx);
-  const eol = detectEOL(contents);
+  const lineStart = next.lastIndexOf('\n', idx) + 1;
+  const indent = next.slice(lineStart, idx);
+  const eol = detectEOL(next);
   const insert = `${indent}${JSON.stringify(CMAKE_SUPPRESS)},${eol}${indent}${JSON.stringify(CMAKE_OBJMAX)},${eol}`;
-  const next = contents.slice(0, lineStart) + insert + contents.slice(lineStart);
+  next = next.slice(0, lineStart) + insert + next.slice(lineStart);
   return { contents: next, changed: next !== contents, missing: false };
 }
 
@@ -231,6 +253,8 @@ module.exports = {
   NATIVE_LIBS,
   CMAKE_SUPPRESS,
   CMAKE_OBJMAX,
+  CMAKE_OBJMAX_VALUE,
+  CMAKE_OBJMAX_SET,
   MARKER,
 };
 
