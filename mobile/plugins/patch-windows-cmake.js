@@ -6,7 +6,7 @@
  *
  * Symptoms (assembleRelease on Windows):
  *
- *   1. Task :react-native-reanimated:buildCMakeRelWithDebInfo[arm64-v8a][reanimated] FAILED
+ *   1. Task :react-native-*:buildCMakeRelWithDebInfo[arm64-v8a] FAILED
  *      C/C++: ninja: error: manifest 'build.ninja' still dirty after 100 tries
  *
  *   2. Task :react-native-worklets:buildCMakeRelWithDebInfo[arm64-v8a][worklets] FAILED
@@ -20,34 +20,40 @@
  * CONFIGURE_DEPENDS makes CMake emit a Ninja phony (`VerifyGlobs.cmake_force`)
  * with no inputs. On Windows that phony is always dirty, so ninja re-runs
  * CMake, the manifest is rewritten, ninja still sees it dirty, 100 times,
- * then gives up. This is a CMake+Ninja+Windows toolchain loop, not an app
- * bug. CMake issue #21106 / ninja "still dirty after 100 tries".
+ * then gives up. CMake issue #21106.
  *
- * Root cause (2): worklets (and reanimated) glob sources under an absolute
- * path (`${CMAKE_SOURCE_DIR}/../Common/cpp`). CMake encodes `C:\Users\…` as
- * `C_/Users/…` inside the object-file directory. A high CMAKE_OBJECT_PATH_MAX
- * (1024) disables CMake's hash-shortening, so ninja tries to mkdir a path
- * that exceeds Windows MAX_PATH (260) and fails. CMake 3.22.1's ninja (the
- * Android SDK default) does not use the `\\?\` long-path prefix. The Windows
- * default CMAKE_OBJECT_PATH_MAX is 250 for this reason — keep it LOW so
- * CMake hashes `C_/Users/…` down to a short directory name.
+ * Root cause (2): those globs run against an absolute path
+ * (`${CMAKE_SOURCE_DIR}/../Common/cpp`). CMake encodes `C:\Users\…` as
+ * `C_/Users/…` inside the object-file directory. The .cxx dir is already
+ * ~130 chars, so the encoded object path exceeds Windows MAX_PATH (260)
+ * and ninja mkdir fails. CMake 3.22.1's ninja (Android SDK default) does
+ * not use the `\\?\` long-path prefix.
+ *
+ * CMAKE_OBJECT_PATH_MAX is a trap on this toolchain:
+ *   - 1024 (tried first) is above the unhashed length, so CMake does not
+ *     hash and ninja gets C_/Users/… → mkdir fails.
+ *   - 128 (tried second) is below the *hashed* length (~215), so CMake
+ *     hashes, decides the hash still does not fit, falls back to the
+ *     original long path → mkdir fails the same way. Observed: .cxx hash
+ *     changed (4zc15271) but the mkdir path was still C_/Users/….
+ *   - 250 (Windows default) hashes long paths AND accepts the hashed
+ *     form. Used as a backstop. The real fix is (4) below.
  *
  * Fix (idempotent, version-tolerant string surgery on the two libraries):
- *   1. Strip CONFIGURE_DEPENDS from the GLOB_RECURSE calls — the source
- *      list of a third-party library does not change during a Gradle build.
- *   2. set(CMAKE_SUPPRESS_REGENERATION ON) so ninja never gets a RERUN_CMAKE
- *      rule (belt-and-suspenders for any other restat loop).
- *   3. set(CMAKE_OBJECT_PATH_MAX 128) so CMake hash-shortens object paths
- *      well before Windows MAX_PATH. (A previous 1024 value caused symptom 2.)
- *   4. Pass the same two -D flags through each library's Gradle cmake
- *      arguments() so they apply even if CMakeLists is later restored.
+ *   1. Strip CONFIGURE_DEPENDS from the GLOB_RECURSE calls.
+ *   2. set(CMAKE_SUPPRESS_REGENERATION ON) so ninja never gets RERUN_CMAKE.
+ *   3. set(CMAKE_OBJECT_PATH_MAX 250 CACHE STRING "" FORCE) BEFORE project()
+ *      — that is when the generator reads it. Gradle also gets the -D flag.
+ *   4. Relativize the globbed *_CPP_SOURCES before add_library so object
+ *      dirs become CMakeFiles/<tgt>.dir/__/Common/cpp/… instead of
+ *      CMakeFiles/<tgt>.dir/C_/Users/…. This is what actually keeps the
+ *      path under MAX_PATH, independent of CMake's hash fallback.
  *
  * Runs in THREE places so the flow is order-proof:
  *   1. npm postinstall of @performance-tracker/mobile
  *   2. every prebuild, via plugins/with-windows-cmake.js
- *   3. npm run clean:native — the documented repair for this exact error,
- *      so `git pull` + clean:native + assembleRelease is enough; prebuild
- *      is NOT required for the CMakeLists patch to take effect.
+ *   3. npm run clean:native — the documented repair,
+ *      so `git pull` + clean:native + assembleRelease is enough.
  *
  * Does not change app JS, native UX, or Gradle/AGP versions.
  */
@@ -57,11 +63,13 @@ const path = require('path');
 
 const TAG = '[with-windows-cmake]';
 const MARKER = '>>> with-windows-cmake';
+const REL_MARKER = '>>> with-windows-cmake-relsrc';
 const CMAKE_SUPPRESS = '-DCMAKE_SUPPRESS_REGENERATION=ON';
-// Low on purpose — 1024 disabled hashing and blew past Windows MAX_PATH.
-const CMAKE_OBJMAX_VALUE = '128';
+// Windows default. See file header: 1024 and 128 both failed, for
+// opposite reasons. 250 hashes C_/Users/… and still fits the hash.
+const CMAKE_OBJMAX_VALUE = '250';
 const CMAKE_OBJMAX = `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`;
-const CMAKE_OBJMAX_SET = `set(CMAKE_OBJECT_PATH_MAX ${CMAKE_OBJMAX_VALUE})`;
+const CMAKE_OBJMAX_SET = `set(CMAKE_OBJECT_PATH_MAX ${CMAKE_OBJMAX_VALUE} CACHE STRING "" FORCE)`;
 
 const NATIVE_LIBS = [
   { name: 'react-native-reanimated', files: ['CMakeLists.txt', 'build.gradle.kts'] },
@@ -88,16 +96,57 @@ function detectEOL(text) {
 function cmakeFixBlock(eol) {
   return [
     `# ${MARKER}`,
-    `# Windows+ninja: a CMake glob-verify phony with no inputs is always dirty,`,
-    `# so ninja re-runs CMake 100 times and fails with`,
-    `# "manifest 'build.ninja' still dirty after 100 tries".`,
-    `set(CMAKE_SUPPRESS_REGENERATION ON)`,
-    `# Keep object paths short. A high limit (1024) disabled hashing and made`,
-    `# ninja fail with mkdir(CMakeFiles/…/C_/Users/…/Common): No such file`,
-    `# or directory — the encoded absolute source path exceeds MAX_PATH (260).`,
+    `# Windows+ninja: glob-verify phonies loop, and object paths`,
+    `# must stay under MAX_PATH (260). This block MUST sit before project()`,
+    `# because that is when the generator reads CMAKE_OBJECT_PATH_MAX.`,
+    `# 1024: no hash, mkdir C_/Users/... failed.`,
+    `# 128: hash did not fit, CMake fell back to the long path, same mkdir.`,
+    `# 250: Windows default — long paths hash, hashed paths still fit.`,
     CMAKE_OBJMAX_SET,
+    `set(CMAKE_SUPPRESS_REGENERATION ON)`,
     `# <<< with-windows-cmake`,
   ].join(eol);
+}
+
+function relativeSourcesBlock(eol) {
+  return [
+    `# ${REL_MARKER}`,
+    `# Absolute glob results become C_/Users/... object dirs on Windows;`,
+    `# ninja mkdir then fails past MAX_PATH (260). Relativize so objects`,
+    `# land under CMakeFiles/<tgt>.dir/__/Common/cpp/... which stays short.`,
+    'foreach(_pt_var IN ITEMS',
+    '    WORKLETS_COMMON_CPP_SOURCES WORKLETS_ANDROID_CPP_SOURCES',
+    '    REANIMATED_COMMON_CPP_SOURCES REANIMATED_ANDROID_CPP_SOURCES',
+    '    REANIMATED_NATIVEVIEW_CPP_SOURCES)',
+    '  if(DEFINED ${_pt_var})',
+    '    set(_pt_rel "")',
+    '    foreach(_pt_src IN LISTS ${_pt_var})',
+    '      if(IS_ABSOLUTE "${_pt_src}")',
+    '        file(RELATIVE_PATH _pt_src "${CMAKE_CURRENT_SOURCE_DIR}" "${_pt_src}")',
+    '      endif()',
+    '      list(APPEND _pt_rel "${_pt_src}")',
+    '    endforeach()',
+    '    set(${_pt_var} "${_pt_rel}")',
+    '  endif()',
+    'endforeach()',
+    '# <<< with-windows-cmake-relsrc',
+  ].join(eol);
+}
+
+/**
+ * Drop a previously injected header (any 1024/128/250 generation) so a
+ * fresh one can be prepended in front of project(). Does not touch the
+ * relative-sources block (different marker).
+ */
+function stripOldHeaderBlock(contents) {
+  return contents.replace(
+    /# >>> with-windows-cmake(?!-relsrc)[^\n]*\r?\n[\s\S]*?# <<< with-windows-cmake(?!-relsrc)\r?\n(?:\r?\n)?/,
+    ''
+  );
+}
+
+function hasHeaderBlock(contents) {
+  return /# >>> with-windows-cmake(?!-relsrc)/.test(contents);
 }
 
 /**
@@ -105,29 +154,23 @@ function cmakeFixBlock(eol) {
  * @returns {{ contents: string, changed: boolean }}
  */
 function patchCMakeListsText(contents) {
-  const globDepends = /\bfile\s*\(\s*GLOB[_A-Z]*\s+\S+\s+CONFIGURE_DEPENDS\b/;
   const eol = detectEOL(contents);
   let next = contents;
-  // Only strip the keyword from file(GLOB[_RECURSE] VAR CONFIGURE_DEPENDS …)
-  // — never from comments or other text.
+
   next = next.replace(/(file\s*\(\s*GLOB[_A-Z]*\s+\S+)\s+CONFIGURE_DEPENDS\b/g, '$1');
+  next = stripOldHeaderBlock(next);
 
-  // Migrate a previously-injected high limit (1024 disabled hashing).
-  next = next.replace(/set\(CMAKE_OBJECT_PATH_MAX\s+\d+\)/g, CMAKE_OBJMAX_SET);
-
-  if (next.includes(MARKER) && !globDepends.test(next) && next.includes(CMAKE_OBJMAX_SET)) {
-    return { contents: next, changed: next !== contents };
+  if (!hasHeaderBlock(next)) {
+    next = cmakeFixBlock(eol) + eol + eol + next.replace(/^\uFEFF/, '');
   }
 
-  if (!next.includes(MARKER)) {
-    const block = cmakeFixBlock(eol);
-    const req = /^(cmake_minimum_required\([^)]*\))[ \t]*\r?$/m;
-    if (req.test(next)) {
-      next = next.replace(req, `$1${eol}${eol}${block}`);
-    } else {
-      next = block + eol + eol + next;
+  if (!next.includes(REL_MARKER)) {
+    const addLib = /^add_library\s*\(/m;
+    if (addLib.test(next)) {
+      next = next.replace(addLib, `${relativeSourcesBlock(eol)}${eol}${eol}add_library(`);
     }
   }
+
   return { contents: next, changed: next !== contents };
 }
 
@@ -138,7 +181,7 @@ function patchCMakeListsText(contents) {
  * @returns {{ contents: string, changed: boolean, missing: boolean }}
  */
 function patchGradleKtsText(contents) {
-  // Migrate a previously-injected high limit without duplicating the flag.
+  // Migrate a previously-injected 1024/128 without duplicating the flag.
   let next = contents.replace(/-DCMAKE_OBJECT_PATH_MAX=\d+/g, `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`);
   if (next.includes(CMAKE_SUPPRESS) && next.includes(CMAKE_OBJMAX)) {
     return { contents: next, changed: next !== contents, missing: false };
@@ -256,6 +299,7 @@ module.exports = {
   CMAKE_OBJMAX_VALUE,
   CMAKE_OBJMAX_SET,
   MARKER,
+  REL_MARKER,
 };
 
 if (require.main === module) {

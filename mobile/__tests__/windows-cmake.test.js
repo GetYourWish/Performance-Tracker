@@ -5,8 +5,10 @@
 //      caused by file(GLOB_RECURSE … CONFIGURE_DEPENDS) in
 //      react-native-reanimated 4.6.x and react-native-worklets 0.12.x.
 //   2. "ninja: error: mkdir(CMakeFiles/worklets.dir/C_/Users/…/Common)"
-//      caused by CMAKE_OBJECT_PATH_MAX=1024 disabling CMake's hash-shortening
-//      of object paths, so ninja mkdir exceeds Windows MAX_PATH (260).
+//      caused by absolute glob results encoded as C_/Users/... object
+//      dirs that exceed Windows MAX_PATH (260). CMAKE_OBJECT_PATH_MAX
+//      1024 and 128 both failed (no hash / hash-didn't-fit fallback).
+//      The real fix is relativizing *_CPP_SOURCES before add_library.
 // The transforms are pure string work, tested against excerpts of the
 // real 4.6.0 / 0.12.1 files shipped on npm.
 
@@ -23,6 +25,7 @@ const {
   CMAKE_OBJMAX_VALUE,
   CMAKE_OBJMAX_SET,
   MARKER,
+  REL_MARKER,
   NATIVE_LIBS
 } = require('../plugins/patch-windows-cmake')
 
@@ -48,6 +51,8 @@ file(GLOB_RECURSE WORKLETS_COMMON_CPP_SOURCES CONFIGURE_DEPENDS
      "\${COMMON_CPP_DIR}/worklets/*.cpp")
 file(GLOB_RECURSE WORKLETS_ANDROID_CPP_SOURCES CONFIGURE_DEPENDS
      "\${ANDROID_CPP_DIR}/worklets/*.cpp")
+
+add_library(worklets SHARED \${WORKLETS_COMMON_CPP_SOURCES})
 `
 
 const REANIMATED_KTS = `        @Suppress("UnstableApiUsage")
@@ -65,7 +70,7 @@ const REANIMATED_KTS = `        @Suppress("UnstableApiUsage")
 `
 
 describe('patchCMakeListsText', () => {
-  test('strips CONFIGURE_DEPENDS and inserts the suppress-regeneration block (reanimated shape)', () => {
+  test('strips CONFIGURE_DEPENDS, prepends the header before project(), relativizes sources (reanimated shape)', () => {
     const { contents, changed } = patchCMakeListsText(REANIMATED_CMAKELISTS)
     expect(changed).toBe(true)
     expect(contents).not.toMatch(/\bCONFIGURE_DEPENDS\b/)
@@ -74,14 +79,20 @@ describe('patchCMakeListsText', () => {
     expect(contents).toContain('set(CMAKE_SUPPRESS_REGENERATION ON)')
     expect(contents).toContain(CMAKE_OBJMAX_SET)
     expect(contents).not.toContain('set(CMAKE_OBJECT_PATH_MAX 1024)')
+    expect(contents).not.toContain('set(CMAKE_OBJECT_PATH_MAX 128)')
     expect(contents).toContain(MARKER)
-    // block lands after cmake_minimum_required, sources still compile
-    const reqAt = contents.indexOf('cmake_minimum_required')
-    const blockAt = contents.indexOf('set(CMAKE_SUPPRESS_REGENERATION ON)')
+    expect(contents).toContain(REL_MARKER)
+    expect(contents).toContain('file(RELATIVE_PATH _pt_src')
+    // header MUST sit before project() — generator reads OBJECT_PATH_MAX then
+    const objmaxAt = contents.indexOf('set(CMAKE_OBJECT_PATH_MAX')
+    const projAt = contents.search(/^project\s*\(/m)
+    const relAt = contents.indexOf(REL_MARKER)
     const globAt = contents.indexOf('file(GLOB_RECURSE')
-    expect(reqAt).toBeGreaterThanOrEqual(0)
-    expect(blockAt).toBeGreaterThan(reqAt)
-    expect(globAt).toBeGreaterThan(blockAt)
+    const addAt = contents.indexOf('add_library(')
+    expect(objmaxAt).toBeGreaterThanOrEqual(0)
+    expect(projAt).toBeGreaterThan(objmaxAt)
+    expect(relAt).toBeGreaterThan(globAt)
+    expect(addAt).toBeGreaterThan(relAt)
   })
 
   test('handles cmake_minimum_required appearing before project() (worklets shape)', () => {
@@ -91,6 +102,8 @@ describe('patchCMakeListsText', () => {
     expect(contents).toContain('file(GLOB_RECURSE WORKLETS_COMMON_CPP_SOURCES')
     expect(contents).toContain('set(CMAKE_SUPPRESS_REGENERATION ON)')
     expect(contents).toContain(CMAKE_OBJMAX_SET)
+    expect(contents).toContain(REL_MARKER)
+    expect(contents.indexOf('set(CMAKE_OBJECT_PATH_MAX')).toBeLessThan(contents.search(/^project\s*\(/m))
   })
 
   test('is idempotent', () => {
@@ -98,23 +111,29 @@ describe('patchCMakeListsText', () => {
     const twice = patchCMakeListsText(once)
     expect(twice.changed).toBe(false)
     expect(twice.contents).toBe(once)
-    expect(twice.contents.split('CMAKE_SUPPRESS_REGENERATION').length - 1).toBe(1)
-    expect(twice.contents.split('CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
+    expect(twice.contents.split('set(CMAKE_SUPPRESS_REGENERATION').length - 1).toBe(1)
+    expect(twice.contents.split('set(CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
+    expect(twice.contents.split(REL_MARKER).length - 1).toBe(1)
   })
 
-  test('migrates a previously-injected CMAKE_OBJECT_PATH_MAX 1024 down to 128', () => {
-    const old = patchCMakeListsText(REANIMATED_CMAKELISTS).contents.replace(
-      CMAKE_OBJMAX_SET,
-      'set(CMAKE_OBJECT_PATH_MAX 1024)'
-    )
-    expect(old).toContain('set(CMAKE_OBJECT_PATH_MAX 1024)')
-    const migrated = patchCMakeListsText(old)
+  test('migrates a previously-injected CMAKE_OBJECT_PATH_MAX 1024/128 header to 250 + relsrc', () => {
+    const with128 = `# ${MARKER}
+set(CMAKE_SUPPRESS_REGENERATION ON)
+set(CMAKE_OBJECT_PATH_MAX 128)
+# <<< with-windows-cmake
+
+` + REANIMATED_CMAKELISTS.replace(/ CONFIGURE_DEPENDS/g, '')
+    expect(with128).toContain('set(CMAKE_OBJECT_PATH_MAX 128)')
+    const migrated = patchCMakeListsText(with128)
     expect(migrated.changed).toBe(true)
     expect(migrated.contents).toContain(CMAKE_OBJMAX_SET)
+    expect(migrated.contents).not.toContain('set(CMAKE_OBJECT_PATH_MAX 128)')
     expect(migrated.contents).not.toContain('set(CMAKE_OBJECT_PATH_MAX 1024)')
-    expect(migrated.contents.split('CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
-    expect(migrated.contents).toContain(MARKER)
-    expect(migrated.contents).not.toMatch(/\bCONFIGURE_DEPENDS\b/)
+    expect(migrated.contents.split('set(CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
+    expect(migrated.contents).toContain(REL_MARKER)
+    expect(migrated.contents.indexOf('set(CMAKE_OBJECT_PATH_MAX')).toBeLessThan(
+      migrated.contents.search(/^project\s*\(/m)
+    )
   })
 
   test('preserves CRLF when the input is a Windows checkout', () => {
@@ -134,14 +153,15 @@ describe('patchGradleKtsText', () => {
     expect(contents).toContain(CMAKE_SUPPRESS)
     expect(contents).toContain(CMAKE_OBJMAX)
     expect(CMAKE_OBJMAX).toContain(CMAKE_OBJMAX_VALUE)
+    expect(CMAKE_OBJMAX_VALUE).toBe('250')
     const suppressAt = contents.indexOf(CMAKE_SUPPRESS)
     const stlAt = contents.indexOf('-DANDROID_STL=c++_shared')
     expect(suppressAt).toBeGreaterThanOrEqual(0)
     expect(stlAt).toBeGreaterThan(suppressAt)
-    // still a valid arguments() list — flags are quoted comma-separated
     expect(contents).toContain(`"${CMAKE_SUPPRESS}",`)
     expect(contents).toContain(`"${CMAKE_OBJMAX}",`)
     expect(contents).not.toContain('CMAKE_OBJECT_PATH_MAX=1024')
+    expect(contents).not.toContain('CMAKE_OBJECT_PATH_MAX=128')
   })
 
   test('is idempotent', () => {
@@ -153,19 +173,21 @@ describe('patchGradleKtsText', () => {
     expect(twice.contents.split('CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
   })
 
-  test('migrates a previously-injected -DCMAKE_OBJECT_PATH_MAX=1024 without duplicating flags', () => {
-    const old = patchGradleKtsText(REANIMATED_KTS).contents.replace(
-      `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`,
-      '-DCMAKE_OBJECT_PATH_MAX=1024'
-    )
-    expect(old).toContain('-DCMAKE_OBJECT_PATH_MAX=1024')
-    const migrated = patchGradleKtsText(old)
-    expect(migrated.changed).toBe(true)
-    expect(migrated.missing).toBe(false)
-    expect(migrated.contents).toContain(CMAKE_OBJMAX)
-    expect(migrated.contents).not.toContain('CMAKE_OBJECT_PATH_MAX=1024')
-    expect(migrated.contents.split(CMAKE_SUPPRESS).length - 1).toBe(1)
-    expect(migrated.contents.split('CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
+  test('migrates a previously-injected -DCMAKE_OBJECT_PATH_MAX=1024 or 128 without duplicating flags', () => {
+    for (const oldVal of ['1024', '128']) {
+      const old = patchGradleKtsText(REANIMATED_KTS).contents.replace(
+        `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`,
+        `-DCMAKE_OBJECT_PATH_MAX=${oldVal}`
+      )
+      expect(old).toContain(`-DCMAKE_OBJECT_PATH_MAX=${oldVal}`)
+      const migrated = patchGradleKtsText(old)
+      expect(migrated.changed).toBe(true)
+      expect(migrated.missing).toBe(false)
+      expect(migrated.contents).toContain(CMAKE_OBJMAX)
+      expect(migrated.contents).not.toContain(`CMAKE_OBJECT_PATH_MAX=${oldVal}`)
+      expect(migrated.contents.split(CMAKE_SUPPRESS).length - 1).toBe(1)
+      expect(migrated.contents.split('CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
+    }
   })
 
   test('reports missing when there is no cmake ANDROID_STL argument to anchor on', () => {
@@ -209,6 +231,7 @@ describe('patchWindowsCmake filesystem walk', () => {
       expect(cmake).not.toMatch(/\bCONFIGURE_DEPENDS\b/)
       expect(cmake).toContain('CMAKE_SUPPRESS_REGENERATION')
       expect(cmake).toContain(CMAKE_OBJMAX_SET)
+      expect(cmake).toContain(REL_MARKER)
       const kts = fs.readFileSync(path.join(nm, lib.name, 'android', 'build.gradle.kts'), 'utf8')
       expect(kts).toContain(CMAKE_SUPPRESS)
       expect(kts).toContain(CMAKE_OBJMAX)
@@ -234,7 +257,7 @@ describe('patchWindowsCmake filesystem walk', () => {
     expect(after).toBe(before)
   })
 
-  test('migrates on-disk 1024 patches in both libraries without a second insert', () => {
+  test('migrates on-disk 1024/128 patches in both libraries without a second insert', () => {
     const { mobileRoot, nm } = seedLayout({ hoisted: false })
     patchWindowsCmake(mobileRoot)
     for (const lib of NATIVE_LIBS) {
@@ -242,13 +265,13 @@ describe('patchWindowsCmake filesystem walk', () => {
       const ktsFile = path.join(nm, lib.name, 'android', 'build.gradle.kts')
       fs.writeFileSync(
         cmakeFile,
-        fs.readFileSync(cmakeFile, 'utf8').replace(CMAKE_OBJMAX_SET, 'set(CMAKE_OBJECT_PATH_MAX 1024)')
+        fs.readFileSync(cmakeFile, 'utf8').replace(CMAKE_OBJMAX_SET, 'set(CMAKE_OBJECT_PATH_MAX 128)')
       )
       fs.writeFileSync(
         ktsFile,
         fs.readFileSync(ktsFile, 'utf8').replace(
           `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`,
-          '-DCMAKE_OBJECT_PATH_MAX=1024'
+          '-DCMAKE_OBJECT_PATH_MAX=128'
         )
       )
     }
@@ -260,10 +283,11 @@ describe('patchWindowsCmake filesystem walk', () => {
       const cmake = fs.readFileSync(path.join(nm, lib.name, 'android', 'CMakeLists.txt'), 'utf8')
       const kts = fs.readFileSync(path.join(nm, lib.name, 'android', 'build.gradle.kts'), 'utf8')
       expect(cmake).toContain(CMAKE_OBJMAX_SET)
-      expect(cmake).not.toContain('set(CMAKE_OBJECT_PATH_MAX 1024)')
-      expect(cmake.split('CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
+      expect(cmake).not.toContain('set(CMAKE_OBJECT_PATH_MAX 128)')
+      expect(cmake.split('set(CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
+      expect(cmake).toContain(REL_MARKER)
       expect(kts).toContain(CMAKE_OBJMAX)
-      expect(kts).not.toContain('CMAKE_OBJECT_PATH_MAX=1024')
+      expect(kts).not.toContain('CMAKE_OBJECT_PATH_MAX=128')
       expect(kts.split('CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
     }
   })

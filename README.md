@@ -295,10 +295,12 @@ a bug in the app's code:
 The repo now patches those CMakeLists (and the libraries' Gradle cmake
 arguments) at `npm install`, at prebuild, and as part of `clean:native`.
 The patch strips `CONFIGURE_DEPENDS`, sets `CMAKE_SUPPRESS_REGENERATION`,
-and keeps `CMAKE_OBJECT_PATH_MAX=128` so CMake hash-shortens object paths.
-After a `git pull` of this fix you still have to wipe the **already-written**
-`.cxx` scratch from the failed run, otherwise ninja keeps the old manifest
-and the old long object paths:
+keeps `CMAKE_OBJECT_PATH_MAX=250` (the Windows default — 1024 skipped
+hashing, 128 hashed then fell back because the hash still did not fit),
+and **relativizes** the globbed C++ sources so object dirs are
+`__/Common/cpp/...` instead of `C_/Users/...`. After a `git pull` of this
+fix you still have to wipe the **already-written** `.cxx` scratch from the
+failed run, otherwise ninja keeps the old long object paths:
 
 ```bash
 npm run clean:native --workspace @performance-tracker/mobile
