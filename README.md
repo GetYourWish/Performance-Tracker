@@ -155,6 +155,16 @@ That script patches Reanimated/Worklets CMake for Windows (so ninja stops
 regenerating forever) and deletes the stale `.cxx` caches from the failed
 run. Details under **Android build troubleshooting** below.
 
+If instead Gradle dies on
+`Task ':expo:releaseSourcesJar' uses this output of task ':expo:generatePackagesList'`,
+re-apply the Expo Gradle 9 patches (no prebuild, no cache wipe) and retry:
+
+```bash
+node mobile/plugins/patch-expo-gradle-kotlin.js
+cd mobile/android
+.\gradlew assembleRelease
+```
+
 A successful release build now ends with this gate (added by
 `mobile/plugins/with-standalone-release.js`):
 

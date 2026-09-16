@@ -23,6 +23,8 @@
  *      - automatic SoftwareComponent creation (components.release) gone,
  *        breaking the publishing setup
  *      - srcDirs(Provider) forbidden in the SourceSet DSL
+ *      - :expo:releaseSourcesJar packages generatePackagesList output
+ *        without a declared dependency (Gradle 9 implicit-dependency error)
  *    The two included builds compile from source at build time, so patching
  *    their Kotlin sources fixes the runtime failures.
  *
@@ -309,6 +311,86 @@ function patchExpoAutolinkingPluginAgp9(contents, label, filePath) {
   return contents.replace(old, patched);
 }
 
+/**
+ * Gradle 9 fails assembleRelease with:
+ *   Task ':expo:releaseSourcesJar' uses this output of task ':expo:generatePackagesList'
+ *   without declaring an explicit or implicit dependency.
+ *
+ * generatePackagesList writes build/generated/expo/src/main/java, which is on
+ * the main source set, so AGP's withSourcesJar() task packages it. preBuild
+ * already depends on generatePackagesList (so compilation is ordered); the
+ * sources JAR does not. Wire every *SourcesJar task to that producer.
+ */
+function patchExpoAutolinkingSourcesJarAgp9(contents, label, filePath) {
+  if (contents.includes(`${AGP9_MARKER} Gradle 9 fails assembleRelease when releaseSourcesJar`)) {
+    console.log(`${TAG} ok: ${label} already wires SourcesJar -> generatePackagesList`);
+    return contents;
+  }
+  const old = [
+    '    // Ensures that the task is executed before the build.',
+    '    project.tasks',
+    '      .named("preBuild", Task::class.java)',
+    '      .dependsOn(generatePackagesList)',
+    '',
+    '    // Adds the generated file to the source set.',
+  ].join('\n');
+  const patched = [
+    '    // Ensures that the task is executed before the build.',
+    '    project.tasks',
+    '      .named("preBuild", Task::class.java)',
+    '      .dependsOn(generatePackagesList)',
+    '',
+    `    // ${AGP9_MARKER} Gradle 9 fails assembleRelease when releaseSourcesJar`,
+    '    // packages build/generated/expo/src/main/java (output of generatePackagesList)',
+    '    // without declaring a dependency on that task.',
+    '    project.tasks.configureEach { task ->',
+    '      if (task.name.endsWith("SourcesJar")) {',
+    '        task.dependsOn(generatePackagesList)',
+    '      }',
+    '    }',
+    '',
+    '    // Adds the generated file to the source set.',
+  ].join('\n');
+  if (!contents.includes(old)) {
+    console.warn(
+      `${TAG} WARNING: ${label} does not match the expected preBuild.dependsOn(generatePackagesList) shape — ` +
+        `SourcesJar dependency patch NOT applied (${filePath}). The build will fail with ` +
+        `":expo:releaseSourcesJar uses this output of task ':expo:generatePackagesList'" until this script is updated.`
+    );
+    return null;
+  }
+  console.log(`${TAG} patched ${label}: *SourcesJar.dependsOn(generatePackagesList) for Gradle 9`);
+  return contents.replace(old, patched);
+}
+
+const EXPO_SOURCES_JAR_MARKER = `${AGP9_MARKER} releaseSourcesJar dependsOn generatePackagesList`;
+
+/**
+ * Same SourcesJar fix, applied directly on :expo's Groovy build.gradle.
+ * Takes effect on the next Gradle run without recompiling the autolinking
+ * included-build (the .kt patch above does that on a cold plugin compile).
+ */
+function patchExpoAndroidBuildGradleSourcesJar(contents, label, filePath) {
+  if (contents.includes(EXPO_SOURCES_JAR_MARKER)) {
+    console.log(`${TAG} ok: ${label} already wires SourcesJar -> generatePackagesList`);
+    return contents;
+  }
+  const block = [
+    '',
+    `// ${EXPO_SOURCES_JAR_MARKER}`,
+    '// Gradle 9: :expo:releaseSourcesJar packages generatePackagesList output.',
+    'tasks.configureEach { task ->',
+    '  if (task.name.endsWith("SourcesJar")) {',
+    '    task.dependsOn("generatePackagesList")',
+    '  }',
+    '}',
+    '',
+  ].join('\n');
+  console.log(`${TAG} patched ${label}: SourcesJar.dependsOn(generatePackagesList)`);
+  if (!contents.endsWith('\n')) contents += '\n';
+  return contents + block;
+}
+
 /** react-native-worklets version from the candidate node_modules list, or null. */
 function readWorkletsVersion(nodeModulesList) {
   for (const nm of nodeModulesList) {
@@ -480,7 +562,15 @@ function patchExpoGradleKotlin(startDir) {
           'ExpoAutolinkingPlugin.kt',
         ],
         'expo-gradle-plugin/expo-autolinking-plugin/.../ExpoAutolinkingPlugin.kt',
-        [patchExpoAutolinkingPluginAgp9]
+        [patchExpoAutolinkingPluginAgp9, patchExpoAutolinkingSourcesJarAgp9]
+      ) && allFound;
+
+    allFound =
+      patchTarget(
+        candidates,
+        ['expo', 'android', 'build.gradle'],
+        'expo/android/build.gradle',
+        [patchExpoAndroidBuildGradleSourcesJar]
       ) && allFound;
   } else if (agpMajor !== null) {
     console.log(`${TAG} react-native catalog pins AGP ${agpMajor}.x < 9 -> AGP 9 patches skipped`);
@@ -508,7 +598,12 @@ function patchExpoGradleKotlin(startDir) {
   return allFound;
 }
 
-module.exports = { patchExpoGradleKotlin };
+module.exports = {
+  patchExpoGradleKotlin,
+  patchExpoAutolinkingSourcesJarAgp9,
+  patchExpoAndroidBuildGradleSourcesJar,
+  AGP9_MARKER,
+};
 
 if (require.main === module) {
   // Run as `node plugins/patch-expo-gradle-kotlin.js` (mobile postinstall).
