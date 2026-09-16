@@ -267,6 +267,38 @@ looked out-of-date, 100 times in a row — a Windows-specific toolchain hiccup,
 3. **System clock drift** (ninja compares file timestamps): make sure Windows
    time sync is on (Settings → Time & language). Rare, but documented.
 
+#### The app says "No tracker.json in this folder"
+
+That screen is not an error state to panic about — it means exactly what it
+says: **the folder you picked on the phone does not contain `tracker.json`
+(yet)**. The file's journey is:
+
+```
+desktop PC:  <SyncThis folder>\tracker.json  (created by the desktop app)
+                    │  Syncthing syncs the folder to the phone…
+                    ▼
+phone:       <Syncthing folder>/tracker.json  ← pick THIS folder in the app
+```
+
+Checklist, in order:
+
+1. On the PC: the desktop app has run at least once and its data file exists
+   (default: a `SyncThis` folder next to the desktop app's .exe, or
+   `Documents\SyncThis`, or a custom path chosen in the desktop app).
+2. Syncthing on the PC shares **that exact folder**; Syncthing on the phone
+   has accepted the share and shows the folder as **Up to Date** — open the
+   Syncthing app and verify, and confirm `tracker.json` is visible in the
+   folder with any Android Files app.
+3. In Performance Tracker, pick the phone-side Syncthing folder (the one from
+   step 2 — not Downloads, not the folder's parent).
+4. If Syncthing finishes syncing *after* you picked the folder, the app
+   re-checks on its own every ~15 s and opens the board the moment the file
+   arrives — or tap **Check again** on the setup screen to force it.
+
+No PC-side data file yet, or you want a fresh start on the phone? Tap
+**Create default tracker.json** — Syncthing then carries that file back to
+the PC, and the desktop app picks it up.
+
 #### Android SDK prerequisites
 
 `gradlew assembleDebug` needs an Android SDK (the Gradle build auto-installs

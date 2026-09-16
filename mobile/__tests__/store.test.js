@@ -467,3 +467,84 @@ describe('tracker store', () => {
     expect(parsed.difficulties).toHaveLength(4)
   })
 })
+
+// ---------------------------------------------------------------------------
+// load watchdog: a SAF read that never settles must not spin 'loading' forever
+// ---------------------------------------------------------------------------
+
+describe('load watchdog (stalled SAF reads)', () => {
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  function makeStalledAdapter() {
+    const adapter = createMemoryAdapter()
+    adapter._dirs.set(DIR, new Set())
+    let resolveListing = null
+    adapter.listChildren = () =>
+      new Promise(resolve => {
+        resolveListing = resolve
+      })
+    // test handle to let the stalled read eventually settle
+    adapter._releaseListing = children => resolveListing(children)
+    return adapter
+  }
+
+  test('a load that never settles becomes a recoverable no-folder state', async () => {
+    jest.useFakeTimers()
+    const adapter = makeStalledAdapter()
+    const store = createTrackerStore({ adapter, dirUri: DIR, fileName: FILE })
+    const pending = store.load() // never resolves — that is the point
+    pending.catch(() => {}) // no unhandled-rejection noise
+    await jest.advanceTimersByTimeAsync(15000)
+    const snap = store.getSnapshot()
+    expect(snap.status).toBe('no-folder')
+    expect(snap.errorMessage).toMatch(/timed out/i)
+    expect(snap.errorMessage).toMatch(/Re-grant folder access/)
+  })
+
+  test('a load that settles normally is untouched by the watchdog', async () => {
+    jest.useFakeTimers()
+    const adapter = createMemoryAdapter()
+    const store = await createReadyStore(adapter, sampleData())
+    await jest.advanceTimersByTimeAsync(60000)
+    expect(store.getSnapshot().status).toBe('ready')
+  })
+
+  test('a late success after the watchdog fired still wins (no newer load started)', async () => {
+    jest.useFakeTimers()
+    const adapter = makeStalledAdapter()
+    const store = createTrackerStore({ adapter, dirUri: DIR, fileName: FILE })
+    const pending = store.load()
+    await jest.advanceTimersByTimeAsync(15000)
+    expect(store.getSnapshot().status).toBe('no-folder')
+    adapter._dirs.set(DIR, new Set([DIR + FILE]))
+    adapter._files.set(DIR + FILE, { content: JSON.stringify(sampleData(), null, 2), mtime: 1 })
+    adapter._releaseListing([DIR + FILE])
+    await jest.advanceTimersByTimeAsync(0) // flush microtasks
+    expect(store.getSnapshot().status).toBe('ready')
+    await pending.catch(() => {})
+  })
+
+  test('a newer load supersedes a stalled older one (generation guard)', async () => {
+    jest.useFakeTimers()
+    const adapter = makeStalledAdapter()
+    const store = createTrackerStore({ adapter, dirUri: DIR, fileName: FILE })
+    const stalled = store.load() // load #1 — stalls
+    await jest.advanceTimersByTimeAsync(15000)
+    expect(store.getSnapshot().status).toBe('no-folder')
+
+    // user taps "Retry loading" — the retry uses a working adapter
+    adapter.listChildren = async () => [DIR + FILE]
+    adapter._files.set(DIR + FILE, { content: JSON.stringify(sampleData(), null, 2), mtime: 1 })
+    await store.load() // load #2 — completes
+    expect(store.getSnapshot().status).toBe('ready')
+
+    // NOW the stalled load #1 finally settles — it must not repaint state
+    adapter._dirs.set(DIR, new Set([DIR + FILE]))
+    adapter._releaseListing([DIR + FILE])
+    await jest.advanceTimersByTimeAsync(0)
+    expect(store.getSnapshot().status).toBe('ready')
+    await stalled.catch(() => {})
+  })
+})

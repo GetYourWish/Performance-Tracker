@@ -21,11 +21,20 @@
 //    .backups/ with the desktop naming scheme, rolling window of 20.
 //  - CONFLICTS: Syncthing's tracker*-conflict-* copies are surfaced as a
 //    list; never auto-loaded, never auto-deleted, never healed.
+//  - WATCHDOG: SAF folder reads normally settle in well under a second; on
+//    a few devices a stale persisted permission makes them hang forever,
+//    which used to leave the UI spinning on 'loading' with no recovery
+//    path. A load that has not settled in LOAD_TIMEOUT_MS becomes an
+//    actionable 'no-folder' state (re-grant screen) instead.
 
 import { checkSchemaVersion, validateAndHealData, createDefaultData } from '@performance-tracker/core'
 import { backupFileName, selectOldBackups } from './backups.js'
 
 export const CONFLICT_PATTERN = /tracker.*-conflict-/
+
+export const LOAD_TIMEOUT_MS = 15000
+export const LOAD_TIMEOUT_MESSAGE =
+  'Reading the data folder timed out. This usually means Android no longer honors the saved folder permission. Tap "Re-grant folder access" below and pick the folder again — your data was not modified.'
 
 function compactOf(value) {
   return JSON.stringify(value)
@@ -52,6 +61,7 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
   let lastStat = null // { exists, size, modificationTime }
   let busy = false // write in flight → polling skips
   let dirListing = [] // last child URIs (conflict detection)
+  let loadSeq = 0 // generation guard: only the newest load may repaint state
 
   function notify(next) {
     Object.assign(state, next)
@@ -109,18 +119,29 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
   }
 
   // Core load path: list → find target → read → gate → heal → snapshot.
+  // Generation-guarded: concurrent loads (poll timer + manual retry) must
+  // not interleave — only the newest load is allowed to repaint state, and
+  // a watchdog converts a stalled SAF read into a recoverable state.
   async function load() {
+    const gen = ++loadSeq
+    const notifyIfCurrent = next => {
+      if (gen === loadSeq) notify(next)
+      return gen === loadSeq
+    }
     if (!state.folderUri) {
-      notify({ status: 'no-folder' })
+      notifyIfCurrent({ status: 'no-folder' })
       return state
     }
-    notify({ status: 'loading', errorMessage: null })
+    notifyIfCurrent({ status: 'loading', errorMessage: null })
+    const watchdog = setTimeout(() => {
+      notifyIfCurrent({ status: 'no-folder', errorMessage: LOAD_TIMEOUT_MESSAGE })
+    }, LOAD_TIMEOUT_MS)
     try {
       const conflicts = await listFolder()
       lastStat = targetUri ? await adapter.statDocument(targetUri) : null
 
       if (!targetUri) {
-        notify({ status: 'missing', data: null, conflicts, lastMissingAt: Date.now() })
+        notifyIfCurrent({ status: 'missing', data: null, conflicts, lastMissingAt: Date.now() })
         return state
       }
 
@@ -129,13 +150,13 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
       try {
         parsed = JSON.parse(raw)
       } catch (e) {
-        notify({ status: 'error', errorMessage: 'Corrupt JSON: ' + e.message, conflicts })
+        notifyIfCurrent({ status: 'error', errorMessage: 'Corrupt JSON: ' + e.message, conflicts })
         return state
       }
 
       const gateErr = gateOrThrow(parsed)
       if (gateErr) {
-        notify({
+        notifyIfCurrent({
           status: 'schema-too-new',
           data: null,
           schemaVersion: gateErr.schemaVersion,
@@ -147,12 +168,14 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
       const healed = validateAndHealData(parsed)
       knownRaw = raw
       healedCompact = compactOf(healed)
-      notify({ status: 'ready', data: healed, conflicts, schemaVersion: null, errorMessage: null })
+      notifyIfCurrent({ status: 'ready', data: healed, conflicts, schemaVersion: null, errorMessage: null })
       return state
     } catch (e) {
       // SAF permission lost (reboot/app standby) or folder gone → setup again
-      notify({ status: 'no-folder', errorMessage: e.message })
+      notifyIfCurrent({ status: 'no-folder', errorMessage: e.message })
       return state
+    } finally {
+      clearTimeout(watchdog)
     }
   }
 

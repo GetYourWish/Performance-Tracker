@@ -1,7 +1,9 @@
 // SetupScreen — Android equivalent of desktop SetupScreen.jsx.
 // States:
 //  - fresh start: pick the Syncthing folder (SAF tree picker)
-//  - folder picked but tracker.json missing: offer to create the default file
+//  - folder picked but tracker.json missing: Syncthing has not delivered the
+//    file yet (or the wrong folder was picked) — the app re-checks on its
+//    own every 15 s, plus manual "Check again" and "Create default" options
 //  - persisted folder permission lost (reboot/standby): re-grant access
 
 import React, { useState } from 'react'
@@ -49,7 +51,7 @@ export function SetupScreen({ theme, mode, folderUri, errorMessage, onPickFolder
 
   const description =
     mode === 'missing'
-      ? 'The folder you picked does not contain a tracker.json yet. Create the default data file here to start tracking — the desktop app will pick it up through Syncthing.'
+      ? 'The folder you picked has no tracker.json in it yet. That file lives on your PC (the desktop app\u2019s data folder) and reaches this phone through Syncthing — if the first sync has not finished, the file is simply not here yet. Once it arrives this app picks it up on its own within ~15 seconds, or tap "Check again" after Syncthing shows the folder as up to date. Picked the wrong folder? Choose a different one below.'
       : mode === 'regrant'
         ? (errorMessage || 'Android revoked access to the data folder.') +
           '\n\nRe-select your Syncthing folder to continue. Your data was not modified.'
@@ -102,7 +104,10 @@ export function SetupScreen({ theme, mode, folderUri, errorMessage, onPickFolder
             <View style={{ gap: SPACING.md }}>
               <FilledButton theme={theme} label={mode === 'regrant' ? 'Re-grant folder access' : 'Choose Syncthing folder'} onPress={handlePick} />
               {mode === 'missing' ? (
-                <FilledButton theme={theme} label="Create default tracker.json" onPress={handleCreate} />
+                <>
+                  <FilledButton theme={theme} label="Check again" onPress={onReload} />
+                  <FilledButton theme={theme} label="Create default tracker.json" onPress={handleCreate} />
+                </>
               ) : null}
               {mode === 'regrant' ? (
                 <FilledButton theme={theme} label="Retry loading" onPress={onReload} />
