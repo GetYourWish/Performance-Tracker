@@ -1,43 +1,51 @@
 /**
- * Local Expo config plugin: make the standalone-APK path foolproof.
+ * Local Expo config plugin: make EVERY installable build standalone and
+ * unmistakable.
  *
- * Problem it solves (observed twice on 2026-09-15): the user installs a DEBUG
- * APK (or can't tell debug from release on the device) and sees React Native's
- * red "Unable to load script. Make sure you're running Metro or that your
- * bundle 'index.android.bundle' is packaged correctly for release" screen.
+ * Problem it solves (observed three times, 2026-09-15..17): the user installs
+ * a DEBUG APK and sees React Native's red "Unable to load script. Make sure
+ * you're running Metro or that your bundle 'index.android.bundle' is packaged
+ * correctly for release" screen.
  *
- * Why that screen appears — verified against react-native 0.87.1 sources:
+ * Why that screen appears — verified against react-native 0.87.1 + expo 57
+ * sources:
  *   - expo-modules ExpoReactHostFactory.kt builds the JS bundle loader as
  *     JSBundleLoader.createAssetLoader("assets://index.android.bundle") for
- *     EVERY build (debug included). On cold start the app therefore always
- *     tries to read the bundle from its own APK first.
+ *     EVERY build (debug included) — unless a host handler (expo-dev-launcher,
+ *     not installed here) supplies its own. On cold start the app therefore
+ *     always tries to read the bundle from its own APK first.
  *   - @react-native/gradle-plugin TaskConfiguration.kt only registers
  *     `createBundle<Variant>JsAndAssets` for variants NOT listed in
- *     `debuggableVariants` (default: debug only). A debug APK ships with NO
- *     JS at all; the red screen is the expected result with no Metro running.
- *   - The message mentions Metro/localhost:8081 because those are the only
- *     other source RN knows about — it is boilerplate from the loader, NOT
- *     the app trying to sync. The app's own code (Syncthing folder sync)
- *     never even started, because its JS never loaded.
+ *     `debuggableVariants` (default: ["debug", "debugOptimized"]). A debug APK
+ *     shipped with NO JS at all — the red screen was the expected result,
+ *     Metro or not (the loader never consults Metro in this setup; the Metro
+ *     text on the screen is loader boilerplate).
  *
- * Two changes, both applied to android/app/build.gradle at prebuild time
- * (mobile/android is generated output; this is the sanctioned way to change it):
+ * Three changes, applied at prebuild time (mobile/android is generated output;
+ * config plugins are the sanctioned way to change it):
  *
- *   1. `versionNameSuffix "-debug"` on the debug buildType — debug and release
- *      builds become distinguishable in Android Settings ("1.0.0-debug" vs
- *      "1.0.0") and via `adb shell dumpsys package <pkg>`.
+ *   1. `debuggableVariants = []` in the react{} block of app/build.gradle —
+ *      the JS bundle (production Hermes bytecode, devEnabled=false) is now
+ *      embedded in EVERY variant. A debug APK boots standalone exactly like
+ *      a release APK. (It is still large — unstripped native code — and
+ *      slower; release remains the recommended daily build.)
  *
- *   2. A `verifyStandaloneApk` task wired with `assembleRelease.finalizedBy`.
- *      It opens app-release.apk as a zip and asserts that
- *      assets/index.android.bundle is present and at least 1 MB (the real
- *      Hermes bundle is ~2.8 MB). Success prints a loud banner with the exact
- *      install command; failure fails the build with a clear explanation —
- *      instead of a red screen on the phone minutes later.
+ *   2. `versionNameSuffix "-debug"` on the debug buildType — debug and release
+ *      builds are distinguishable in Android Settings ("1.0.2-debug" vs
+ *      "1.0.2") and via `adb shell dumpsys package <pkg>`.
  *
- * Idempotent: both edits are marker/version-guarded; re-running prebuild is a
- * no-op. Self-disabling: if the Expo template stops matching the expected
- * patterns, the plugin logs a warning and leaves the file untouched rather
- * than corrupting it.
+ *   3. A debug-only launcher name ("... DEBUG" via app/src/debug/res/values/
+ *      strings.xml) plus verifyStandaloneApk / verifyStandaloneApkDebug
+ *      tasks wired to assembleRelease / assembleDebug: they open each APK as
+ *      a zip and assert assets/index.android.bundle is present and >= 1 MB.
+ *      Success prints a loud banner with the exact install command; failure
+ *      fails the BUILD with a clear explanation — instead of a red screen on
+ *      the phone minutes later.
+ *
+ * Idempotent: all edits are guarded; re-running prebuild is a no-op.
+ * Self-disabling: if the Expo template stops matching the expected patterns,
+ * the plugin logs a warning and leaves the file untouched rather than
+ * corrupting it.
  */
 const { withDangerousMod } = require('@expo/config-plugins');
 const fs = require('fs');
@@ -46,79 +54,161 @@ const path = require('path');
 const TAG = '[with-standalone-release]';
 const MARKER_OPEN = '// >>> with-standalone-release (mobile/plugins/with-standalone-release.js)';
 const MARKER_CLOSE = '// <<< with-standalone-release';
+const BUNDLE_ENTRY = 'assets/index.android.bundle';
+const BUNDLE_MIN_BYTES = '1000000L'; // real Hermes bundles for this app are ~2.8 MB
 
 /**
- * Build the Gradle block for the verifyStandaloneApk task. Pure string
- * function so it can be unit-tested without Gradle.
+ * Build the Gradle block for one variant's verify task. Pure string function
+ * so it can be unit-tested without Gradle. All dynamic Groovy values use
+ * string concatenation (GString ${} inside generated println strings was the
+ * earlier JS-escaping bug — never reintroduce it).
  *
  * The APK path is resolved at CONFIGURATION time (config-cache safe); the
  * task body only touches files and prints.
  */
-function composeVerifyBlock() {
-  return `
-${MARKER_OPEN}
-// Debug builds deliberately ship WITHOUT a JS bundle (they load their code live
-// from Metro); only assembleRelease embeds assets/index.android.bundle. This
-// task fails a bundle-less release build here — with a clear reason — instead
-// of letting it show React Native's "Unable to load script" red screen on the
-// device after install.
-def standaloneApkFile = new File(layout.buildDirectory.get().asFile, "outputs/apk/release/app-release.apk")
-tasks.register("verifyStandaloneApk") {
-    doLast {
-        if (!standaloneApkFile.exists()) {
-            println "${TAG} app-release.apk not found (did assembleRelease fail earlier?) - nothing to verify."
-            return
-        }
-        def bundleMinBytes = 1000000L // real Hermes bundles for this app are ~2.8 MB
-        def apk
-        try {
-            apk = new java.util.zip.ZipFile(standaloneApkFile)
-        } catch (java.util.zip.ZipException e) {
-            throw new GradleException(
-                "${TAG} " + standaloneApkFile.name + " is not a readable APK/zip (" + e.getMessage() + "). " +
-                "The packaging step likely produced a corrupt file - run: gradlew clean assembleRelease"
-            )
-        }
-        try {
-            def entry = apk.getEntry("assets/index.android.bundle")
-            if (entry == null) {
-                throw new GradleException(
-                    "${TAG} app-release.apk does NOT contain assets/index.android.bundle - it would show " +
-                    "'Unable to load script' on the device. The release JS bundling task " +
-                    "(createBundleReleaseJsAndAssets) did not run or was not merged into the APK. " +
-                    "Run: gradlew clean assembleRelease"
-                )
-            }
-            if (entry.getSize() < bundleMinBytes) {
-                throw new GradleException(
-                    "${TAG} assets/index.android.bundle is only " + entry.getSize() + " bytes - too small to be " +
-                    "the real Hermes bundle. Run: gradlew clean assembleRelease"
-                )
-            }
-            def bundleMb = String.format('%.1f', entry.getSize() / (1024.0 * 1024.0))
-            def apkMb = String.format('%.1f', standaloneApkFile.length() / (1024.0 * 1024.0))
-            println ""
-            println "${TAG} ================================================================"
-            println "${TAG} STANDALONE APK VERIFIED - assets/index.android.bundle present (" + bundleMb + " MB)"
-            println "${TAG} APK: " + standaloneApkFile.absolutePath + " (" + apkMb + " MB)"
-            println "${TAG} Install it on the device with:"
-            println "${TAG}     adb install -r \\"" + standaloneApkFile.absolutePath + "\\""
-            println "${TAG} NOTE: assembleDebug / 'npm run android' / Android Studio Run install DEBUG builds that need Metro."
-            println "${TAG} ================================================================"
-        } finally {
-            apk.close()
-        }
-    }
+function composeVariantVerifyBlock({ taskName, assembleTask, apkRelPath, debug }) {
+  const apkFileVar = debug ? 'standaloneDebugApkFile' : 'standaloneApkFile';
+  const label = debug ? 'STANDALONE DEBUG APK VERIFIED' : 'STANDALONE APK VERIFIED';
+  const notFoundNote = debug
+    ? 'app-debug.apk not found (did assembleDebug fail earlier?) - nothing to verify.'
+    : 'app-release.apk not found (did assembleRelease fail earlier?) - nothing to verify.';
+  const missingBundleReason = debug
+    ? 'it would show the red "Unable to load script" screen on the device. The debug JS bundling task ' +
+      '(createBundleDebugJsAndAssets, enabled by debuggableVariants = []) did not run or was not merged into the APK. ' +
+      'Run: gradlew clean assembleDebug'
+    : 'it would show the red "Unable to load script" screen on the device. The release JS bundling task ' +
+      '(createBundleReleaseJsAndAssets) did not run or was not merged into the APK. ' +
+      'Run: gradlew clean assembleRelease';
+  const cleanHint = debug ? 'gradlew clean assembleDebug' : 'gradlew clean assembleRelease';
+  const bannerNote = debug
+    ? 'NOTE: debug APKs are large (unstripped native code, all CPU architectures) - that is normal. ' +
+      'For daily use prefer app-release.apk. This install shows as "... DEBUG" on the launcher ' +
+      'and as a version ending in -debug in Android Settings.'
+    : 'TIP: assembleDebug also bundles the JS these days, but debug APKs are large and unoptimized - ' +
+      'prefer this app-release.apk for daily use.';
+
+  return (
+    MARKER_OPEN + '\n' +
+    '// Verify that the built APK embeds the JS bundle. With debuggableVariants = []\n' +
+    '// EVERY variant must contain assets/index.android.bundle (ExpoReactHostFactory\n' +
+    '// loads exactly that asset on cold start); a bundle-less APK fails here, at\n' +
+    '// build time, instead of red-screening on the device after install.\n' +
+    'def ' + apkFileVar + ' = new File(layout.buildDirectory.get().asFile, "' + apkRelPath + '")\n' +
+    'tasks.register("' + taskName + '") {\n' +
+    '    doLast {\n' +
+    '        if (!' + apkFileVar + '.exists()) {\n' +
+    '            println "' + TAG + ' ' + notFoundNote + '"\n' +
+    '            return\n' +
+    '        }\n' +
+    '        def bundleMinBytes = ' + BUNDLE_MIN_BYTES + '\n' +
+    '        def apk\n' +
+    '        try {\n' +
+    '            apk = new java.util.zip.ZipFile(' + apkFileVar + ')\n' +
+    '        } catch (java.util.zip.ZipException e) {\n' +
+    '            throw new GradleException(\n' +
+    '                "' + TAG + ' " + ' + apkFileVar + '.name + " is not a readable APK/zip (" + e.getMessage() + "). " +\n' +
+    '                "The packaging step likely produced a corrupt file - run: ' + cleanHint + '"\n' +
+    '            )\n' +
+    '        }\n' +
+    '        try {\n' +
+    '            def entry = apk.getEntry("' + BUNDLE_ENTRY + '")\n' +
+    '            if (entry == null) {\n' +
+    '                throw new GradleException(\n' +
+    '                    "' + TAG + ' " + ' + apkFileVar + '.name + " does NOT contain ' + BUNDLE_ENTRY + ' - ' + missingBundleReason + '"\n' +
+    '                )\n' +
+    '            }\n' +
+    '            if (entry.getSize() < bundleMinBytes) {\n' +
+    '                throw new GradleException(\n' +
+    '                    "' + TAG + ' ' + BUNDLE_ENTRY + ' is only " + entry.getSize() + " bytes - too small to be " +\n' +
+    '                    "the real Hermes bundle. Run: ' + cleanHint + '"\n' +
+    '                )\n' +
+    '            }\n' +
+    '            def bundleMb = String.format(\'%.1f\', entry.getSize() / (1024.0 * 1024.0))\n' +
+    '            def apkMb = String.format(\'%.1f\', ' + apkFileVar + '.length() / (1024.0 * 1024.0))\n' +
+    '            println ""\n' +
+    '            println "' + TAG + ' ================================================================"\n' +
+    '            println "' + TAG + ' ' + label + ' - ' + BUNDLE_ENTRY + ' present (" + bundleMb + " MB)"\n' +
+    '            println "' + TAG + ' APK: " + ' + apkFileVar + '.absolutePath + " (" + apkMb + " MB)"\n' +
+    '            println "' + TAG + ' Install it on the device with:"\n' +
+    '            println "' + TAG + '     adb install -r \\"" + ' + apkFileVar + '.absolutePath + "\\""\n' +
+    '            println "' + TAG + ' ' + bannerNote + '"\n' +
+    '            println "' + TAG + ' ================================================================"\n' +
+    '        } finally {\n' +
+    '            apk.close()\n' +
+    '        }\n' +
+    '    }\n' +
+    '}\n' +
+    'tasks.matching { it.name == "' + assembleTask + '" }.configureEach { it.finalizedBy "' + taskName + '" }\n' +
+    MARKER_CLOSE + '\n'
+  );
 }
-tasks.matching { it.name == "assembleRelease" }.configureEach { it.finalizedBy "verifyStandaloneApk" }
-${MARKER_CLOSE}
-`;
+
+/**
+ * Both variants: release (recommended daily build) + debug (now bundles too).
+ */
+function composeVerifyBlock() {
+  return (
+    '\n' +
+    composeVariantVerifyBlock({
+      taskName: 'verifyStandaloneApk',
+      assembleTask: 'assembleRelease',
+      apkRelPath: 'outputs/apk/release/app-release.apk',
+      debug: false
+    }) +
+    composeVariantVerifyBlock({
+      taskName: 'verifyStandaloneApkDebug',
+      assembleTask: 'assembleDebug',
+      apkRelPath: 'outputs/apk/debug/app-debug.apk',
+      debug: true
+    })
+  );
+}
+
+/**
+ * The debug buildType's on-launcher name. "Performance Tracker" -> "Performance Tracker DEBUG".
+ */
+function composeDebugAppName(mainName) {
+  return (mainName || 'Performance Tracker') + ' DEBUG'
+}
+
+function escapeXml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/**
+ * Compose (or patch) android/app/src/debug/res/values/strings.xml so the
+ * DEBUG variant shows a distinct launcher name. Pure function:
+ *   contents == null  -> fresh overlay file
+ *   otherwise         -> replace the existing app_name value, or insert one
+ *                          before </resources>; anything else is left intact
+ * Returns { contents, changed }; changed=false signals "leave the file alone".
+ */
+function patchDebugStringsXml(contents, debugAppName) {
+  const nameLine = '<string name="app_name">' + escapeXml(debugAppName) + '</string>'
+  if (contents == null || contents.trim() === '') {
+    return {
+      contents: '<resources>\n  <string name="app_name">' + escapeXml(debugAppName) + '</string>\n</resources>\n',
+      changed: true
+    }
+  }
+  const appRe = /<string name="app_name"[^>]*>[\s\S]*?<\/string>/
+  if (appRe.test(contents)) {
+    const next = contents.replace(appRe, nameLine)
+    return { contents: next, changed: next !== contents }
+  }
+  if (contents.includes('</resources>')) {
+    return {
+      contents: contents.replace('</resources>', '  ' + nameLine + '\n</resources>'),
+      changed: true
+    }
+  }
+  return { contents, changed: false }
 }
 
 /**
  * Patch the generated android/app/build.gradle. Pure string function.
- * Returns { contents, injectedSuffix, injectedVerify, warnings } so callers
- * and tests can assert exactly what happened.
+ * Returns { contents, warnings } so callers and tests can assert exactly what
+ * happened.
  */
 function patchAppBuildGradle(contents) {
   const warnings = [];
@@ -137,7 +227,7 @@ function patchAppBuildGradle(contents) {
         `$1            versionNameSuffix "-debug"\n`
       );
       console.log(
-        `${TAG} injected versionNameSuffix "-debug" into the debug buildType (debug builds now show as "1.0.0-debug" in Android Settings)`
+        `${TAG} injected versionNameSuffix "-debug" into the debug buildType (debug builds now show as "1.0.2-debug" in Android Settings)`
       );
     } else {
       warnings.push(
@@ -146,7 +236,37 @@ function patchAppBuildGradle(contents) {
     }
   }
 
-  // --- 2. verifyStandaloneApk task (marker-guarded, appended once) ----------
+  // --- 2. debuggableVariants = [] in the react{} block -----------------------
+  // The RN gradle plugin skips JS bundling for variants listed here (default
+  // ["debug", "debugOptimized"]). Empty the list so EVERY APK embeds the
+  // standalone bundle. Commented-out template occurrences ("// debuggable...") do not count.
+  if (/^\s*debuggableVariants\s*=/m.test(result)) {
+    console.log(
+      `${TAG} an active debuggableVariants assignment is already present - leaving it untouched`
+    );
+  } else {
+    const reactBlockRe = /(^|\n)(react\s*\{\r?\n)/;
+    if (reactBlockRe.test(result)) {
+      result = result.replace(
+        reactBlockRe,
+        `$1$2` +
+          `    // >>> with-standalone-release: debug builds MUST bundle the JS too\n` +
+          `    // ExpoReactHostFactory always loads assets://index.android.bundle on\n` +
+          `    // cold start - an unbundled debug APK can never start, Metro or not.\n` +
+          `    debuggableVariants = []\n` +
+          `    // <<< with-standalone-release\n`
+      );
+      console.log(
+        `${TAG} injected debuggableVariants = [] (debug APKs now embed the standalone JS bundle instead of red-screening)`
+      );
+    } else {
+      warnings.push(
+        'react { block not found in app/build.gradle - template layout changed upstream; debuggableVariants NOT injected (debug APKs will need Metro!)'
+      );
+    }
+  }
+
+  // --- 3. verify tasks for BOTH variants (marker-guarded, appended once) ----
   if (result.includes(MARKER_OPEN)) {
     console.log(
       `${TAG} verifyStandaloneApk block already present in app/build.gradle - skipping append`
@@ -154,7 +274,7 @@ function patchAppBuildGradle(contents) {
   } else {
     result = result.trimEnd() + '\n' + composeVerifyBlock();
     console.log(
-      `${TAG} appended verifyStandaloneApk task (assembleRelease.finalizedBy) - a release APK without the embedded JS bundle now fails the build instead of red-screening on the device`
+      `${TAG} appended verifyStandaloneApk + verifyStandaloneApkDebug (assembleRelease/assembleDebug.finalizedBy) - a bundle-less APK now fails the build instead of red-screening on the device`
     );
   }
 
@@ -165,12 +285,8 @@ function withStandaloneRelease(config) {
   return withDangerousMod(config, [
     'android',
     async (config) => {
-      const appGradleFile = path.join(
-        config.modRequest.projectRoot,
-        'android',
-        'app',
-        'build.gradle'
-      );
+      const projectRoot = config.modRequest.projectRoot;
+      const appGradleFile = path.join(projectRoot, 'android', 'app', 'build.gradle');
       if (!fs.existsSync(appGradleFile)) {
         throw new Error(
           `${TAG} ${appGradleFile} not found after prebuild. The android template layout may have changed upstream.`
@@ -184,6 +300,28 @@ function withStandaloneRelease(config) {
       if (contents !== original) {
         fs.writeFileSync(appGradleFile, contents);
       }
+
+      // --- debug launcher-name overlay (app/src/debug/res/values/strings.xml)
+      const mainStringsFile = path.join(projectRoot, 'android', 'app', 'src', 'main', 'res', 'values', 'strings.xml');
+      let mainName = 'Performance Tracker';
+      if (fs.existsSync(mainStringsFile)) {
+        const mainStrings = fs.readFileSync(mainStringsFile, 'utf8');
+        const m = mainStrings.match(/<string name="app_name">([^<]*)<\/string>/);
+        if (m) mainName = m[1];
+      } else {
+        console.warn(`${TAG} WARNING: ${mainStringsFile} not found - using default app name for the debug overlay`);
+      }
+      const debugStringsDir = path.join(projectRoot, 'android', 'app', 'src', 'debug', 'res', 'values');
+      const debugStringsFile = path.join(debugStringsDir, 'strings.xml');
+      const existing = fs.existsSync(debugStringsFile) ? fs.readFileSync(debugStringsFile, 'utf8') : null;
+      const { contents: debugContents, changed } = patchDebugStringsXml(existing, composeDebugAppName(mainName));
+      if (changed) {
+        fs.mkdirSync(debugStringsDir, { recursive: true });
+        fs.writeFileSync(debugStringsFile, debugContents);
+        console.log(`${TAG} debug launcher name is now "${composeDebugAppName(mainName)}" (${debugStringsFile})`);
+      } else {
+        console.warn(`${TAG} WARNING: could not patch ${debugStringsFile} - template layout changed upstream`);
+      }
       return config;
     },
   ]);
@@ -192,4 +330,6 @@ function withStandaloneRelease(config) {
 module.exports = withStandaloneRelease;
 module.exports.patchAppBuildGradle = patchAppBuildGradle;
 module.exports.composeVerifyBlock = composeVerifyBlock;
+module.exports.patchDebugStringsXml = patchDebugStringsXml;
+module.exports.composeDebugAppName = composeDebugAppName;
 module.exports.TAG = TAG;

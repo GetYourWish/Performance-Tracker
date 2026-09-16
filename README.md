@@ -149,7 +149,8 @@ A successful release build now ends with this gate (added by
 [with-standalone-release]     adb install -r "...app-release.apk"
 ```
 
-If the embedded bundle were missing, the BUILD fails with a clear reason — you
+The same gate runs for `assembleDebug` (`STANDALONE DEBUG APK VERIFIED`). If
+an embedded bundle were missing, the BUILD fails with a clear reason — you
 never see a red screen on the phone. Release APKs are signed with the debug
 keystore by default (fine for personal use and sideloading; generate a real
 keystore before any store/public release).
@@ -157,36 +158,45 @@ keystore before any store/public release).
 #### Why an APK says "Unable to load script" (debug vs release)
 
 React Native apps ship their JavaScript **inside the APK**
-(`assets/index.android.bundle`) — but only in **release** builds. Verified
-against react-native 0.87.1 sources: the Gradle plugin registers the bundling
-task (`createBundleReleaseJsAndAssets`) only for non-debuggable variants, and
-the app's JS loader (`ExpoReactHostFactory`) always tries to read that embedded
-asset first on cold start, in every build type. So:
+(`assets/index.android.bundle`). Verified against react-native 0.87.1 + expo 57
+sources: the app's JS loader (`ExpoReactHostFactory`) **always** reads that
+embedded asset on cold start — every build type, no Metro fallback (this app
+does not ship expo-dev-launcher). And the RN Gradle plugin used to bundle that
+asset into **release only** (`debuggableVariants` defaults to
+`["debug", "debugOptimized"]`). A debug APK therefore had no JS at all and
+could never start.
 
-| Build | JS bundle inside the APK? | Runs without Metro? | `adb shell dumpsys package com.getyourwish.performancetracker` shows |
-|---|---|---|---|
-| `assembleDebug` | **No** — by design; it loads its code live from Metro on your PC | ❌ | `versionName 1.0.1-debug` |
-| `assembleRelease` | **Yes** (~2.8 MB Hermes bytecode) | ✅ standalone | `versionName 1.0.1` |
+**Since v1.0.2 the plugin injects `debuggableVariants = []`** — every variant
+embeds the standalone bundle, so *any* APK you install boots on its own:
 
-The debug buildType is marked with a `versionNameSuffix "-debug"` (injected by
-`mobile/plugins/with-standalone-release.js`), so you can always tell which
-build is installed: Android → Settings → Apps → Performance Tracker.
+| Build | JS bundle inside the APK? | Runs without Metro? | Launcher shows | Settings shows | Typical size |
+|---|---|---|---|---|---|
+| `assembleDebug` (v1.0.2+) | **Yes** | ✅ standalone | Performance Tracker **DEBUG** | `versionName 1.0.2-debug` | **big** (~180 MB — unstripped native code for all CPU architectures; this is normal for debug) |
+| `assembleRelease` | **Yes** (~2.8 MB Hermes bytecode) | ✅ standalone | Performance Tracker | `versionName 1.0.2` | a fraction of debug |
+
+> Saw a ~181 MB APK? That was the **debug** variant — its size, not the
+> release build's. Debug APKs carry unoptimized native code for all four CPU
+> architectures. Prefer `app-release.apk` for daily use.
+
+If you install a debug APK **built before v1.0.2** (or from an old checkout),
+it still has no JS and shows the red screen — rebuild after `git pull`.
+
+The debug buildType is also marked with a `versionNameSuffix "-debug"`
+(injected by `mobile/plugins/with-standalone-release.js`), so you can always
+tell which build is installed: Android → Settings → Apps → Performance
+Tracker DEBUG.
 
 - The red screen's mention of "Metro", "localhost:8081" and `adb reverse` is
   boilerplate from React Native's script loader — it is **not** the app trying
   to sync or reach the internet. The app's own code (Syncthing-folder sync)
   never even started, because its JavaScript never loaded.
-- Traps that put a debug build on your phone:
+- Traps that put a **pre-v1.0.2** debug build (the red-screening kind) on your
+  phone — after pulling v1.0.2+ these produce working standalone APKs, but
+  they stay LARGE and are labeled "DEBUG":
   - `npm run android` / `npx expo run:android` (mobile workspace) — builds and
     installs the **debug** variant
   - Android Studio's green Run button — always installs the **debug** variant
   - installing `app-debug.apk` instead of `app-release.apk`
-- Escape hatch for a debug APK on a USB device (development only):
-
-```bash
-adb reverse tcp:8081 tcp:8081                             # forward the Metro port
-npm run start --workspace @performance-tracker/mobile    # then relaunch the app on the device
-```
 
 #### If the app crashes right when you open it
 
@@ -219,8 +229,8 @@ easiest:
 ```
 
 The bat's `perf-tracker-package.txt` output also shows `versionName` — telling
-you whether the installed build is the debug variant (`1.0.1-debug`) or
-release (`1.0.1`).
+you whether the installed build is the debug variant (`1.0.2-debug`) or
+release (`1.0.2`).
 
 History: the v1.0.0 release APK crashed on launch because `App` called
 `useSafeAreaInsets()` with **no `<SafeAreaProvider>` ancestor** — Expo's
