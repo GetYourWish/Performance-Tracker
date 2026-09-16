@@ -234,7 +234,38 @@ CI so a broken first render can never reach an APK again.
 # Other useful commands:
 npm run start --workspace @performance-tracker/mobile   # Expo dev server (fast JS iteration)
 npm run test:core:rn                                    # Hermes drift guard
+npm run clean:native --workspace @performance-tracker/mobile  # repair Windows C++ build caches
 ```
+
+#### Android build troubleshooting — `ninja: error: manifest 'build.ninja' still dirty after 100 tries`
+
+The release build compiles two libraries that contain C++ code
+(`react-native-reanimated`, `react-native-worklets`) with the CMake + ninja
+toolchain. That error means ninja regenerated its build manifest and it *still*
+looked out-of-date, 100 times in a row — a Windows-specific toolchain hiccup,
+**not** a bug in the app's code. Documented triggers, in order of likelihood:
+
+1. **Stale CMake scratch state** from an interrupted build (Ctrl+C, laptop
+   sleep, a previous failed run). Fix with the one-command repair script:
+
+   ```bash
+   npm run clean:native --workspace @performance-tracker/mobile
+   cd mobile/android && gradlew assembleRelease
+   ```
+
+   The script stops the Gradle daemons (they hold file locks), deletes the
+   `.cxx` scratch dirs and build caches of the two C++ libraries plus the app's
+   build outputs, and touches nothing else. Sources and downloads stay put.
+
+2. **Windows Defender (or another antivirus) re-scanning freshly written
+   build files**, changing their timestamps behind ninja's back. If the same
+   error comes straight back after a clean rebuild, this is your cause:
+   Windows Security → Virus & threat protection → Manage settings →
+   Exclusions → *Add an exclusion* → **Folder** → add the whole repo folder
+   (`C:\Users\...\Performance-Tracker`), then clean-rebuild once more.
+
+3. **System clock drift** (ninja compares file timestamps): make sure Windows
+   time sync is on (Settings → Time & language). Rare, but documented.
 
 #### Android SDK prerequisites
 

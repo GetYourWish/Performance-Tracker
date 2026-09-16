@@ -10,6 +10,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "prebuild": "node scripts/expo-prebuild-safe.js",
+    "clean:native": "node scripts/clean-native.js",
     "bundle:check": "expo export --platform android --output-dir .bundle-check",
     "test": "jest"
   },
