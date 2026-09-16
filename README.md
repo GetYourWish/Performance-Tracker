@@ -188,31 +188,39 @@ adb reverse tcp:8081 tcp:8081                             # forward the Metro po
 npm run start --workspace @performance-tracker/mobile    # then relaunch the app on the device
 ```
 
-```bash
-# Other useful commands:
-npm run start --workspace @performance-tracker/mobile   # Expo dev server (fast JS iteration)
-npm run test:core:rn                                    # Hermes drift guard
-```
-
 #### If the app crashes right when you open it
 
-A release APK has no red box — an unhandled JS error during startup kills the
-process instantly and looks like "the app just closes". Since v1.0.1 the app
-carries its own crash reporter (`mobile/src/diagnostics.js`):
+A **release** build has no red error screen — any fatal startup error just
+closes the app silently. Three layers of evidence exist, pick whichever is
+easiest:
 
-- A **fatal JS error is recorded on-device** and the **next launch** shows a
-  dark screen — *"The app hit an error last time"* — with the error name,
-  message and stack. Screenshot that screen and send it; tap **Continue to
-  the app** to dismiss and carry on.
-- The in-app report covers JavaScript failures. For anything lower-level
-  (native crash, missing `.so`), 30 seconds of logcat gives the answer:
+1. **JavaScript crashes — shown on screen (since v1.0.1).** The app records
+   its own fatal JS errors (`mobile/src/diagnostics.js`): the **next launch**
+   shows a dark screen — *"The app hit an error last time"* — with the error
+   name, message and stack. Screenshot that screen and send it; tap
+   **Continue to the app** to dismiss and carry on.
+
+2. **Native crashes — written to a file (since v1.0.1).** A native
+   UncaughtExceptionHandler (`mobile/plugins/with-crash-log.js`, installed by
+   prebuild) writes every process-killing error — including native crashes a
+   JS reporter cannot see — to **two files on the phone**, no adb required:
+   - `Downloads/perf-tracker-crash-<timestamp>.txt` — open with any Files app
+     and share the newest one after reproducing the crash
+   - app-private `files/perf-tracker-crash-latest.txt` (backup copy)
+
+3. **System-level log — for already-installed older builds.** Windows:
+   double-click [`capture-crash.bat`](capture-crash.bat) at the repo root with
+   the phone connected over USB (Developer options → USB debugging). It saves
+   the crash buffer, recent log, installed-package info and device info to
+   the Desktop. Or paste this into PowerShell:
 
 ```powershell
-# Windows — phone plugged in, USB debugging on
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" logcat -c
-#  → open the app, let it crash
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" logcat -d AndroidRuntime:E > "$env:USERPROFILE\Desktop\crash.txt"
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" logcat -b crash -d > "$env:USERPROFILE\Desktop\crash.txt"
 ```
+
+The bat's `perf-tracker-package.txt` output also shows `versionName` — telling
+you whether the installed build is the debug variant (`1.0.1-debug`) or
+release (`1.0.1`).
 
 History: the v1.0.0 release APK crashed on launch because `App` called
 `useSafeAreaInsets()` with **no `<SafeAreaProvider>` ancestor** — Expo's
@@ -221,6 +229,12 @@ threw, and a release build turns that into an instant crash. `App` now mounts
 the provider itself (with `initialWindowMetrics`), and two boot smoke tests
 (`mobile/__tests__/app-boot*.test.js`) mount the **full** component tree in
 CI so a broken first render can never reach an APK again.
+
+```bash
+# Other useful commands:
+npm run start --workspace @performance-tracker/mobile   # Expo dev server (fast JS iteration)
+npm run test:core:rn                                    # Hermes drift guard
+```
 
 #### Android SDK prerequisites
 
