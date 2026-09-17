@@ -2,59 +2,51 @@
 'use strict';
 
 /**
- * Windows CMake/ninja fix for react-native-reanimated + react-native-worklets.
+ * Windows CMake/ninja fix for the RN New-Arch C++ build.
  *
  * Symptoms (assembleRelease on Windows):
  *
- *   1. Task :react-native-*:buildCMakeRelWithDebInfo[arm64-v8a] FAILED
- *      C/C++: ninja: error: manifest 'build.ninja' still dirty after 100 tries
+ *   1. Task :react-native-*:buildCMakeRelWithDebInfo FAILED
+ *      ninja: error: manifest 'build.ninja' still dirty after 100 tries
  *
- *   2. Task :react-native-worklets:buildCMakeRelWithDebInfo[arm64-v8a][worklets] FAILED
- *      ninja: error: mkdir(CMakeFiles/worklets.dir/C_/Users/…/Common): No such file or directory
+ *   2. Task :react-native-worklets:buildCMakeRelWithDebInfo[worklets] FAILED
+ *      ninja: error: mkdir(CMakeFiles/worklets.dir/C_/Users/…/Common)
  *
- * Root cause (1), verified against reanimated 4.6.0 / worklets 0.12.1 CMakeLists.txt:
- * both libraries glob their C++ sources with
+ *   3. Task :app:buildCMakeRelWithDebInfo[arm64-v8a] FAILED
+ *      ninja: error: mkdir(safeareacontext_autolinked_build/CMakeFiles/
+ *        react_codegen_safeareacontext.dir/C_/Users/…/react-native-safe-area-context)
  *
- *   file(GLOB_RECURSE … CONFIGURE_DEPENDS "…/*.cpp")
+ * (1) file(GLOB_RECURSE … CONFIGURE_DEPENDS) emits a Ninja phony with no
+ * inputs. On Windows it is always dirty, so ninja re-runs CMake 100 times.
+ * CMake issue #21106.
  *
- * CONFIGURE_DEPENDS makes CMake emit a Ninja phony (`VerifyGlobs.cmake_force`)
- * with no inputs. On Windows that phony is always dirty, so ninja re-runs
- * CMake, the manifest is rewritten, ninja still sees it dirty, 100 times,
- * then gives up. CMake issue #21106.
+ * (2)(3) Globs (or codegen) feed CMake absolute Windows paths. CMake encodes
+ * `C:\Users\…` as `C_/Users/…` in the object dir. The .cxx folder is already
+ * ~130–180 chars, so mkdir exceeds MAX_PATH (260). CMake 3.22.1's ninja
+ * (Android SDK default) does not use the `\\?\` long-path prefix.
  *
- * Root cause (2): those globs run against an absolute path
- * (`${CMAKE_SOURCE_DIR}/../Common/cpp`). CMake encodes `C:\Users\…` as
- * `C_/Users/…` inside the object-file directory. The .cxx dir is already
- * ~130 chars, so the encoded object path exceeds Windows MAX_PATH (260)
- * and ninja mkdir fails. CMake 3.22.1's ninja (Android SDK default) does
- * not use the `\\?\` long-path prefix.
+ * Symptom (3) is the APP cmake (New Arch autolinking), not the worklets
+ * library cmake. RN points the app at
+ *   react-native/ReactAndroid/cmake-utils/default-app-setup/CMakeLists.txt
+ * which add_subdirectory's each autolinked codegen cmake (safe-area-context
+ * lives at android/src/main/jni/CMakeLists.txt and globs common/cpp).
  *
  * CMAKE_OBJECT_PATH_MAX is a trap on this toolchain:
- *   - 1024 (tried first) is above the unhashed length, so CMake does not
- *     hash and ninja gets C_/Users/… → mkdir fails.
- *   - 128 (tried second) is below the *hashed* length (~215), so CMake
- *     hashes, decides the hash still does not fit, falls back to the
- *     original long path → mkdir fails the same way. Observed: .cxx hash
- *     changed (4zc15271) but the mkdir path was still C_/Users/….
- *   - 250 (Windows default) hashes long paths AND accepts the hashed
- *     form. Used as a backstop. The real fix is (4) below.
+ *   - 1024: above the unhashed length → no hash → mkdir C_/Users/… fails.
+ *   - 128: hashed path (~215) still >128 → CMake falls back to the long
+ *     path → same mkdir. Observed as a new .cxx hash with the same error.
+ *   - 250 (Windows default): long paths hash AND the hash fits. Backstop.
  *
- * Fix (idempotent, version-tolerant string surgery on the two libraries):
- *   1. Strip CONFIGURE_DEPENDS from the GLOB_RECURSE calls.
- *   2. set(CMAKE_SUPPRESS_REGENERATION ON) so ninja never gets RERUN_CMAKE.
- *   3. set(CMAKE_OBJECT_PATH_MAX 250 CACHE STRING "" FORCE) BEFORE project()
- *      — that is when the generator reads it. Gradle also gets the -D flag.
- *   4. Relativize the globbed *_CPP_SOURCES before add_library so object
- *      dirs become CMakeFiles/<tgt>.dir/__/Common/cpp/… instead of
- *      CMakeFiles/<tgt>.dir/C_/Users/…. This is what actually keeps the
- *      path under MAX_PATH, independent of CMake's hash fallback.
+ * Fix (idempotent string surgery):
+ *   1. Strip CONFIGURE_DEPENDS from GLOB calls.
+ *   2. set(CMAKE_SUPPRESS_REGENERATION ON).
+ *   3. set(CMAKE_OBJECT_PATH_MAX 250 CACHE STRING "" FORCE) BEFORE project().
+ *   4. Relativize globbed *_SRCS / *_SOURCES before add_library so object
+ *      dirs are __/common/cpp/… not C_/Users/….
+ *   5. Apply (3) to the app cmake (default-app-setup) and pass the -D flags
+ *      through app/build.gradle so autolinked codegen inherits them.
  *
- * Runs in THREE places so the flow is order-proof:
- *   1. npm postinstall of @performance-tracker/mobile
- *   2. every prebuild, via plugins/with-windows-cmake.js
- *   3. npm run clean:native — the documented repair,
- *      so `git pull` + clean:native + assembleRelease is enough.
- *
+ * Runs in THREE places: npm postinstall, prebuild, npm run clean:native.
  * Does not change app JS, native UX, or Gradle/AGP versions.
  */
 
@@ -65,16 +57,35 @@ const TAG = '[with-windows-cmake]';
 const MARKER = '>>> with-windows-cmake';
 const REL_MARKER = '>>> with-windows-cmake-relsrc';
 const CMAKE_SUPPRESS = '-DCMAKE_SUPPRESS_REGENERATION=ON';
-// Windows default. See file header: 1024 and 128 both failed, for
-// opposite reasons. 250 hashes C_/Users/… and still fits the hash.
 const CMAKE_OBJMAX_VALUE = '250';
 const CMAKE_OBJMAX = `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`;
 const CMAKE_OBJMAX_SET = `set(CMAKE_OBJECT_PATH_MAX ${CMAKE_OBJMAX_VALUE} CACHE STRING "" FORCE)`;
 
 const NATIVE_LIBS = [
-  { name: 'react-native-reanimated', files: ['CMakeLists.txt', 'build.gradle.kts'] },
-  { name: 'react-native-worklets', files: ['CMakeLists.txt', 'build.gradle.kts'] },
+  {
+    name: 'react-native-reanimated',
+    cmakeRel: path.join('android', 'CMakeLists.txt'),
+    gradleRel: path.join('android', 'build.gradle.kts'),
+  },
+  {
+    name: 'react-native-worklets',
+    cmakeRel: path.join('android', 'CMakeLists.txt'),
+    gradleRel: path.join('android', 'build.gradle.kts'),
+  },
+  {
+    name: 'react-native-safe-area-context',
+    cmakeRel: path.join('android', 'src', 'main', 'jni', 'CMakeLists.txt'),
+    gradleRel: null,
+  },
 ];
+
+const APP_CMAKE_REL = path.join(
+  'react-native',
+  'ReactAndroid',
+  'cmake-utils',
+  'default-app-setup',
+  'CMakeLists.txt'
+);
 
 function findNodeModulesCandidates(startDir) {
   const found = [];
@@ -97,8 +108,8 @@ function cmakeFixBlock(eol) {
   return [
     `# ${MARKER}`,
     `# Windows+ninja: glob-verify phonies loop, and object paths`,
-    `# must stay under MAX_PATH (260). This block MUST sit before project()`,
-    `# because that is when the generator reads CMAKE_OBJECT_PATH_MAX.`,
+    `# must stay under MAX_PATH (260). This block MUST sit at file start,`,
+    `# because the native generator reads CMAKE_OBJECT_PATH_MAX at project().`,
     `# 1024: no hash, mkdir C_/Users/... failed.`,
     `# 128: hash did not fit, CMake fell back to the long path, same mkdir.`,
     `# 250: Windows default — long paths hash, hashed paths still fit.`,
@@ -113,12 +124,10 @@ function relativeSourcesBlock(eol) {
     `# ${REL_MARKER}`,
     `# Absolute glob results become C_/Users/... object dirs on Windows;`,
     `# ninja mkdir then fails past MAX_PATH (260). Relativize so objects`,
-    `# land under CMakeFiles/<tgt>.dir/__/Common/cpp/... which stays short.`,
-    'foreach(_pt_var IN ITEMS',
-    '    WORKLETS_COMMON_CPP_SOURCES WORKLETS_ANDROID_CPP_SOURCES',
-    '    REANIMATED_COMMON_CPP_SOURCES REANIMATED_ANDROID_CPP_SOURCES',
-    '    REANIMATED_NATIVEVIEW_CPP_SOURCES)',
-    '  if(DEFINED ${_pt_var})',
+    `# land under CMakeFiles/<tgt>.dir/__/common/cpp/... which stays short.`,
+    'get_cmake_property(_pt_vars VARIABLES)',
+    'foreach(_pt_var IN LISTS _pt_vars)',
+    '  if(_pt_var MATCHES "(_CPP_SOURCES|_SRCS|_SOURCES)$")',
     '    set(_pt_rel "")',
     '    foreach(_pt_src IN LISTS ${_pt_var})',
     '      if(IS_ABSOLUTE "${_pt_src}")',
@@ -133,14 +142,16 @@ function relativeSourcesBlock(eol) {
   ].join(eol);
 }
 
-/**
- * Drop a previously injected header (any 1024/128/250 generation) so a
- * fresh one can be prepended in front of project(). Does not touch the
- * relative-sources block (different marker).
- */
 function stripOldHeaderBlock(contents) {
   return contents.replace(
     /# >>> with-windows-cmake(?!-relsrc)[^\n]*\r?\n[\s\S]*?# <<< with-windows-cmake(?!-relsrc)\r?\n(?:\r?\n)?/,
+    ''
+  );
+}
+
+function stripOldRelsrcBlock(contents) {
+  return contents.replace(
+    /# >>> with-windows-cmake-relsrc[^\n]*\r?\n[\s\S]*?# <<< with-windows-cmake-relsrc\r?\n(?:\r?\n)?/,
     ''
   );
 }
@@ -150,7 +161,7 @@ function hasHeaderBlock(contents) {
 }
 
 /**
- * Pure string transform of a library CMakeLists.txt.
+ * Pure string transform of a library / app CMakeLists.txt.
  * @returns {{ contents: string, changed: boolean }}
  */
 function patchCMakeListsText(contents) {
@@ -159,6 +170,7 @@ function patchCMakeListsText(contents) {
 
   next = next.replace(/(file\s*\(\s*GLOB[_A-Z]*\s+\S+)\s+CONFIGURE_DEPENDS\b/g, '$1');
   next = stripOldHeaderBlock(next);
+  next = stripOldRelsrcBlock(next);
 
   if (!hasHeaderBlock(next)) {
     next = cmakeFixBlock(eol) + eol + eol + next.replace(/^\uFEFF/, '');
@@ -176,12 +188,9 @@ function patchCMakeListsText(contents) {
 
 /**
  * Pure string transform of a library android/build.gradle.kts.
- * Inserts the two -D cmake flags into the first arguments() block
- * (defaultConfig), using that block's own indentation.
  * @returns {{ contents: string, changed: boolean, missing: boolean }}
  */
 function patchGradleKtsText(contents) {
-  // Migrate a previously-injected 1024/128 without duplicating the flag.
   let next = contents.replace(/-DCMAKE_OBJECT_PATH_MAX=\d+/g, `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`);
   if (next.includes(CMAKE_SUPPRESS) && next.includes(CMAKE_OBJMAX)) {
     return { contents: next, changed: next !== contents, missing: false };
@@ -199,6 +208,39 @@ function patchGradleKtsText(contents) {
   return { contents: next, changed: next !== contents, missing: false };
 }
 
+/**
+ * Inject cmake -D flags into the app's Groovy build.gradle so the New Arch
+ * app cmake (safeareacontext_autolinked_build etc.) inherits them.
+ * @returns {{ contents: string, changed: boolean, missing: boolean }}
+ */
+function patchAppBuildGradleText(contents) {
+  let next = contents.replace(/-DCMAKE_OBJECT_PATH_MAX=\d+/g, `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`);
+  if (next.includes(`"${CMAKE_OBJMAX}"`) && next.includes(`"${CMAKE_SUPPRESS}"`)) {
+    return { contents: next, changed: next !== contents, missing: false };
+  }
+  const androidOpen = next.search(/^android\s*\{/m);
+  if (androidOpen === -1) {
+    return { contents: next, changed: next !== contents, missing: true };
+  }
+  const brace = next.indexOf('{', androidOpen);
+  const eol = detectEOL(next);
+  const insert = [
+    '',
+    `    // ${MARKER}`,
+    '    defaultConfig {',
+    '        externalNativeBuild {',
+    '            cmake {',
+    `                arguments "${CMAKE_OBJMAX}", "${CMAKE_SUPPRESS}"`,
+    '            }',
+    '        }',
+    '    }',
+    '    // <<< with-windows-cmake',
+    '',
+  ].join(eol);
+  next = next.slice(0, brace + 1) + insert + next.slice(brace + 1);
+  return { contents: next, changed: true, missing: false };
+}
+
 function writeIfChanged(filePath, original, next, label) {
   if (next === original) {
     console.log(`${TAG} ok: ${label} already patched (${filePath})`);
@@ -209,17 +251,22 @@ function writeIfChanged(filePath, original, next, label) {
   return 'patched';
 }
 
-function findLibAndroidDir(candidates, libName) {
+function findInNodeModules(candidates, relParts) {
   for (const nm of candidates) {
-    const dir = path.join(nm, libName, 'android');
-    if (fs.existsSync(dir)) return dir;
+    const filePath = path.join(nm, ...relParts);
+    if (fs.existsSync(filePath)) return filePath;
   }
   return null;
 }
 
+function recordStatus(result, status) {
+  if (status === 'patched') result.patched += 1;
+  else result.alreadyOk += 1;
+}
+
 /**
- * Patch reanimated + worklets CMake/Gradle under every node_modules above
- * startDir (npm workspaces hoist to the repo root).
+ * Patch reanimated / worklets / safe-area-context CMake, the RN app cmake,
+ * and app/build.gradle (when prebuild has produced android/).
  *
  * @param {string} startDir e.g. the mobile/ workspace root
  * @returns {{ ok: boolean, patched: number, alreadyOk: number, missing: string[] }}
@@ -236,47 +283,64 @@ function patchWindowsCmake(startDir) {
   console.log(`${TAG} scanning: ${candidates.join(' -> ')}`);
 
   for (const lib of NATIVE_LIBS) {
-    const androidDir = findLibAndroidDir(candidates, lib.name);
-    if (!androidDir) {
-      console.warn(`${TAG} skip: ${lib.name}/android not installed`);
-      result.ok = false;
-      result.missing.push(lib.name);
-      continue;
-    }
-
-    const cmakeFile = path.join(androidDir, 'CMakeLists.txt');
-    if (!fs.existsSync(cmakeFile)) {
-      console.warn(`${TAG} skip: ${lib.name} CMakeLists.txt not found at ${cmakeFile}`);
+    const cmakeFile = findInNodeModules(candidates, [lib.name, lib.cmakeRel]);
+    if (!cmakeFile) {
+      console.warn(`${TAG} skip: ${lib.name} CMakeLists.txt not found`);
       result.ok = false;
       result.missing.push(lib.name + '/CMakeLists.txt');
     } else {
       const original = fs.readFileSync(cmakeFile, 'utf8');
       const { contents } = patchCMakeListsText(original);
-      const status = writeIfChanged(cmakeFile, original, contents, lib.name + '/CMakeLists.txt');
-      if (status === 'patched') result.patched += 1;
-      else result.alreadyOk += 1;
+      recordStatus(result, writeIfChanged(cmakeFile, original, contents, lib.name + '/CMakeLists.txt'));
     }
 
-    const ktsFile = path.join(androidDir, 'build.gradle.kts');
-    if (!fs.existsSync(ktsFile)) {
-      console.warn(`${TAG} skip: ${lib.name} build.gradle.kts not found at ${ktsFile}`);
+    if (!lib.gradleRel) continue;
+    const ktsFile = findInNodeModules(candidates, [lib.name, lib.gradleRel]);
+    if (!ktsFile) {
+      console.warn(`${TAG} skip: ${lib.name} ${lib.gradleRel} not found`);
       result.ok = false;
-      result.missing.push(lib.name + '/build.gradle.kts');
+      result.missing.push(lib.name + '/' + lib.gradleRel);
     } else {
       const original = fs.readFileSync(ktsFile, 'utf8');
       const patched = patchGradleKtsText(original);
       if (patched.missing) {
         console.warn(
-          `${TAG} WARNING: ${lib.name}/build.gradle.kts has no -DANDROID_STL cmake argument ` +
+          `${TAG} WARNING: ${lib.name} gradle has no -DANDROID_STL cmake argument ` +
             `to anchor on — cmake -D flags not injected. CMakeLists patch still applies.`
         );
         result.alreadyOk += 1;
       } else {
-        const status = writeIfChanged(ktsFile, original, patched.contents, lib.name + '/build.gradle.kts');
-        if (status === 'patched') result.patched += 1;
-        else result.alreadyOk += 1;
+        recordStatus(
+          result,
+          writeIfChanged(ktsFile, original, patched.contents, lib.name + '/build.gradle.kts')
+        );
       }
     }
+  }
+
+  const appCmake = findInNodeModules(candidates, APP_CMAKE_REL.split(path.sep));
+  if (!appCmake) {
+    console.warn(
+      `${TAG} skip: react-native default-app-setup/CMakeLists.txt not found — ` +
+        `:app:buildCMakeRelWithDebInfo may still mkdir C_/Users/... for codegen`
+    );
+  } else {
+    const original = fs.readFileSync(appCmake, 'utf8');
+    const { contents } = patchCMakeListsText(original);
+    recordStatus(result, writeIfChanged(appCmake, original, contents, 'react-native/default-app-setup/CMakeLists.txt'));
+  }
+
+  const appGradle = path.join(startDir, 'android', 'app', 'build.gradle');
+  if (fs.existsSync(appGradle)) {
+    const original = fs.readFileSync(appGradle, 'utf8');
+    const patched = patchAppBuildGradleText(original);
+    if (patched.missing) {
+      console.warn(`${TAG} WARNING: ${appGradle} has no android { } block to inject cmake arguments`);
+    } else {
+      recordStatus(result, writeIfChanged(appGradle, original, patched.contents, 'android/app/build.gradle'));
+    }
+  } else {
+    console.log(`${TAG} skip: ${appGradle} not generated yet (run prebuild first, or ignore if already generated)`);
   }
 
   if (result.patched > 0) {
@@ -292,8 +356,10 @@ module.exports = {
   patchWindowsCmake,
   patchCMakeListsText,
   patchGradleKtsText,
+  patchAppBuildGradleText,
   TAG,
   NATIVE_LIBS,
+  APP_CMAKE_REL,
   CMAKE_SUPPRESS,
   CMAKE_OBJMAX,
   CMAKE_OBJMAX_VALUE,

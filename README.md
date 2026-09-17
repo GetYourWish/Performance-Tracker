@@ -145,9 +145,13 @@ If `assembleRelease` dies on
 (the `:react-native-reanimated:buildCMakeRelWithDebInfo` task)
 **or** on
 `ninja: error: mkdir(CMakeFiles/worklets.dir/C_/Users/…/Common)`
-(the `:react-native-worklets:buildCMakeRelWithDebInfo` task — Windows
-`MAX_PATH`), run this once after `git pull`, then retry the gradle
-command — do **not** re-run prebuild:
+(the `:react-native-worklets:buildCMakeRelWithDebInfo` task)
+**or** on
+`ninja: error: mkdir(safeareacontext_autolinked_build/…/C_/Users/…)`
+(the `:app:buildCMakeRelWithDebInfo` task — same Windows `MAX_PATH`
+encoding, now in the app's New-Arch codegen cmake), run this once
+after `git pull`, then retry the gradle command — do **not** re-run
+prebuild:
 
 ```bash
 npm run clean:native --workspace @performance-tracker/mobile
@@ -155,10 +159,10 @@ cd mobile/android
 .\gradlew assembleRelease
 ```
 
-That script patches Reanimated/Worklets CMake for Windows (so ninja stops
-regenerating forever, and so object-file paths stay under `MAX_PATH`) and
-deletes the stale `.cxx` caches from the failed run. Details under
-**Android build troubleshooting** below.
+That script patches Reanimated/Worklets/safe-area-context CMake (and the
+app cmake) for Windows so object-file paths stay under `MAX_PATH`, and
+deletes the stale `.cxx` caches from the failed run (library `.cxx` **and**
+`android/app/.cxx`). Details under **Android build troubleshooting** below.
 
 If instead Gradle dies on
 `Task ':expo:releaseSourcesJar' uses this output of task ':expo:generatePackagesList'`,
@@ -279,28 +283,31 @@ npm run clean:native --workspace @performance-tracker/mobile  # repair Windows C
 
 #### Android build troubleshooting — ninja C++ failures on Windows
 
-The release build compiles two libraries that contain C++ code
-(`react-native-reanimated`, `react-native-worklets`) with the CMake + ninja
-toolchain. On Windows two toolchain failures show up, neither of which is
-a bug in the app's code:
+The release build compiles C++ through CMake + ninja for
+`react-native-reanimated`, `react-native-worklets`, and (via the app's
+New-Arch cmake) codegen of `react-native-safe-area-context`. On Windows
+three toolchain failures show up, none of which is a bug in the app's
+code:
 
 1. `ninja: error: manifest 'build.ninja' still dirty after 100 tries` —
    those libraries' `file(GLOB_RECURSE … CONFIGURE_DEPENDS)` makes ninja
    regenerate `build.ninja` forever.
 2. `ninja: error: mkdir(CMakeFiles/worklets.dir/C_/Users/…/Common)` —
    CMake encoded an absolute `C:\Users\…` source path into the object-file
-   directory. A high `CMAKE_OBJECT_PATH_MAX` (1024) disabled hashing, so
-   the path exceeded Windows `MAX_PATH` (260) and ninja's mkdir failed.
+   directory past Windows `MAX_PATH` (260).
+3. `ninja: error: mkdir(safeareacontext_autolinked_build/…/C_/Users/…)` —
+   the same encoding, inside `:app:buildCMakeRelWithDebInfo` (codegen of
+   safe-area-context under `android/app/.cxx`, not the library `.cxx`).
 
-The repo now patches those CMakeLists (and the libraries' Gradle cmake
-arguments) at `npm install`, at prebuild, and as part of `clean:native`.
-The patch strips `CONFIGURE_DEPENDS`, sets `CMAKE_SUPPRESS_REGENERATION`,
-keeps `CMAKE_OBJECT_PATH_MAX=250` (the Windows default — 1024 skipped
-hashing, 128 hashed then fell back because the hash still did not fit),
-and **relativizes** the globbed C++ sources so object dirs are
-`__/Common/cpp/...` instead of `C_/Users/...`. After a `git pull` of this
-fix you still have to wipe the **already-written** `.cxx` scratch from the
-failed run, otherwise ninja keeps the old long object paths:
+The repo now patches those CMakeLists, the RN default app cmake, and
+`app/build.gradle` cmake arguments at `npm install`, at prebuild, and as
+part of `clean:native`. The patch strips `CONFIGURE_DEPENDS`, sets
+`CMAKE_SUPPRESS_REGENERATION`, keeps `CMAKE_OBJECT_PATH_MAX=250` (the
+Windows default — 1024 skipped hashing, 128 hashed then fell back because
+the hash still did not fit), and **relativizes** globbed C++ sources so
+object dirs are `__/common/cpp/...` instead of `C_/Users/...`. After a
+`git pull` of this fix you still have to wipe the **already-written**
+`.cxx` scratch from the failed run (including `android/app/.cxx`):
 
 ```bash
 npm run clean:native --workspace @performance-tracker/mobile
@@ -309,8 +316,8 @@ cd mobile/android && gradlew assembleRelease
 
 `clean:native` (1) re-applies the CMake patch so you do not need to re-run
 prebuild, (2) stops the Gradle daemons that hold file locks, (3) deletes the
-`.cxx` scratch dirs and build caches of the two C++ libraries plus the app's
-build outputs. Sources and downloads stay put.
+`.cxx` scratch dirs of the C++ libraries **and** `android/app/.cxx`, plus the
+app's build outputs. Sources and downloads stay put.
 
 If the **same** ninja error comes straight back after that patched rebuild,
 it is no longer the CMakeLists loop. Remaining environmental causes:

@@ -70,10 +70,12 @@ function findLibAndroidDir(mobileRoot, libName) {
 function collectTargets({ mobileRoot, androidRoot }) {
   const targets = []
   if (androidRoot && exists(androidRoot)) {
-    // app build outputs + the root project's build dir (no sources live here)
-    for (const rel of ['app/build', 'build']) {
+    // app build outputs, the app CMake scratch (.cxx — New Arch codegen
+    // for safe-area-context etc. lives here, NOT under the library), and
+    // the root project's build dir. No sources live in any of these.
+    for (const rel of ['app/build', 'app/.cxx', 'build']) {
       const dir = path.join(androidRoot, rel)
-      if (exists(dir)) targets.push({ path: dir, kind: 'app-build-cache' })
+      if (exists(dir)) targets.push({ path: dir, kind: rel === 'app/.cxx' ? 'app-cmake-cache' : 'app-build-cache' })
     }
   }
   for (const lib of NATIVE_CMAKE_LIBS) {

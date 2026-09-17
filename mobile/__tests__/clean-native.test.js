@@ -76,6 +76,15 @@ describe('clean-native collectTargets', () => {
     }
   })
 
+  test('wipes android/app/.cxx (New Arch app cmake / safe-area-context codegen)', () => {
+    const { mobileRoot, androidRoot } = makeLayout({ hoisted: false })
+    touch(path.join(androidRoot, 'app', '.cxx', 'RelWithDebInfo', 'arm64-v8a', 'build.ninja'))
+    const targets = collectTargets({ mobileRoot, androidRoot })
+    const paths = targets.map(t => t.path)
+    expect(paths).toContain(path.join(androidRoot, 'app', '.cxx'))
+    expect(targets.some(t => t.kind === 'app-cmake-cache')).toBe(true)
+  })
+
   test('returns an empty list on a fresh checkout (nothing exists yet)', () => {
     const mobileRoot = path.join(tmp, 'mobile')
     mkdirp(mobileRoot)

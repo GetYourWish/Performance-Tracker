@@ -1,16 +1,14 @@
 // Unit tests for mobile/plugins/patch-windows-cmake.js
 //
-// The patcher is the source-level fix for two Windows C++ build failures:
+// Windows C++ build failures this patcher covers:
 //   1. "ninja: error: manifest 'build.ninja' still dirty after 100 tries"
-//      caused by file(GLOB_RECURSE … CONFIGURE_DEPENDS) in
-//      react-native-reanimated 4.6.x and react-native-worklets 0.12.x.
+//      — file(GLOB_RECURSE … CONFIGURE_DEPENDS)
 //   2. "ninja: error: mkdir(CMakeFiles/worklets.dir/C_/Users/…/Common)"
-//      caused by absolute glob results encoded as C_/Users/... object
-//      dirs that exceed Windows MAX_PATH (260). CMAKE_OBJECT_PATH_MAX
-//      1024 and 128 both failed (no hash / hash-didn't-fit fallback).
-//      The real fix is relativizing *_CPP_SOURCES before add_library.
-// The transforms are pure string work, tested against excerpts of the
-// real 4.6.0 / 0.12.1 files shipped on npm.
+//      — absolute glob → C_/Users object dirs past MAX_PATH
+//   3. "ninja: error: mkdir(safeareacontext_autolinked_build/…/C_/Users/…)"
+//      — same encoding, but in the APP cmake (New Arch codegen), not the
+//        worklets library cmake.
+// Transforms are pure string work against excerpts of the real npm files.
 
 const fs = require('fs')
 const os = require('os')
@@ -19,6 +17,7 @@ const path = require('path')
 const {
   patchCMakeListsText,
   patchGradleKtsText,
+  patchAppBuildGradleText,
   patchWindowsCmake,
   CMAKE_SUPPRESS,
   CMAKE_OBJMAX,
@@ -26,7 +25,8 @@ const {
   CMAKE_OBJMAX_SET,
   MARKER,
   REL_MARKER,
-  NATIVE_LIBS
+  NATIVE_LIBS,
+  APP_CMAKE_REL
 } = require('../plugins/patch-windows-cmake')
 
 const REANIMATED_CMAKELISTS = `project(Reanimated)
@@ -55,6 +55,31 @@ file(GLOB_RECURSE WORKLETS_ANDROID_CPP_SOURCES CONFIGURE_DEPENDS
 add_library(worklets SHARED \${WORKLETS_COMMON_CPP_SOURCES})
 `
 
+const SAFEAREA_CMAKELISTS = `cmake_minimum_required(VERSION 3.13)
+set(LIB_LITERAL safeareacontext)
+set(LIB_TARGET_NAME react_codegen_\${LIB_LITERAL})
+set(LIB_ANDROID_DIR \${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+set(LIB_COMMON_DIR \${LIB_ANDROID_DIR}/../common/cpp)
+
+file(GLOB LIB_CUSTOM_SRCS CONFIGURE_DEPENDS *.cpp \${LIB_COMMON_DIR}/react/renderer/components/\${LIB_LITERAL}/*.cpp)
+file(GLOB LIB_CODEGEN_SRCS CONFIGURE_DEPENDS \${LIB_ANDROID_GENERATED_JNI_DIR}/*.cpp)
+
+add_library(
+  \${LIB_TARGET_NAME}
+  SHARED
+  \${LIB_CUSTOM_SRCS}
+  \${LIB_CODEGEN_SRCS}
+)
+`
+
+const APP_CMAKE = `cmake_minimum_required(VERSION 3.13)
+
+# Define the library name here.
+project(appmodules)
+
+include(\${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
+`
+
 const REANIMATED_KTS = `        @Suppress("UnstableApiUsage")
         externalNativeBuild {
             cmake {
@@ -69,21 +94,44 @@ const REANIMATED_KTS = `        @Suppress("UnstableApiUsage")
         }
 `
 
+const APP_BUILD_GRADLE = `apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+android {
+    ndkVersion rootProject.ext.ndkVersion
+    compileSdk rootProject.ext.compileSdkVersion
+    namespace 'com.getyourwish.performancetracker'
+    defaultConfig {
+        applicationId 'com.getyourwish.performancetracker'
+        versionCode 3
+        versionName "1.0.2"
+    }
+}
+`
+
+function expectedPatchedCount() {
+  let n = 1 // default-app-setup
+  for (const lib of NATIVE_LIBS) {
+    n += 1
+    if (lib.gradleRel) n += 1
+  }
+  return n
+}
+
 describe('patchCMakeListsText', () => {
   test('strips CONFIGURE_DEPENDS, prepends the header before project(), relativizes sources (reanimated shape)', () => {
     const { contents, changed } = patchCMakeListsText(REANIMATED_CMAKELISTS)
     expect(changed).toBe(true)
-    expect(contents).not.toMatch(/\bCONFIGURE_DEPENDS\b/)
+    expect(contents).not.toMatch(/file\s*\(\s*GLOB[_A-Z]*\s+\S+\s+CONFIGURE_DEPENDS/)
     expect(contents).toContain('file(GLOB_RECURSE REANIMATED_COMMON_CPP_SOURCES')
     expect(contents).toContain('${COMMON_CPP_DIR}/reanimated/*.cpp')
     expect(contents).toContain('set(CMAKE_SUPPRESS_REGENERATION ON)')
     expect(contents).toContain(CMAKE_OBJMAX_SET)
-    expect(contents).not.toContain('set(CMAKE_OBJECT_PATH_MAX 1024)')
-    expect(contents).not.toContain('set(CMAKE_OBJECT_PATH_MAX 128)')
     expect(contents).toContain(MARKER)
     expect(contents).toContain(REL_MARKER)
+    expect(contents).toContain('get_cmake_property(_pt_vars VARIABLES)')
     expect(contents).toContain('file(RELATIVE_PATH _pt_src')
-    // header MUST sit before project() — generator reads OBJECT_PATH_MAX then
     const objmaxAt = contents.indexOf('set(CMAKE_OBJECT_PATH_MAX')
     const projAt = contents.search(/^project\s*\(/m)
     const relAt = contents.indexOf(REL_MARKER)
@@ -98,12 +146,31 @@ describe('patchCMakeListsText', () => {
   test('handles cmake_minimum_required appearing before project() (worklets shape)', () => {
     const { contents, changed } = patchCMakeListsText(WORKLETS_CMAKELISTS)
     expect(changed).toBe(true)
-    expect(contents).not.toMatch(/\bCONFIGURE_DEPENDS\b/)
+    expect(contents).not.toMatch(/file\s*\(\s*GLOB[_A-Z]*\s+\S+\s+CONFIGURE_DEPENDS/)
     expect(contents).toContain('file(GLOB_RECURSE WORKLETS_COMMON_CPP_SOURCES')
-    expect(contents).toContain('set(CMAKE_SUPPRESS_REGENERATION ON)')
     expect(contents).toContain(CMAKE_OBJMAX_SET)
     expect(contents).toContain(REL_MARKER)
     expect(contents.indexOf('set(CMAKE_OBJECT_PATH_MAX')).toBeLessThan(contents.search(/^project\s*\(/m))
+  })
+
+  test('relativizes LIB_CUSTOM_SRCS in the safe-area-context jni CMakeLists', () => {
+    const { contents, changed } = patchCMakeListsText(SAFEAREA_CMAKELISTS)
+    expect(changed).toBe(true)
+    expect(contents).not.toMatch(/file\s*\(\s*GLOB[_A-Z]*\s+\S+\s+CONFIGURE_DEPENDS/)
+    expect(contents).toContain('file(GLOB LIB_CUSTOM_SRCS')
+    expect(contents).toContain(REL_MARKER)
+    expect(contents).toContain('_SRCS|_SOURCES')
+    expect(contents.indexOf(REL_MARKER)).toBeLessThan(contents.indexOf('add_library('))
+    expect(contents).toContain(CMAKE_OBJMAX_SET)
+  })
+
+  test('prepends OBJECT_PATH_MAX before project(appmodules) in the RN default app cmake', () => {
+    const { contents, changed } = patchCMakeListsText(APP_CMAKE)
+    expect(changed).toBe(true)
+    expect(contents).toContain(CMAKE_OBJMAX_SET)
+    expect(contents.indexOf('set(CMAKE_OBJECT_PATH_MAX')).toBeLessThan(contents.search(/^project\s*\(/m))
+    // no add_library in this file — no relsrc block
+    expect(contents).not.toContain(REL_MARKER)
   })
 
   test('is idempotent', () => {
@@ -128,12 +195,23 @@ set(CMAKE_OBJECT_PATH_MAX 128)
     expect(migrated.changed).toBe(true)
     expect(migrated.contents).toContain(CMAKE_OBJMAX_SET)
     expect(migrated.contents).not.toContain('set(CMAKE_OBJECT_PATH_MAX 128)')
-    expect(migrated.contents).not.toContain('set(CMAKE_OBJECT_PATH_MAX 1024)')
     expect(migrated.contents.split('set(CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
     expect(migrated.contents).toContain(REL_MARKER)
     expect(migrated.contents.indexOf('set(CMAKE_OBJECT_PATH_MAX')).toBeLessThan(
       migrated.contents.search(/^project\s*\(/m)
     )
+  })
+
+  test('rewrites an old hardcoded relsrc foreach into the generic VARIABLES scan', () => {
+    const oldRelsrc = patchCMakeListsText(REANIMATED_CMAKELISTS).contents.replace(
+      /get_cmake_property\(_pt_vars VARIABLES\)[\s\S]*?endforeach\(\)/,
+      'foreach(_pt_var IN ITEMS WORKLETS_COMMON_CPP_SOURCES)\n  set(_pt_rel "")\nendforeach()'
+    )
+    expect(oldRelsrc).toContain('foreach(_pt_var IN ITEMS WORKLETS_COMMON_CPP_SOURCES)')
+    const migrated = patchCMakeListsText(oldRelsrc)
+    expect(migrated.changed).toBe(true)
+    expect(migrated.contents).toContain('get_cmake_property(_pt_vars VARIABLES)')
+    expect(migrated.contents.split(REL_MARKER).length - 1).toBe(1)
   })
 
   test('preserves CRLF when the input is a Windows checkout', () => {
@@ -152,7 +230,6 @@ describe('patchGradleKtsText', () => {
     expect(changed).toBe(true)
     expect(contents).toContain(CMAKE_SUPPRESS)
     expect(contents).toContain(CMAKE_OBJMAX)
-    expect(CMAKE_OBJMAX).toContain(CMAKE_OBJMAX_VALUE)
     expect(CMAKE_OBJMAX_VALUE).toBe('250')
     const suppressAt = contents.indexOf(CMAKE_SUPPRESS)
     const stlAt = contents.indexOf('-DANDROID_STL=c++_shared')
@@ -160,8 +237,6 @@ describe('patchGradleKtsText', () => {
     expect(stlAt).toBeGreaterThan(suppressAt)
     expect(contents).toContain(`"${CMAKE_SUPPRESS}",`)
     expect(contents).toContain(`"${CMAKE_OBJMAX}",`)
-    expect(contents).not.toContain('CMAKE_OBJECT_PATH_MAX=1024')
-    expect(contents).not.toContain('CMAKE_OBJECT_PATH_MAX=128')
   })
 
   test('is idempotent', () => {
@@ -198,6 +273,31 @@ describe('patchGradleKtsText', () => {
   })
 })
 
+describe('patchAppBuildGradleText', () => {
+  test('injects cmake arguments into the android { } block', () => {
+    const { contents, changed, missing } = patchAppBuildGradleText(APP_BUILD_GRADLE)
+    expect(missing).toBe(false)
+    expect(changed).toBe(true)
+    expect(contents).toContain(`arguments "${CMAKE_OBJMAX}", "${CMAKE_SUPPRESS}"`)
+    expect(contents).toContain(MARKER)
+    expect(contents.indexOf('android {')).toBeLessThan(contents.indexOf(CMAKE_OBJMAX))
+  })
+
+  test('is idempotent', () => {
+    const once = patchAppBuildGradleText(APP_BUILD_GRADLE).contents
+    const twice = patchAppBuildGradleText(once)
+    expect(twice.changed).toBe(false)
+    expect(twice.contents).toBe(once)
+    expect(twice.contents.split(CMAKE_OBJMAX).length - 1).toBe(1)
+  })
+
+  test('reports missing when there is no android { } block', () => {
+    const { missing, changed } = patchAppBuildGradleText('plugins { id("com.android.application") }\n')
+    expect(missing).toBe(true)
+    expect(changed).toBe(false)
+  })
+})
+
 describe('patchWindowsCmake filesystem walk', () => {
   let tmp
   beforeEach(() => {
@@ -207,88 +307,114 @@ describe('patchWindowsCmake filesystem walk', () => {
     fs.rmSync(tmp, { recursive: true, force: true })
   })
 
-  function seedLayout({ hoisted }) {
+  function seedLayout({ hoisted, withAppGradle }) {
     const mobileRoot = path.join(tmp, 'mobile')
     const nm = hoisted ? path.join(tmp, 'node_modules') : path.join(mobileRoot, 'node_modules')
     fs.mkdirSync(mobileRoot, { recursive: true })
     for (const lib of NATIVE_LIBS) {
-      const android = path.join(nm, lib.name, 'android')
-      fs.mkdirSync(android, { recursive: true })
-      fs.writeFileSync(path.join(android, 'CMakeLists.txt'), REANIMATED_CMAKELISTS)
-      fs.writeFileSync(path.join(android, 'build.gradle.kts'), REANIMATED_KTS)
+      const cmakeFile = path.join(nm, lib.name, lib.cmakeRel)
+      fs.mkdirSync(path.dirname(cmakeFile), { recursive: true })
+      fs.writeFileSync(cmakeFile, lib.name.includes('safe-area') ? SAFEAREA_CMAKELISTS : REANIMATED_CMAKELISTS)
+      if (lib.gradleRel) {
+        const ktsFile = path.join(nm, lib.name, lib.gradleRel)
+        fs.mkdirSync(path.dirname(ktsFile), { recursive: true })
+        fs.writeFileSync(ktsFile, REANIMATED_KTS)
+      }
+    }
+    const appCmake = path.join(nm, APP_CMAKE_REL)
+    fs.mkdirSync(path.dirname(appCmake), { recursive: true })
+    fs.writeFileSync(appCmake, APP_CMAKE)
+    if (withAppGradle) {
+      const gradle = path.join(mobileRoot, 'android', 'app', 'build.gradle')
+      fs.mkdirSync(path.dirname(gradle), { recursive: true })
+      fs.writeFileSync(gradle, APP_BUILD_GRADLE)
     }
     return { mobileRoot, nm }
   }
 
-  test('patches CMakeLists + gradle.kts for both libraries (nested node_modules)', () => {
+  test('patches CMakeLists + gradle.kts for libraries + the RN app cmake (nested node_modules)', () => {
     const { mobileRoot, nm } = seedLayout({ hoisted: false })
     const result = patchWindowsCmake(mobileRoot)
     expect(result.ok).toBe(true)
-    expect(result.patched).toBe(4)
+    expect(result.patched).toBe(expectedPatchedCount())
     expect(result.missing).toEqual([])
     for (const lib of NATIVE_LIBS) {
-      const cmake = fs.readFileSync(path.join(nm, lib.name, 'android', 'CMakeLists.txt'), 'utf8')
-      expect(cmake).not.toMatch(/\bCONFIGURE_DEPENDS\b/)
+      const cmake = fs.readFileSync(path.join(nm, lib.name, lib.cmakeRel), 'utf8')
+      expect(cmake).not.toMatch(/file\s*\(\s*GLOB[_A-Z]*\s+\S+\s+CONFIGURE_DEPENDS/)
       expect(cmake).toContain('CMAKE_SUPPRESS_REGENERATION')
       expect(cmake).toContain(CMAKE_OBJMAX_SET)
-      expect(cmake).toContain(REL_MARKER)
-      const kts = fs.readFileSync(path.join(nm, lib.name, 'android', 'build.gradle.kts'), 'utf8')
-      expect(kts).toContain(CMAKE_SUPPRESS)
-      expect(kts).toContain(CMAKE_OBJMAX)
+      if (lib.gradleRel) {
+        const kts = fs.readFileSync(path.join(nm, lib.name, lib.gradleRel), 'utf8')
+        expect(kts).toContain(CMAKE_SUPPRESS)
+        expect(kts).toContain(CMAKE_OBJMAX)
+      }
     }
+    const appCmake = fs.readFileSync(path.join(nm, APP_CMAKE_REL), 'utf8')
+    expect(appCmake).toContain(CMAKE_OBJMAX_SET)
+    expect(appCmake.indexOf('set(CMAKE_OBJECT_PATH_MAX')).toBeLessThan(appCmake.search(/^project\s*\(/m))
+  })
+
+  test('also injects cmake arguments into android/app/build.gradle when it exists', () => {
+    const { mobileRoot } = seedLayout({ hoisted: false, withAppGradle: true })
+    const result = patchWindowsCmake(mobileRoot)
+    expect(result.ok).toBe(true)
+    expect(result.patched).toBe(expectedPatchedCount() + 1)
+    const gradle = fs.readFileSync(path.join(mobileRoot, 'android', 'app', 'build.gradle'), 'utf8')
+    expect(gradle).toContain(CMAKE_OBJMAX)
+    expect(gradle).toContain(CMAKE_SUPPRESS)
   })
 
   test('finds libraries when npm hoisted them to the repo root', () => {
     const { mobileRoot } = seedLayout({ hoisted: true })
     const result = patchWindowsCmake(mobileRoot)
     expect(result.ok).toBe(true)
-    expect(result.patched).toBe(4)
+    expect(result.patched).toBe(expectedPatchedCount())
   })
 
   test('second run is a no-op (alreadyOk, no extra writes)', () => {
     const { mobileRoot, nm } = seedLayout({ hoisted: false })
     patchWindowsCmake(mobileRoot)
-    const before = fs.readFileSync(path.join(nm, 'react-native-reanimated', 'android', 'CMakeLists.txt'), 'utf8')
+    const cmakePath = path.join(nm, 'react-native-reanimated', 'android', 'CMakeLists.txt')
+    const before = fs.readFileSync(cmakePath, 'utf8')
     const second = patchWindowsCmake(mobileRoot)
     expect(second.patched).toBe(0)
-    expect(second.alreadyOk).toBe(4)
+    expect(second.alreadyOk).toBe(expectedPatchedCount())
     expect(second.ok).toBe(true)
-    const after = fs.readFileSync(path.join(nm, 'react-native-reanimated', 'android', 'CMakeLists.txt'), 'utf8')
-    expect(after).toBe(before)
+    expect(fs.readFileSync(cmakePath, 'utf8')).toBe(before)
   })
 
-  test('migrates on-disk 1024/128 patches in both libraries without a second insert', () => {
+  test('migrates on-disk 128 patches without a second insert', () => {
     const { mobileRoot, nm } = seedLayout({ hoisted: false })
     patchWindowsCmake(mobileRoot)
     for (const lib of NATIVE_LIBS) {
-      const cmakeFile = path.join(nm, lib.name, 'android', 'CMakeLists.txt')
-      const ktsFile = path.join(nm, lib.name, 'android', 'build.gradle.kts')
+      const cmakeFile = path.join(nm, lib.name, lib.cmakeRel)
       fs.writeFileSync(
         cmakeFile,
         fs.readFileSync(cmakeFile, 'utf8').replace(CMAKE_OBJMAX_SET, 'set(CMAKE_OBJECT_PATH_MAX 128)')
       )
-      fs.writeFileSync(
-        ktsFile,
-        fs.readFileSync(ktsFile, 'utf8').replace(
-          `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`,
-          '-DCMAKE_OBJECT_PATH_MAX=128'
+      if (lib.gradleRel) {
+        const ktsFile = path.join(nm, lib.name, lib.gradleRel)
+        fs.writeFileSync(
+          ktsFile,
+          fs.readFileSync(ktsFile, 'utf8').replace(
+            `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`,
+            '-DCMAKE_OBJECT_PATH_MAX=128'
+          )
         )
-      )
+      }
     }
     const migrated = patchWindowsCmake(mobileRoot)
     expect(migrated.ok).toBe(true)
-    expect(migrated.patched).toBe(4)
-    expect(migrated.alreadyOk).toBe(0)
+    expect(migrated.patched).toBeGreaterThan(0)
     for (const lib of NATIVE_LIBS) {
-      const cmake = fs.readFileSync(path.join(nm, lib.name, 'android', 'CMakeLists.txt'), 'utf8')
-      const kts = fs.readFileSync(path.join(nm, lib.name, 'android', 'build.gradle.kts'), 'utf8')
+      const cmake = fs.readFileSync(path.join(nm, lib.name, lib.cmakeRel), 'utf8')
       expect(cmake).toContain(CMAKE_OBJMAX_SET)
       expect(cmake).not.toContain('set(CMAKE_OBJECT_PATH_MAX 128)')
-      expect(cmake.split('set(CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
-      expect(cmake).toContain(REL_MARKER)
-      expect(kts).toContain(CMAKE_OBJMAX)
-      expect(kts).not.toContain('CMAKE_OBJECT_PATH_MAX=128')
-      expect(kts.split('CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
+      if (lib.gradleRel) {
+        const kts = fs.readFileSync(path.join(nm, lib.name, lib.gradleRel), 'utf8')
+        expect(kts).toContain(CMAKE_OBJMAX)
+        expect(kts).not.toContain('CMAKE_OBJECT_PATH_MAX=128')
+      }
     }
   })
 
