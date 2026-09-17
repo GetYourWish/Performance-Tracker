@@ -298,8 +298,23 @@ code:
 3. `ninja: error: mkdir(safeareacontext_autolinked_build/…/C_/Users/…)` —
    the same encoding, inside `:app:buildCMakeRelWithDebInfo`. Autolinked
    codegen sources sit *outside* the app `CMAKE_SOURCE_DIR`, so CMake will
-   not relativize them; the patch compiles short `pt_<md5>.cpp` stubs in
-   each target's `.cxx` dir that `#include` the real file.
+   not relativize them; even `CMAKE_OBJECT_PATH_MAX=250` cannot save the
+   long-named codegen files (e.g. `RNCSafeAreaViewComponentDescriptor.cpp.o`
+   — the md5-hash shortening needs `32 + filename ≤ 250 − dir_len`, and the
+   `.cxx` object dir is already ~178 chars). The patch compiles short
+   `pt_<md5>.cpp` stubs in each target's binary dir that `#include` the
+   real file, which caps every object path at ~220 chars.
+
+   **Root cause of earlier failed attempts:** the stub pass was gated on
+   `if(NOT WIN32)` — but `WIN32` describes the *target* platform and is
+   false for **every** Android build, so the pass never ran (dead code) and
+   the mkdir failure kept coming back. The gate is now
+   `CMAKE_HOST_WIN32` (the *build host*), with
+   `-DPT_WIN_SHORT_OBJECTS_FORCE=ON` as an any-host escape hatch (used to
+   verify the pass on Linux/macOS with the same CMake the Android SDK
+   ships). The patcher also **upgrades an older block already sitting in
+   `node_modules` in place** (strip + re-inject), so `git pull` +
+   `clean:native` is enough — no reinstall needed.
 
 The repo now patches those CMakeLists, the RN default app cmake, and
 `app/build.gradle` cmake arguments at `npm install`, at prebuild, and as

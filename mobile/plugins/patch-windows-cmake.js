@@ -45,6 +45,16 @@
  *      dirs are __/common/cpp/… not C_/Users/….
  *   5. Apply (3) to the app cmake (default-app-setup) and pass the -D flags
  *      through app/build.gradle so autolinked codegen inherits them.
+ *   6. Walk every target defined by the app cmake and REPLACE absolute-path
+ *      sources with short generated stubs (${BINARY_DIR}/pt_<md5>.cpp that
+ *      #include the real file). CRITICAL LESSON: the pass MUST be gated on
+ *      CMAKE_HOST_WIN32 (build host), never WIN32 (target platform) — an
+ *      Android build always has WIN32=false, so a WIN32 gate made the whole
+ *      pass dead code and symptom (3) kept failing. PT_WIN_SHORT_OBJECTS_FORCE
+ *      runs the pass on any host (repo CMake parity tests use it).
+ *      The short-obj block is STRIPPED and re-injected on every patcher run
+ *      so a newer plugin version upgrades an older block already sitting in
+ *      node_modules in place (node_modules survives git pull).
  *
  * Runs in THREE places: npm postinstall, prebuild, npm run clean:native.
  * Does not change app JS, native UX, or Gradle/AGP versions.
@@ -158,8 +168,13 @@ function stripOldRelsrcBlock(contents) {
 }
 
 function stripOldShortObjBlock(contents) {
+  // Exact inverse of the insertion below: the blank line(s) before the
+  // block, the block itself, and the newline that terminates it. Keeping
+  // strip/insert exact inverses is what makes re-running the patcher a
+  // stable fixpoint (idempotent) while still upgrading older block
+  // variants in place.
   return contents.replace(
-    /# >>> with-windows-cmake-short-obj[^\n]*\r?\n[\s\S]*?# <<< with-windows-cmake-short-obj\r?\n(?:\r?\n)?/,
+    /(?:\r?\n){1,2}# >>> with-windows-cmake-short-obj[^\n]*\r?\n[\s\S]*?# <<< with-windows-cmake-short-obj\r?\n/,
     ''
   );
 }
@@ -175,6 +190,11 @@ function shortObjBlock(eol) {
     `# CMAKE_SOURCE_DIR, so CMake names objects C_/Users/... and ninja`,
     `# mkdir exceeds MAX_PATH. Compile a short stub in each target's`,
     `# binary dir that #includes the real .cpp instead.`,
+    `#`,
+    `# Gate on CMAKE_HOST_WIN32 (the build host), NOT on WIN32: WIN32`,
+    `# describes the TARGET platform and is false for every Android`,
+    `# build, so a WIN32 gate turned this pass into dead code.`,
+    `# -DPT_WIN_SHORT_OBJECTS_FORCE=ON runs it on any host (tests/CI).`,
     'function(pt_win_walk_targets out dir)',
     '  get_property(_t DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)',
     '  get_property(_s DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)',
@@ -190,8 +210,11 @@ function shortObjBlock(eol) {
     '  if(_alias)',
     '    return()',
     '  endif()',
+    '  # Only stub targets that actually compile sources. Utility/custom',
+    '  # targets use SOURCES as custom-command inputs — replacing those',
+    '  # would break generation, not shorten object paths.',
     '  get_target_property(_type "${tgt}" TYPE)',
-    '  if(_type STREQUAL "INTERFACE_LIBRARY")',
+    '  if(NOT _type MATCHES "^(SHARED_LIBRARY|MODULE_LIBRARY|STATIC_LIBRARY|OBJECT_LIBRARY|EXECUTABLE)$")',
     '    return()',
     '  endif()',
     '  get_target_property(_srcs "${tgt}" SOURCES)',
@@ -230,7 +253,7 @@ function shortObjBlock(eol) {
     '  set_property(TARGET "${tgt}" PROPERTY SOURCES "${_new}")',
     'endfunction()',
     'function(pt_win_short_objects)',
-    '  if(NOT WIN32)',
+    '  if(NOT CMAKE_HOST_WIN32 AND NOT PT_WIN_SHORT_OBJECTS_FORCE)',
     '    return()',
     '  endif()',
     '  pt_win_walk_targets(_pt_all "${CMAKE_SOURCE_DIR}")',
@@ -251,14 +274,18 @@ function patchAppSetupCMakeText(contents) {
   const original = contents;
   const eol = detectEOL(contents);
   let next = patchCMakeListsText(contents).contents;
-  if (!next.includes(SHORT_MARKER)) {
-    const includeRe =
-      /^(include\(\s*\$\{REACT_ANDROID_DIR\}\/cmake-utils\/ReactNative-application\.cmake\s*\))/m;
-    if (includeRe.test(next)) {
-      next = next.replace(includeRe, `$1${eol}${eol}${shortObjBlock(eol)}`);
-    } else {
-      next = next.replace(/\s*$/, '') + eol + eol + shortObjBlock(eol) + eol;
-    }
+  // ALWAYS strip any previously injected short-object block before
+  // re-inserting the current one: node_modules survives `git pull`, so an
+  // older (possibly buggy — e.g. the WIN32-gate dead-code variant) block
+  // must be upgraded in place, not left behind because the marker matched.
+  // strip + insert below are exact inverses → idempotent fixpoint.
+  next = stripOldShortObjBlock(next);
+  const includeRe =
+    /^(include\(\s*\$\{REACT_ANDROID_DIR\}\/cmake-utils\/ReactNative-application\.cmake\s*\))/m;
+  if (includeRe.test(next)) {
+    next = next.replace(includeRe, `$1${eol}${eol}${shortObjBlock(eol)}${eol}`);
+  } else {
+    next = next.replace(/\s*$/, '') + eol + eol + shortObjBlock(eol) + eol;
   }
   return { contents: next, changed: next !== original };
 }

@@ -190,6 +190,54 @@ describe('patchCMakeListsText', () => {
     expect(contents).not.toContain(REL_MARKER)
   })
 
+  test('short-object pass is gated on the build HOST, never on the target WIN32', () => {
+    // WIN32 describes the TARGET platform and is false for every Android
+    // build — gating on it made the pass dead code and the Windows
+    // safeareacontext mkdir failure kept happening. The host check is
+    // CMAKE_HOST_WIN32; PT_WIN_SHORT_OBJECTS_FORCE allows CI parity runs.
+    const { contents } = patchAppSetupCMakeText(APP_CMAKE)
+    expect(contents).toContain('if(NOT CMAKE_HOST_WIN32 AND NOT PT_WIN_SHORT_OBJECTS_FORCE)')
+    expect(contents).not.toMatch(/if\(NOT WIN32\)/)
+  })
+
+  test('only compilable target types are stubbed (custom/utility targets keep their sources)', () => {
+    const { contents } = patchAppSetupCMakeText(APP_CMAKE)
+    expect(contents).toContain(
+      '_type MATCHES "^(SHARED_LIBRARY|MODULE_LIBRARY|STATIC_LIBRARY|OBJECT_LIBRARY|EXECUTABLE)$"'
+    )
+    // The old INTERFACE_LIBRARY-only check no longer exists (subsumed).
+    expect(contents).not.toContain('STREQUAL "INTERFACE_LIBRARY"')
+  })
+
+  test('re-running the patcher upgrades an older WIN32-gated block in place', () => {
+    // node_modules survives `git pull`, so the user's disk holds the block
+    // written by the PREVIOUS (buggy) plugin version. The patcher must
+    // strip + re-inject so the fixed block replaces it without a reinstall.
+    const fresh = patchAppSetupCMakeText(APP_CMAKE).contents
+    const stale = fresh.replace(
+      /function\(pt_win_short_objects\)[\s\S]*?endfunction\(\)/,
+      [
+        'function(pt_win_short_objects)',
+        '  if(NOT WIN32)',
+        '    return()',
+        '  endif()',
+        '  pt_win_walk_targets(_pt_all "${CMAKE_SOURCE_DIR}")',
+        '  foreach(_pt_tgt IN LISTS _pt_all)',
+        '    pt_win_stub_target("${_pt_tgt}")',
+        '  endforeach()',
+        'endfunction()'
+      ].join('\n')
+    )
+    expect(stale).toContain('if(NOT WIN32)') // sanity: this is the old shape
+    const migrated = patchAppSetupCMakeText(stale)
+    expect(migrated.changed).toBe(true)
+    expect(migrated.contents).toContain('if(NOT CMAKE_HOST_WIN32 AND NOT PT_WIN_SHORT_OBJECTS_FORCE)')
+    expect(migrated.contents).not.toMatch(/if\(NOT WIN32\)/)
+    expect(migrated.contents.split(SHORT_MARKER).length - 1).toBe(1)
+    // The upgraded file is byte-identical to a fresh patch.
+    expect(migrated.contents).toBe(fresh)
+  })
+
   test('app-setup patch is idempotent', () => {
     const once = patchAppSetupCMakeText(APP_CMAKE).contents
     const twice = patchAppSetupCMakeText(once)
