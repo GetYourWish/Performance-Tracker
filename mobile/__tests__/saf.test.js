@@ -18,6 +18,14 @@
 // every awaiting screen (boot splash, 'Create default tracker.json', the
 // folder picker) forever — the load() watchdog only repainted STATE, the
 // promises themselves never settled.
+//
+// And the createFileAsync argument order: the adapter used to pass
+// (dirUri, mime, name) while expo's REAL signature is
+// createFileAsync(parentUri, fileName, mimeType) — every created document
+// got the display name 'application/json' instead of 'tracker.json', so
+// 'Create default tracker.json' produced a file the app could never find
+// again. The mock below now mirrors expo's REAL parameter order; a mock
+// must mirror the LIBRARY, never the code under test.
 
 // Stand-in for 'expo-file-system/legacy' so the adapter is exercisable in
 // Node. The factory reads mockLegacyState at CALL time so a test can flip a
@@ -39,8 +47,8 @@ function mockMakeLegacyFs(state) {
         if (state.stallReadDirectory) return new Promise(() => {}) // OEM stall: never settles
         return []
       },
-      createFileAsync: async (parentUri, mimeType, fileName) => {
-        mockLegacyCalls.push(['createFileAsync', parentUri, mimeType, fileName])
+      createFileAsync: async (parentUri, fileName, mimeType) => {
+        mockLegacyCalls.push(['createFileAsync', parentUri, fileName, mimeType])
         return parentUri + '/' + encodeURIComponent(fileName)
       }
     },
@@ -214,12 +222,27 @@ describe('createSafAdapter', () => {
     }
   })
 
-  test('createDocument calls createFileAsync(parentUri, mimeType, fileName) in that order', async () => {
+  test('createDocument calls createFileAsync(parentUri, fileName, mimeType) in that order — the real expo signature', async () => {
+    // REGRESSION: the adapter used to pass (dirUri, mime, name) — swapped.
+    // On a real device the created document was named after the MIME string
+    // ('application/json'), never 'tracker.json', so the app could not read
+    // back what it had just created ('create default → still cannot read it').
+    // The expo ground truth (expo-file-system 57.0.6, src/legacy/FileSystem.ts):
+    //   createFileAsync(parentUri: string, fileName: string, mimeType: string)
     mockLegacyCalls.length = 0
     const adapter = createSafAdapter()
     await adapter.createDocument('content://folder', 'tracker.json')
     expect(mockLegacyCalls).toEqual([
-      ['createFileAsync', 'content://folder', 'application/json', 'tracker.json']
+      ['createFileAsync', 'content://folder', 'tracker.json', 'application/json']
+    ])
+  })
+
+  test('createDocument forwards a custom mime in the third slot', async () => {
+    mockLegacyCalls.length = 0
+    const adapter = createSafAdapter()
+    await adapter.createDocument('content://folder', 'notes.txt', 'text/plain')
+    expect(mockLegacyCalls).toEqual([
+      ['createFileAsync', 'content://folder', 'notes.txt', 'text/plain']
     ])
   })
 

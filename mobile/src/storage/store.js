@@ -10,7 +10,7 @@
 //    if another device wrote since our last load/write, the fresh content is
 //    schema-gated + healed and the mutation is applied ON TOP of it — the
 //    phone can never silently clobber a concurrent desktop edit.
-//  - ATOMIC WRITE: content is written to tracker.json.tmp in the SAME
+//  - ATOMIC WRITE: content is written to a tmp document in the SAME
 //    directory, read back and verified byte-for-byte, then the verified
 //    content is written to the target document and the tmp removed. SAF has
 //    no rename-clobber, so the final replace is a full-document write; the
@@ -230,8 +230,19 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
     // refresh the directory listing (the target may have appeared/vanished)
     await listFolder()
 
-    // 1) tmp document in the SAME directory, verified byte-for-byte
-    const tmpName = state.fileName + '.tmp'
+    // 1) tmp document in the SAME directory, verified byte-for-byte.
+    //
+    //    The tmp display name is platform-safe on purpose:
+    //     - It must END with '.json' — Android's DocumentsContract appends the
+    //       MIME-derived extension to any display name that lacks it, so a
+    //       'tracker.json.tmp' document is actually created as
+    //       'tracker.json.tmp.json', which exact-name cleanup can never find.
+    //     - It must NOT be 'tracker.json.tmp' — that is the DESKTOP app's own
+    //       atomicSave temp file, synced into this folder by Syncthing while
+    //       the desktop is mid-save; removing it (the stale-tmp cleanup below)
+    //       would break the desktop's rename. A leading dot keeps ours
+    //       distinct and is ignored by the desktop's file watcher.
+    const tmpName = '.' + state.fileName.replace(/\.json$/, '') + '.tmp.json'
     const existingTmp = dirListing.find(u => adapter.fileNameOf(u) === tmpName)
     if (existingTmp) await adapter.removeDocument(existingTmp)
     const tmpUri = await adapter.createDocument(state.folderUri, tmpName)

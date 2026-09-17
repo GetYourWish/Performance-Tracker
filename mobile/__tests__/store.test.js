@@ -170,7 +170,8 @@ describe('backups rotation', () => {
   test('isBackupName ignores other files', () => {
     expect(isBackupName('tracker-2026-01-01T00-00-00-000Z.json')).toBe(true)
     expect(isBackupName('tracker.json')).toBe(false)
-    expect(isBackupName('tracker.json.tmp')).toBe(false)
+    expect(isBackupName('tracker.json.tmp')).toBe(false) // desktop atomicSave tmp
+    expect(isBackupName('.tracker.tmp.json')).toBe(false) // mobile atomic-write tmp
   })
 })
 
@@ -343,6 +344,8 @@ describe('tracker store', () => {
     await store.mutate(d => createTask(d, 'hello', '2026-02-01T10:00:00.000Z'))
 
     const names = [...adapter._files.keys()].map(fileNameOf)
+    // the mobile tmp is a leading-dot name (Android-safe, desktop-distinct)
+    expect(names).not.toContain('.tracker.tmp.json')
     expect(names).not.toContain('tracker.json.tmp')
     const raw = adapter._files.get(DIR + FILE).content
     expect(raw).toBe(JSON.stringify(JSON.parse(raw), null, 2)) // pretty, 2-space

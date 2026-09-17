@@ -131,6 +131,53 @@ theme.
 - **Conflicts**: Syncthing `-conflict-` copies are surfaced on the board and in
   Settings — never auto-loaded, never auto-deleted
 
+#### v1.0.3 — fixing "stuck on Loading…" / "created tracker.json but it can't be read"
+
+Three device-only bugs shipped in v1.0.2's storage layer, all found by reading
+expo-file-system 57.0.6's actual sources (`src/legacy/FileSystem.ts` +
+`FileSystemLegacyModule.kt`):
+
+1. **`createFileAsync` arguments were swapped.** Expo's real signature is
+   `createFileAsync(parentUri, fileName, mimeType)` — the adapter passed
+   `(dirUri, mime, name)`, so on a real device every created document was
+   *named* `application/json` with mime type `tracker.json`. "Create default
+   tracker.json" wrote a file the app could never find again — exactly
+   "created it but still cannot read it". (The unit suite missed it because
+   the SAF mock had invented the same wrong order the adapter used; the mock
+   now mirrors expo's real signature.)
+2. **The crash reporter imported the wrong expo entry point.** SDK 57's root
+   `expo-file-system` has no `documentDirectory` and its legacy string
+   methods are stubs that *throw* — `diagnostics.js` now imports
+   `expo-file-system/legacy` like the SAF adapter does.
+3. **expo's `getInfoAsync` leaks one file descriptor per call on content
+   URIs** (the stream is opened, never closed). The store's 15-second
+   change-detection poll leaked ~240 fds/hour until every SAF call started
+   failing. `mobile/plugins/patch-expo-fs-leak.js` (npm postinstall + every
+   prebuild) patches the Kotlin to close the stream — see the file for the
+   exact edit.
+
+The atomic-write tmp document was also renamed `tracker.json.tmp` →
+`.tracker.tmp.json`: Android's `DocumentsContract` appends the mime extension
+to any display name that lacks it (`tracker.json.tmp` would be created as
+`tracker.json.tmp.json`, unfindable for cleanup), and the plain name is the
+*desktop* app's own atomicSave temp, which the phone must never delete while
+Syncthing is mid-delivery.
+
+**Rebuilding after these fixes** (the fd-leak patch makes `npm install`
+mandatory, not just a `git pull`):
+
+```bash
+git pull
+npm install                    # runs the postinstall patches (incl. patch-expo-fs-leak.js)
+cd mobile/android
+.\gradlew assembleRelease      # Windows
+```
+
+Folders used with the broken v1.0.2 may contain junk documents named
+`application.json` / `application (1).json` — those are mis-named
+tracker.json copies the old build created; they are never read or written by
+v1.0.3 and can be deleted manually (the real `tracker.json` is untouched).
+
 #### Building the standalone APK (release) — the only APK that works without Metro
 
 ```bash

@@ -116,8 +116,21 @@ export async function findChildByName(dirUri, name) {
 
 // NOTE: SAF createDocument dedupes names on collision ("tracker (1).json"),
 // so callers MUST remove a same-name document via removeDocument() first.
+//
+// REGRESSION GUARD (remote-reported: 'clicked create default tracker.json,
+// it still cannot read it'): expo's signature is
+//     StorageAccessFramework.createFileAsync(parentUri, fileName, mimeType)
+// — fileName BEFORE mimeType. This adapter used to pass (dirUri, mime, name),
+// so on a real device EVERY created document got the display name
+// 'application/json' and the mime type 'tracker.json' / 'tracker.json.tmp'.
+// The tmp + target documents were therefore never named tracker.json, the
+// next load() could not find the file, and the app bounced back to the
+// 'No tracker.json' screen — looking exactly like 'created it but cannot
+// read it'. The unit suite never caught it because the SAF mock invented
+// the same wrong parameter order the adapter used; the mock now mirrors
+// expo's REAL signature (see __tests__/saf.test.js).
 export async function createDocument(dirUri, name, mime = JSON_MIME) {
-  return withTimeout(() => SAF().createFileAsync(dirUri, mime, name), `Creating ${name}`)
+  return withTimeout(() => SAF().createFileAsync(dirUri, name, mime), `Creating ${name}`)
 }
 
 export async function removeDocument(uri) {

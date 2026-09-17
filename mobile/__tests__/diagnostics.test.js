@@ -1,13 +1,21 @@
 // diagnostics.js — release crash reporter.
-// The FS is mocked; the reporter logic (DEV no-op, handler chaining, report
-// shape, read/clear caching) is exercised directly. In jest, __DEV__ is true,
-// so tests that need the release path flip the global explicitly.
+//
+// The LEGACY FS is mocked (diagnostics must import from
+// 'expo-file-system/legacy' — see the module header); the ROOT
+// 'expo-file-system' mock below replicates the REAL SDK 57 root export:
+// no documentDirectory, and every legacy string method is a deprecation
+// stub that THROWS. If diagnostics ever regresses to the root import, the
+// reporter silently dies on-device (nothing recorded, nothing shown) — with
+// this mock it dies loudly in the suite instead.
+//
+// In jest, __DEV__ is true, so tests that need the release path flip the
+// global explicitly.
 
 import { installReleaseCrashReporter, readLastCrash, clearLastCrash, crashReportUri } from '../src/diagnostics'
 
-const mockState = { writes: [], deleted: [], files: new Map() }
+const mockState = { writes: [], deleted: [], files: new Map(), rootCalls: [] }
 
-jest.mock('expo-file-system', () => ({
+jest.mock('expo-file-system/legacy', () => ({
   documentDirectory: 'file:///mock-doc/',
   writeAsStringAsync: jest.fn(async (uri, content) => {
     mockState.files.set(uri, content)
@@ -23,6 +31,26 @@ jest.mock('expo-file-system', () => ({
     mockState.files.delete(uri)
   })
 }))
+
+// REAL SDK 57 root behavior: legacy methods throw, documentDirectory is gone.
+jest.mock('expo-file-system', () => {
+  const throwing = name =>
+    jest.fn(async (...args) => {
+      mockState.rootCalls.push(name)
+      throw new Error(
+        `Method ${name} imported from "expo-file-system" is deprecated. You can migrate to the new filesystem API using "File" and "Directory" classes or import the legacy API from "expo-file-system/legacy".`
+      )
+    })
+  return {
+    Paths: {},
+    File: class {},
+    Directory: class {},
+    getInfoAsync: throwing('getInfoAsync'),
+    readAsStringAsync: throwing('readAsStringAsync'),
+    writeAsStringAsync: throwing('writeAsStringAsync'),
+    deleteAsync: throwing('deleteAsync')
+  }
+})
 
 const realDev = global.__DEV__
 const realHandler = global.ErrorUtils && global.ErrorUtils.getGlobalHandler
@@ -80,6 +108,8 @@ describe('release crash reporter', () => {
         expect(parsed.at).toBeTruthy()
         // original handler was still called
         expect(typeof handler).toBe('function')
+        // and crucially: nothing ever reached the SDK 57 ROOT stubs
+        expect(mockState.rootCalls).toHaveLength(0)
       })
     })
   })

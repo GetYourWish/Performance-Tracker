@@ -6,7 +6,7 @@
   "license": "MIT",
   "main": "index.js",
   "scripts": {
-    "postinstall": "node plugins/patch-expo-gradle-kotlin.js && node plugins/patch-windows-cmake.js",
+    "postinstall": "node plugins/patch-expo-gradle-kotlin.js && node plugins/patch-windows-cmake.js && node plugins/patch-expo-fs-leak.js",
     "start": "expo start",
     "android": "expo run:android",
     "prebuild": "node scripts/expo-prebuild-safe.js",

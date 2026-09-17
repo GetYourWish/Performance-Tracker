@@ -161,7 +161,7 @@ describe('store vs real Android document URIs', () => {
 
   test('findChildByName semantics inside listFolder: tmp + target with real ids', async () => {
     const adapter = createRealisticAdapter()
-    adapter._files.set(docUri('tracker.json.tmp'), { content: 'stale', mtime: 1 })
+    adapter._files.set(docUri('.tracker.tmp.json'), { content: 'stale', mtime: 1 })
     adapter._files.set(docUri('tracker.json'), { content: sampleRaw(), mtime: 2 })
     const store = createTrackerStore({ adapter, dirUri: DIR })
     await store.load()
@@ -190,18 +190,65 @@ describe('initializeDefault safety', () => {
     // exactly ONE tracker document, now holding the default data
     const docs = [...adapter._files.keys()].map(fileNameOf)
     expect(docs.filter(n => n === 'tracker.json')).toHaveLength(1)
-    expect(docs.filter(n => n !== 'tracker.json' && n !== 'tracker.json.tmp')).toHaveLength(0)
+    expect(docs.filter(n => n !== 'tracker.json' && n !== '.tracker.tmp.json')).toHaveLength(0)
     const written = JSON.parse(adapter._files.get(docUri('tracker.json')).content)
     expect(written.schemaVersion).toBe(1)
     expect(written.difficulties).toHaveLength(4)
 
     // no tmp litter
-    expect(docs.includes('tracker.json.tmp')).toBe(false)
+    expect(docs.includes('.tracker.tmp.json')).toBe(false)
 
     // the previous content was backed up verbatim in the app-private area
     const backups = [...adapter._appFiles.entries()]
     expect(backups).toHaveLength(1)
     expect(backups[0][1]).toBe(raw)
+  })
+
+  test('cleans its own stale mobile tmp but never deletes the desktop\'s tracker.json.tmp', async () => {
+    // Two tmp files can legitimately sit in the Syncthing folder:
+    //  - '.tracker.tmp.json' — OURS (a crashed mobile write); the next write
+    //    must remove it before creating a fresh one
+    //  - 'tracker.json.tmp'  — the DESKTOP app's atomicSave temp, synced in
+    //    while the desktop is mid-save. The phone must leave it ALONE:
+    //    deleting it would break the desktop's rename. (Our tmp name was
+    //    chosen to end in '.json' precisely because Android's
+    //    DocumentsContract would otherwise append '.json' to a
+    //    'tracker.json.tmp' display name, making it unfindable for cleanup.)
+    const adapter = createRealisticAdapter()
+    adapter._files.set(docUri('.tracker.tmp.json'), { content: 'stale mobile write', mtime: 1 })
+    adapter._files.set(docUri('tracker.json.tmp'), { content: 'desktop mid-save', mtime: 2 })
+    const store = createTrackerStore({ adapter, dirUri: DIR })
+
+    await store.initializeDefault()
+
+    const docs = [...adapter._files.keys()].map(fileNameOf)
+    // our stale tmp was replaced by the write's own tmp and removed again
+    expect(docs.includes('.tracker.tmp.json')).toBe(false)
+    // the desktop's live tmp survived untouched
+    expect(docs.includes('tracker.json.tmp')).toBe(true)
+    expect(adapter._files.get(docUri('tracker.json.tmp')).content).toBe('desktop mid-save')
+    // and the target landed under its real name
+    expect(docs.includes('tracker.json')).toBe(true)
+  })
+
+  test('createDocument is called with the tmp name that ends in .json (Android never re-suffixed it)', async () => {
+    // Guard for the OTHER half of the createFileAsync regression: the tmp
+    // display name must end with '.json', or Android's DocumentsContract
+    // appends the MIME extension ('tracker.json.tmp' → 'tracker.json.tmp.json')
+    // and the exact-name cleanup in writeData stops finding it.
+    const created = []
+    const adapter = createRealisticAdapter()
+    const baseCreate = adapter.createDocument.bind(adapter)
+    adapter.createDocument = (dirUri, name, mime) => {
+      created.push(name)
+      return baseCreate(dirUri, name, mime)
+    }
+    const store = createTrackerStore({ adapter, dirUri: DIR })
+    await store.initializeDefault()
+    expect(created.length).toBeGreaterThan(0)
+    for (const name of created) {
+      expect(name.endsWith('.json')).toBe(true)
+    }
   })
 
   test('rejects with SAF_TIMEOUT when the provider write stalls — no infinite spinner', async () => {

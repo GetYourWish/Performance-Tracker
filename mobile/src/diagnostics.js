@@ -11,8 +11,26 @@
 //    be the reason the app crashes.
 //  - The original global handler is still invoked (native crash pipeline,
 //    e.g. the JS exception dialog, keeps its normal behavior).
+//
+// FS import mirrors saf.js: SDK 54+ moved the string API (documentDirectory,
+// readAsStringAsync, writeAsStringAsync, getInfoAsync, deleteAsync) to
+// 'expo-file-system/legacy' — the ROOT export of SDK 57 has none of them
+// (documentDirectory is undefined there and the legacy methods are stubs
+// that THROW 'deprecated … will throw in runtime'), which silently killed
+// the whole crash reporter: reports were never written, never read, never
+// shown. The lazy require keeps this module out of the Node test env.
 
-import * as FileSystem from 'expo-file-system'
+let _fs = null
+function legacyFs() {
+  if (!_fs) {
+    try {
+      _fs = require('expo-file-system/legacy') // SDK 54+
+    } catch (e) {
+      _fs = require('expo-file-system') // older SDKs
+    }
+  }
+  return _fs
+}
 
 const CRASH_FILE = 'last-crash.json'
 export const MAX_STACK_CHARS = 8000
@@ -20,7 +38,7 @@ export const MAX_STACK_CHARS = 8000
 let cachedReport // undefined = not read yet, null = checked & none
 
 export function crashReportUri() {
-  return FileSystem.documentDirectory + CRASH_FILE
+  return legacyFs().documentDirectory + CRASH_FILE
 }
 
 export function installReleaseCrashReporter() {
@@ -38,7 +56,9 @@ export function installReleaseCrashReporter() {
           isFatal: !!isFatal,
           at: new Date().toISOString()
         }
-        FileSystem.writeAsStringAsync(crashReportUri(), JSON.stringify(report, null, 2)).catch(() => {})
+        legacyFs()
+          .writeAsStringAsync(crashReportUri(), JSON.stringify(report, null, 2))
+          .catch(() => {})
       } catch (e) {
         // reporter must never throw
       }
@@ -53,12 +73,12 @@ export function installReleaseCrashReporter() {
 export async function readLastCrash() {
   if (cachedReport !== undefined) return cachedReport
   try {
-    const info = await FileSystem.getInfoAsync(crashReportUri())
+    const info = await legacyFs().getInfoAsync(crashReportUri())
     if (!info.exists) {
       cachedReport = null
       return null
     }
-    const raw = await FileSystem.readAsStringAsync(crashReportUri())
+    const raw = await legacyFs().readAsStringAsync(crashReportUri())
     cachedReport = JSON.parse(raw)
   } catch (e) {
     cachedReport = null
@@ -69,7 +89,7 @@ export async function readLastCrash() {
 export async function clearLastCrash() {
   cachedReport = null
   try {
-    await FileSystem.deleteAsync(crashReportUri(), { idempotent: true })
+    await legacyFs().deleteAsync(crashReportUri(), { idempotent: true })
   } catch (e) {
     // ignore — nothing we can do, and the screen will simply reappear
   }
