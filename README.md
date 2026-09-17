@@ -296,8 +296,10 @@ code:
    CMake encoded an absolute `C:\Users\…` source path into the object-file
    directory past Windows `MAX_PATH` (260).
 3. `ninja: error: mkdir(safeareacontext_autolinked_build/…/C_/Users/…)` —
-   the same encoding, inside `:app:buildCMakeRelWithDebInfo` (codegen of
-   safe-area-context under `android/app/.cxx`, not the library `.cxx`).
+   the same encoding, inside `:app:buildCMakeRelWithDebInfo`. Autolinked
+   codegen sources sit *outside* the app `CMAKE_SOURCE_DIR`, so CMake will
+   not relativize them; the patch compiles short `pt_<md5>.cpp` stubs in
+   each target's `.cxx` dir that `#include` the real file.
 
 The repo now patches those CMakeLists, the RN default app cmake, and
 `app/build.gradle` cmake arguments at `npm install`, at prebuild, and as

@@ -56,6 +56,7 @@ const path = require('path');
 const TAG = '[with-windows-cmake]';
 const MARKER = '>>> with-windows-cmake';
 const REL_MARKER = '>>> with-windows-cmake-relsrc';
+const SHORT_MARKER = '>>> with-windows-cmake-short-obj';
 const CMAKE_SUPPRESS = '-DCMAKE_SUPPRESS_REGENERATION=ON';
 const CMAKE_OBJMAX_VALUE = '250';
 const CMAKE_OBJMAX = `-DCMAKE_OBJECT_PATH_MAX=${CMAKE_OBJMAX_VALUE}`;
@@ -144,7 +145,7 @@ function relativeSourcesBlock(eol) {
 
 function stripOldHeaderBlock(contents) {
   return contents.replace(
-    /# >>> with-windows-cmake(?!-relsrc)[^\n]*\r?\n[\s\S]*?# <<< with-windows-cmake(?!-relsrc)\r?\n(?:\r?\n)?/,
+    /# >>> with-windows-cmake(?!-)[^\n]*\r?\n[\s\S]*?# <<< with-windows-cmake(?!-)\r?\n(?:\r?\n)?/,
     ''
   );
 }
@@ -156,8 +157,110 @@ function stripOldRelsrcBlock(contents) {
   );
 }
 
+function stripOldShortObjBlock(contents) {
+  return contents.replace(
+    /# >>> with-windows-cmake-short-obj[^\n]*\r?\n[\s\S]*?# <<< with-windows-cmake-short-obj\r?\n(?:\r?\n)?/,
+    ''
+  );
+}
+
 function hasHeaderBlock(contents) {
-  return /# >>> with-windows-cmake(?!-relsrc)/.test(contents);
+  return /# >>> with-windows-cmake(?!-)/.test(contents);
+}
+
+function shortObjBlock(eol) {
+  return [
+    `# ${SHORT_MARKER}`,
+    `# Autolinked codegen (safeareacontext etc.) lives outside the app`,
+    `# CMAKE_SOURCE_DIR, so CMake names objects C_/Users/... and ninja`,
+    `# mkdir exceeds MAX_PATH. Compile a short stub in each target's`,
+    `# binary dir that #includes the real .cpp instead.`,
+    'function(pt_win_walk_targets out dir)',
+    '  get_property(_t DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)',
+    '  get_property(_s DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)',
+    '  set(_all ${_t})',
+    '  foreach(_d IN LISTS _s)',
+    '    pt_win_walk_targets(_c "${_d}")',
+    '    list(APPEND _all ${_c})',
+    '  endforeach()',
+    '  set(${out} "${_all}" PARENT_SCOPE)',
+    'endfunction()',
+    'function(pt_win_stub_target tgt)',
+    '  get_target_property(_alias "${tgt}" ALIASED_TARGET)',
+    '  if(_alias)',
+    '    return()',
+    '  endif()',
+    '  get_target_property(_type "${tgt}" TYPE)',
+    '  if(_type STREQUAL "INTERFACE_LIBRARY")',
+    '    return()',
+    '  endif()',
+    '  get_target_property(_srcs "${tgt}" SOURCES)',
+    '  if(NOT _srcs)',
+    '    return()',
+    '  endif()',
+    '  get_target_property(_bin "${tgt}" BINARY_DIR)',
+    '  get_target_property(_sdir "${tgt}" SOURCE_DIR)',
+    '  set(_new "")',
+    '  foreach(_src IN LISTS _srcs)',
+    '    if("${_src}" MATCHES "^\\\\$<")',
+    '      list(APPEND _new "${_src}")',
+    '      continue()',
+    '    endif()',
+    '    if(NOT IS_ABSOLUTE "${_src}")',
+    '      set(_src "${_sdir}/${_src}")',
+    '    endif()',
+    '    get_filename_component(_ext "${_src}" EXT)',
+    '    if(NOT _ext MATCHES "^\\\\.(cpp|cc|cxx|c|mm|m)$")',
+    '      list(APPEND _new "${_src}")',
+    '      continue()',
+    '    endif()',
+    '    file(TO_CMAKE_PATH "${_src}" _src)',
+    '    string(FIND "${_src}" "${_bin}/" _inbin)',
+    '    if(_inbin EQUAL 0)',
+    '      list(APPEND _new "${_src}")',
+    '      continue()',
+    '    endif()',
+    '    string(MD5 _h "${_src}")',
+    '    set(_stub "${_bin}/pt_${_h}${_ext}")',
+    '    if(NOT EXISTS "${_stub}")',
+    '      file(WRITE "${_stub}" "#include \\"${_src}\\"\\n")',
+    '    endif()',
+    '    list(APPEND _new "${_stub}")',
+    '  endforeach()',
+    '  set_property(TARGET "${tgt}" PROPERTY SOURCES "${_new}")',
+    'endfunction()',
+    'function(pt_win_short_objects)',
+    '  if(NOT WIN32)',
+    '    return()',
+    '  endif()',
+    '  pt_win_walk_targets(_pt_all "${CMAKE_SOURCE_DIR}")',
+    '  foreach(_pt_tgt IN LISTS _pt_all)',
+    '    pt_win_stub_target("${_pt_tgt}")',
+    '  endforeach()',
+    'endfunction()',
+    'pt_win_short_objects()',
+    '# <<< with-windows-cmake-short-obj',
+  ].join(eol);
+}
+
+/**
+ * RN default-app-setup CMakeLists: header before project() PLUS short-object
+ * stubs after ReactNative-application.cmake (all autolinked targets exist).
+ */
+function patchAppSetupCMakeText(contents) {
+  const original = contents;
+  const eol = detectEOL(contents);
+  let next = patchCMakeListsText(contents).contents;
+  if (!next.includes(SHORT_MARKER)) {
+    const includeRe =
+      /^(include\(\s*\$\{REACT_ANDROID_DIR\}\/cmake-utils\/ReactNative-application\.cmake\s*\))/m;
+    if (includeRe.test(next)) {
+      next = next.replace(includeRe, `$1${eol}${eol}${shortObjBlock(eol)}`);
+    } else {
+      next = next.replace(/\s*$/, '') + eol + eol + shortObjBlock(eol) + eol;
+    }
+  }
+  return { contents: next, changed: next !== original };
 }
 
 /**
@@ -326,7 +429,7 @@ function patchWindowsCmake(startDir) {
     );
   } else {
     const original = fs.readFileSync(appCmake, 'utf8');
-    const { contents } = patchCMakeListsText(original);
+    const { contents } = patchAppSetupCMakeText(original);
     recordStatus(result, writeIfChanged(appCmake, original, contents, 'react-native/default-app-setup/CMakeLists.txt'));
   }
 
@@ -356,6 +459,7 @@ module.exports = {
   patchWindowsCmake,
   patchCMakeListsText,
   patchGradleKtsText,
+  patchAppSetupCMakeText,
   patchAppBuildGradleText,
   TAG,
   NATIVE_LIBS,
@@ -366,6 +470,7 @@ module.exports = {
   CMAKE_OBJMAX_SET,
   MARKER,
   REL_MARKER,
+  SHORT_MARKER,
 };
 
 if (require.main === module) {

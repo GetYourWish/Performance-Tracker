@@ -18,6 +18,7 @@ const {
   patchCMakeListsText,
   patchGradleKtsText,
   patchAppBuildGradleText,
+  patchAppSetupCMakeText,
   patchWindowsCmake,
   CMAKE_SUPPRESS,
   CMAKE_OBJMAX,
@@ -25,6 +26,7 @@ const {
   CMAKE_OBJMAX_SET,
   MARKER,
   REL_MARKER,
+  SHORT_MARKER,
   NATIVE_LIBS,
   APP_CMAKE_REL
 } = require('../plugins/patch-windows-cmake')
@@ -171,6 +173,30 @@ describe('patchCMakeListsText', () => {
     expect(contents.indexOf('set(CMAKE_OBJECT_PATH_MAX')).toBeLessThan(contents.search(/^project\s*\(/m))
     // no add_library in this file — no relsrc block
     expect(contents).not.toContain(REL_MARKER)
+  })
+
+  test('injects short-object stubs after ReactNative-application.cmake (app setup)', () => {
+    const { contents, changed } = patchAppSetupCMakeText(APP_CMAKE)
+    expect(changed).toBe(true)
+    expect(contents).toContain(CMAKE_OBJMAX_SET)
+    expect(contents).toContain(SHORT_MARKER)
+    expect(contents).toContain('pt_win_short_objects()')
+    expect(contents).toContain('file(WRITE')
+    expect(contents).toContain('#include')
+    const includeAt = contents.indexOf('ReactNative-application.cmake')
+    const stubAt = contents.indexOf(SHORT_MARKER)
+    expect(includeAt).toBeGreaterThanOrEqual(0)
+    expect(stubAt).toBeGreaterThan(includeAt)
+    expect(contents).not.toContain(REL_MARKER)
+  })
+
+  test('app-setup patch is idempotent', () => {
+    const once = patchAppSetupCMakeText(APP_CMAKE).contents
+    const twice = patchAppSetupCMakeText(once)
+    expect(twice.changed).toBe(false)
+    expect(twice.contents).toBe(once)
+    expect(twice.contents.split(SHORT_MARKER).length - 1).toBe(1)
+    expect(twice.contents.split('set(CMAKE_OBJECT_PATH_MAX').length - 1).toBe(1)
   })
 
   test('is idempotent', () => {
@@ -351,6 +377,7 @@ describe('patchWindowsCmake filesystem walk', () => {
     }
     const appCmake = fs.readFileSync(path.join(nm, APP_CMAKE_REL), 'utf8')
     expect(appCmake).toContain(CMAKE_OBJMAX_SET)
+    expect(appCmake).toContain(SHORT_MARKER)
     expect(appCmake.indexOf('set(CMAKE_OBJECT_PATH_MAX')).toBeLessThan(appCmake.search(/^project\s*\(/m))
   })
 
