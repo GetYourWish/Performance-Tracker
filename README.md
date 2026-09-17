@@ -378,7 +378,19 @@ Checklist, in order:
 
 No PC-side data file yet, or you want a fresh start on the phone? Tap
 **Create default tracker.json** — Syncthing then carries that file back to
-the PC, and the desktop app picks it up.
+the PC, and the desktop app picks it up. (If a tracker.json appears while
+you sit on that screen, the button writes the defaults *into* the existing
+file and keeps a backup of its previous content in the app's private area.)
+
+> **Fixed in this version:** two bugs made the "missing file" screen lie and
+> then hang. (1) The app compared file names against Android's internal
+> *document ids* (`primary:Folder/tracker.json`) instead of display names, so
+> a tracker.json that WAS in the picked folder could not be found. (2) When
+> some devices' storage provider stalls, "Create default tracker.json" and
+> the folder picker spun forever — every storage operation now carries a
+> 20 s timeout that turns a stall into an actionable "pick the folder again"
+> message instead of an endless spinner, and a stalled folder read can no
+> longer freeze the boot splash.
 
 #### Android SDK prerequisites
 

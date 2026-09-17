@@ -38,7 +38,13 @@ export function useTracker() {
         if (typeof savedAuto === 'string') setAutoSyncState(savedAuto === '1')
         if (savedFolder) {
           setFolderUri(savedFolder)
-          await store.setFolder(savedFolder)
+          // Deliberately NOT awaited: a stalled SAF read on the restored
+          // folder used to freeze `booted` (and with it the splash screen)
+          // forever, even though the store's watchdog had already repainted
+          // its state underneath. The store owns recovery from here — its
+          // watchdog turns a stalled read into the actionable re-grant
+          // screen — so boot must complete independently of that load.
+          store.setFolder(savedFolder).catch(() => {})
         }
       } finally {
         if (alive) setBooted(true)

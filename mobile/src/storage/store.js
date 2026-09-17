@@ -310,8 +310,19 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
     busy = true
     try {
       const def = createDefaultData()
-      // brand-new file: no rebase needed, no backup of prior content
-      const result = await writeData(def)
+      // Guard: if a tracker.json appeared since the 'missing' screen was
+      // painted (sync finished mid-flight, or an earlier broken build left
+      // one behind), re-list so we WRITE INTO it instead of letting SAF's
+      // createDocument dedupe it into 'tracker (1).json' — and keep a backup
+      // of its content before defaults overwrite it.
+      let clobberRaw = null
+      try {
+        await listFolder()
+        if (targetUri) clobberRaw = await adapter.readDocument(targetUri)
+      } catch (e) {
+        // unreadable or absent — writeData surfaces any real error
+      }
+      const result = await writeData(def, { clobberRaw })
       notify({ data: def, status: 'ready' })
       return { ...result, data: def }
     } finally {
