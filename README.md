@@ -131,6 +131,72 @@ theme.
 - **Conflicts**: Syncthing `-conflict-` copies are surfaced on the board and in
   Settings — never auto-loaded, never auto-deleted
 
+#### v1.0.4 — the REAL "stuck on Loading…" fix + no more network permission
+
+**The eternal "Loading…" had nothing to do with storage.** Every fix in
+v1.0.2/v1.0.3 was correct — and completely invisible to the user, because of
+one React contract violation in `mobile/src/storage/store.js`:
+
+> `notify()` mutated the store's state object in place
+> (`Object.assign(state, next)`), but React's `useSyncExternalStore` only
+> re-renders when `getSnapshot()` returns a **new reference** — its
+> `checkIfSnapshotChanged()` compares snapshots with `Object.is` and silently
+> drops the notification when the reference is unchanged (verified in the
+> React 19.2 renderer bundled with RN 0.87).
+>
+> Consequence: after the first paint, **no store transition ever reached the
+> UI** — not the successful `loading → ready` after a perfect load, not the
+> 15 s watchdog recovery, not the SAF timeouts, nothing. The screen froze on
+> "Loading…" (the aurora/spinner screen) forever, across app restarts, on
+> every build up to and including v1.0.3. The UI only ever repainted when an
+> unrelated `useState` (`booted`, `busy`, `tab`) happened to change — which
+> is precisely why it looked like a storage/file problem.
+
+`notify()` now publishes a fresh state object on every transition
+(`state = { ...state, ...next }`). New regression tests replicate React's
+exact visibility rule (`__tests__/store-snapshot.test.js`) and mount the full
+`<App>` tree with a restored folder to prove the setup screen **and the
+board** are actually reached (`__tests__/app-boot-full.test.js` — the board
+branch had never been rendered in tests before). Verified: 5 of the 8 new
+tests fail against the old mutation, all pass with the fix.
+
+**Why did the app request INTERNET (and SYSTEM_ALERT_WINDOW, VIBRATE)?**
+Pure Expo-bare-template baggage — none of them are used. v1.0.4 ships
+`mobile/plugins/with-release-permissions.js`, which writes a **release-only**
+manifest overlay (`android/app/src/release/AndroidManifest.xml`) removing all
+five template permissions (INTERNET, SYSTEM_ALERT_WINDOW, VIBRATE,
+READ/WRITE_EXTERNAL_STORAGE) from the merged **release** manifest:
+
+- the app is fully offline — `tracker.json` is synced by *Syncthing*, and the
+  app only reads/writes it locally through SAF (which needs no storage
+  permissions at all);
+- the **debug** variant keeps its permissions (Metro/dev-server tooling —
+  dev builds are never shipped);
+- the `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` entry you may see in
+  permission-inspector apps **stays**: androidx-core injects it at build time
+  for safely registering runtime broadcast receivers on Android 13+; it is a
+  self-defined signature marker that grants nothing to anyone and cannot be
+  opted out of without breaking receiver registration.
+
+**Build identification:** every loading/setup screen now shows its version
+("Loading… v1.0.4", "v1.0.4" in the setup footer) — a screenshot of a stuck
+app now identifies the exact installed APK. (We lost a whole debugging round
+because there was no way to tell which build a "stuck on loading" screenshot
+came from.)
+
+**Rebuilding:**
+
+```bash
+git pull
+npm install                    # postinstall patches (unchanged since v1.0.3, but cheap)
+cd mobile/android
+.\gradlew assembleRelease      # Windows
+```
+
+Install the new APK over the old one (versionCode 5) and open it — if it
+still misbehaves, the screen itself now says which version you are running
+and the store's watchdog/timeout errors are actually displayed.
+
 #### v1.0.3 — fixing "stuck on Loading…" / "created tracker.json but it can't be read"
 
 Three device-only bugs shipped in v1.0.2's storage layer, all found by reading

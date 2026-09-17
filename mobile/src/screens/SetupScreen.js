@@ -12,6 +12,11 @@ import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AuroraBackground, GlassCard, FilledButton } from '../components/ui.js'
 import { SPACING, RADIUS } from '../theme.js'
+import appJson from '../../app.json'
+
+// Build marker in the setup screen footer — a screenshot of any pre-board
+// screen must identify the exact installed apk version.
+const VERSION = appJson.expo.version || ''
 
 export function SetupScreen({ theme, mode, folderUri, errorMessage, onPickFolder, onCreateDefault, onReload }) {
   const insets = useSafeAreaInsets()
@@ -130,6 +135,9 @@ export function SetupScreen({ theme, mode, folderUri, errorMessage, onPickFolder
             Folder: {folderUri}
           </Text>
         ) : null}
+        <Text style={{ color: theme.textMuted, fontSize: 11, marginTop: SPACING.md, textAlign: 'center' }}>
+          {`v${VERSION}`}
+        </Text>
       </ScrollView>
     </View>
   )

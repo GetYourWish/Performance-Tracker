@@ -26,6 +26,21 @@
 //    which used to leave the UI spinning on 'loading' with no recovery
 //    path. A load that has not settled in LOAD_TIMEOUT_MS becomes an
 //    actionable 'no-folder' state (re-grant screen) instead.
+//
+// SNAPSHOT CONTRACT (remote-reported 'stuck on Loading… forever'):
+//  React's useSyncExternalStore only re-renders when getSnapshot() returns a
+//  NEW reference — its checkIfSnapshotChanged() compares snapshots with
+//  Object.is and silently drops the update when the reference is unchanged
+//  (verified against the React 19.2 renderer bundled with RN 0.87). This
+//  store therefore NEVER mutates the published state object: notify()
+//  replaces it with a fresh one. An earlier version did
+//  Object.assign(state, next) in place — every transition after the first
+//  paint (folder picked, watchdog recovery, load success → 'ready', even a
+//  fully successful load) was INVISIBLE to React, and the app sat on the
+//  'Loading…' screen forever while the store underneath had long recovered.
+//  The UI only ever repainted when an unrelated useState (booted/busy/tab)
+//  happened to change — which is exactly what made the bug look like a
+//  storage problem.
 
 import { checkSchemaVersion, validateAndHealData, createDefaultData } from '@performance-tracker/core'
 import { backupFileName, selectOldBackups } from './backups.js'
@@ -43,7 +58,11 @@ function compactOf(value) {
 export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' }) {
   const listeners = new Set()
 
-  const state = {
+  // `let` on purpose: notify() REPLACES this object (see SNAPSHOT CONTRACT
+  // above). getSnapshot() returns it directly, so between notifications the
+  // reference is stable (required by useSyncExternalStore) and every notify
+  // publishes a fresh reference (also required — React bails out otherwise).
+  let state = {
     // 'no-folder' | 'loading' | 'ready' | 'missing' | 'schema-too-new' | 'error'
     status: dirUri ? 'loading' : 'no-folder',
     data: null, // healed data
@@ -64,7 +83,10 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
   let loadSeq = 0 // generation guard: only the newest load may repaint state
 
   function notify(next) {
-    Object.assign(state, next)
+    // Immutably replace the snapshot — mutating in place made every store
+    // transition invisible to useSyncExternalStore (Object.is bailout),
+    // which froze the UI on 'Loading…' forever. See SNAPSHOT CONTRACT.
+    state = { ...state, ...next }
     listeners.forEach(l => l())
   }
 

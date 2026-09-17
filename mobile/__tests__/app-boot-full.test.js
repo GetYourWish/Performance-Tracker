@@ -46,6 +46,76 @@ jest.mock('react-native-draggable-flatlist', () => {
     ScaleDecorator: ({ children }) => children
   }
 })
+// the board branch mounts GestureHandlerRootView, whose real module calls a
+// native install() — mock it so the 'ready' tree can render under jest
+jest.mock('react-native-gesture-handler', () => {
+  const React = require('react')
+  const RN = require('react-native')
+  return {
+    __esModule: true,
+    GestureHandlerRootView: ({ children }) =>
+      React.createElement(RN.View, { style: { flex: 1 } }, children)
+  }
+})
+
+// Realistic SAF adapter: child URIs shaped exactly like a real Android
+// external-storage document provider (percent-encoded document ids), so the
+// REAL fileNameOf parser from saf.js is exercised. The folder contents are
+// switched per-test via `mockFolderFiles`.
+const SAVED_FOLDER =
+  'content://com.android.externalstorage.documents/tree/primary%3ASyncthing%2FTracker'
+const mockFolderFiles = new Map() // display name → file content
+function mockDocUriFor(name) {
+  return SAVED_FOLDER + '/document/' + encodeURIComponent('primary:Syncthing/Tracker/' + name)
+}
+jest.mock('../src/storage/saf.js', () => {
+  const actual = jest.requireActual('../src/storage/saf.js')
+  return {
+    ...actual,
+    createSafAdapter: () => ({
+      listChildren: async () => [...mockFolderFiles.keys()].map(mockDocUriFor),
+      createDocument: async (dirUri, name) => {
+        mockFolderFiles.set(name, '')
+        return mockDocUriFor(name)
+      },
+      removeDocument: async uri => {
+        mockFolderFiles.delete(actual.fileNameOf(uri))
+      },
+      readDocument: async uri => {
+        const c = mockFolderFiles.get(actual.fileNameOf(uri))
+        if (c === undefined) throw new Error('Document not found: ' + uri)
+        return c
+      },
+      writeDocument: async (uri, content) => {
+        mockFolderFiles.set(actual.fileNameOf(uri), content)
+      },
+      statDocument: async uri => {
+        const c = mockFolderFiles.get(actual.fileNameOf(uri))
+        return c === undefined ? null : { exists: true, size: c.length, modificationTime: 1 }
+      },
+      fileNameOf: actual.fileNameOf,
+      appDocumentsDir: () => 'file://data/user/0/pt/docs/',
+      ensureAppDir: async () => {},
+      appWriteFile: async () => {},
+      appListDir: async () => [],
+      appDelete: async () => {}
+    })
+  }
+})
+
+function sampleRaw() {
+  return JSON.stringify({
+    schemaVersion: 1,
+    meta: { createdAt: '2026-09-01T10:00:00.000Z', updatedAt: '2026-09-01T10:00:00.000Z' },
+    settings: { theme: 'dark', weekStartsOn: 1, fatigueIncrement: 0.1, fatigueCap: 3.0 },
+    difficulties: [],
+    categories: [],
+    markers: [],
+    board: [],
+    tasks: [],
+    history: []
+  })
+}
 
 async function flushMicrotasks(times = 12) {
   for (let i = 0; i < times; i++) {
@@ -70,8 +140,19 @@ function collectTexts(node, out = []) {
 }
 
 describe('app boot pipeline (full tree render)', () => {
+  // mounted trees are unmounted after each test: a restored folder arms the
+  // 15 s external-change poll interval, which would otherwise outlive the
+  // test as an open handle.
+  const mountedTrees = []
   afterEach(async () => {
+    while (mountedTrees.length) {
+      const t = mountedTrees.pop()
+      act(() => {
+        t.unmount()
+      })
+    }
     await AsyncStorage.clear()
+    mockFolderFiles.clear()
   })
 
   test('first run mounts all the way to the setup screen without throwing', async () => {
@@ -81,6 +162,7 @@ describe('app boot pipeline (full tree render)', () => {
       await Promise.resolve()
     })
     await flushMicrotasks()
+    mountedTrees.push(tree)
 
     expect(tree).toBeTruthy()
 
@@ -89,5 +171,58 @@ describe('app boot pipeline (full tree render)', () => {
     expect(texts).toContain('Welcome to Performance Tracker')
     // and it must still be mounted (not an error screen)
     expect(texts).not.toContain('No safe area value available')
+  })
+
+  // The remote-reported eternal-'Loading…' regression, end to end.
+  //
+  // A saved folder is restored at boot; the SAF read RESOLVES (perfectly
+  // healthy device — this is NOT a stall test). The store transitioned
+  // 'loading' → 'missing'/'ready' underneath, but the UI never re-rendered:
+  // notify() used to mutate the state object in place, so
+  // useSyncExternalStore's checkIfSnapshotChanged (Object.is on the
+  // reference) dropped every notification and the tree stayed on the aurora
+  // 'Loading…' screen FOREVER — the exact user report "i cannot go past the
+  // loading", across app restarts, on every build up to and including 1.0.3.
+  describe('saved folder restored at boot (eternal-loading regression)', () => {
+    beforeEach(async () => {
+      await AsyncStorage.clear()
+      await AsyncStorage.setItem('pt.folderUri', SAVED_FOLDER)
+    })
+
+    test('restored folder without tracker.json reaches the setup screen', async () => {
+      let tree = null
+      await act(async () => {
+        tree = TestRenderer.create(<App />)
+        await Promise.resolve()
+      })
+      await flushMicrotasks()
+      mountedTrees.push(tree)
+
+      const texts = collectTexts(tree.toJSON()).join(' | ')
+      // With the in-place-mutation store this stayed 'Loading…' forever.
+      expect(texts).not.toContain('Loading…')
+      expect(texts).toContain('No tracker.json in this folder')
+      // the build marker makes any future screenshot self-identifying
+      expect(texts).toMatch(/v\d+\.\d+/)
+    })
+
+    test('restored folder WITH tracker.json reaches the board', async () => {
+      mockFolderFiles.set('tracker.json', sampleRaw())
+      let tree = null
+      await act(async () => {
+        tree = TestRenderer.create(<App />)
+        await Promise.resolve()
+      })
+      await flushMicrotasks()
+      mountedTrees.push(tree)
+
+      const texts = collectTexts(tree.toJSON()).join(' | ')
+      // THE happy path that never worked on a real device: the successful
+      // 'ready' transition used to be invisible to React, so the app sat on
+      // 'Loading…' even though the file had loaded perfectly.
+      expect(texts).not.toContain('Loading…')
+      expect(texts).toContain('Board')
+      expect(texts).toContain('Settings')
+    })
   })
 })

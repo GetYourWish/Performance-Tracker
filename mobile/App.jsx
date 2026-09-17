@@ -14,6 +14,14 @@ import { BoardScreen } from './src/components/BoardScreen.js'
 import { SetupScreen, SchemaErrorScreen } from './src/screens/SetupScreen.js'
 import { SettingsScreen } from './src/screens/SettingsScreen.js'
 import { CrashReportScreen } from './src/screens/CrashReportScreen.js'
+import appJson from './app.json'
+
+// Shown on every loading/error screen so a screenshot identifies the exact
+// installed build ("Loading… v1.0.4") — we wasted a whole debugging round
+// because there was no way to tell WHICH apk a 'stuck on loading' screenshot
+// came from.
+const APP_VERSION = appJson.expo.version || ''
+const LOADING_TEXT = `Loading… v${APP_VERSION}`
 
 // Root: mounts SafeAreaProvider BEFORE anything calls useSafeAreaInsets.
 // Expo's registerRootComponent() registers the component as-is (no provider
@@ -78,7 +86,7 @@ function AppShell() {
     return (
       <View style={[styles.fill, styles.center, { backgroundColor: '#EEF2FF' }]}>
         <ActivityIndicator size="large" color="#8b5cf6" />
-        <Text style={{ color: '#666666', marginTop: SPACING.md }}>Loading…</Text>
+        <Text style={{ color: '#666666', marginTop: SPACING.md }}>{LOADING_TEXT}</Text>
       </View>
     )
   }
@@ -118,7 +126,7 @@ function AppShell() {
         ) : (
           <>
             <ActivityIndicator size="large" color="#8b5cf6" />
-            <Text style={{ color: theme.textSecondary, marginTop: SPACING.md }}>Loading…</Text>
+            <Text style={{ color: theme.textSecondary, marginTop: SPACING.md }}>{LOADING_TEXT}</Text>
           </>
         )}
       </View>
