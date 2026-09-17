@@ -131,7 +131,90 @@ theme.
 - **Conflicts**: Syncthing `-conflict-` copies are surfaced on the board and in
   Settings — never auto-loaded, never auto-deleted
 
+#### v1.0.5 — the board crash fix ("Element type is invalid") + REGENERATE YOUR ANDROID FOLDER
+
+**Symptom (2026-09-17 crash report, captured by the on-device crash logger):**
+the app finally got past "Loading…" — and then crashed the moment the board
+should have appeared:
+
+```
+JavascriptException: Error: Element type is invalid: expected a string
+(for built-in components) or a class/function (for composite components)
+but got: undefined.
+    at RCTView → at View → at BoardScreen → …
+```
+
+**Root cause 1 — the crash itself.** `react-native-draggable-flatlist` v4
+exports the list component as the **default export only**
+(`export default DraggableFlatList`); `ScaleDecorator` & friends are the named
+exports. `BoardScreen.js` imported it as a *named* binding
+(`import { DraggableFlatList, … }`) — which compiles, bundles and passes every
+test, but is `undefined` at runtime. The very first board render on a real
+device died. Nobody ever saw it before because **no build had ever reached the
+board** — every earlier build was stuck on "Loading…" (the v1.0.4 store bug).
+The jest mocks had *invented* a named `DraggableFlatList` export, so the full
+-boot board tests passed while the app crashed (the same "mock mirrors the
+app's wrong assumption" failure class as the v1.0.3 SAF arg-order bug).
+
+**Root cause 2 — a second latent crash found by the follow-up audit.**
+`CategorySheet.js` rendered `<TextInput>` without importing it — the first
+"New category" tap would have crashed the freshly-fixed board with the same
+error. A full JSX-binding audit of every app file found (and fixed) it.
+
+Fixes shipped:
+- `BoardScreen.js` — `import DraggableFlatList, { ScaleDecorator } …` (default import)
+- `CategorySheet.js` — `TextInput` added to the react-native import list
+- jest mocks now mirror the REAL package export shape (`__esModule: true` +
+  `default` + `ScaleDecorator`) — a regression back to a named import now
+  fails the board render tests in CI
+- new permanent guards: `__tests__/package-contract.test.js` (pins the real
+  installed package's export shape + BoardScreen's import form),
+  `__tests__/jsx-bindings.test.js` (static audit: every JSX tag in the app
+  must resolve to a declared binding), `__tests__/category-sheet.test.js`
+  (opens the create-category form for real)
+- the JS crash report and Settings→About now show the **bundled app.json
+  version** (see below for why that matters)
+
+**Why your crash report said "app version: 1.0.1" while running 1.0.4 code —
+IMPORTANT for every future rebuild.** `gradlew assembleRelease` rebuilds the
+**JS bundle** from source but does **not** regenerate the android project:
+`versionName`, `versionCode` and the release **permissions overlay** are
+synced from `app.json` only by `expo prebuild`. Your `mobile/android` folder
+was generated while app.json still said 1.0.1, so every APK since silently:
+- reported versionName 1.0.1 in native crash reports (the JS *loading screens*
+  showed the true v1.0.4 — both were right about different halves of the apk), and
+- still contained INTERNET & co., because the v1.0.4
+  `with-release-permissions` overlay had never been written into that folder.
+
+**Rebuilding (v1.0.5 — the android folder MUST be regenerated this time):**
+
+```bash
+git pull
+npm install                                  # postinstall patches (unchanged)
+npm run clean:native --workspace @performance-tracker/mobile   # regenerates android/ from app.json
+cd mobile/android
+.\gradlew assembleRelease                    # Windows
+```
+
+`clean:native` wipes and regenerates `mobile/android` (the .cxx native
+rebuild is the cost — grab a coffee). After installing the APK (versionCode
+6), verify the sync worked:
+
+- the loading/setup screens say **v1.0.5**;
+- Settings → About says **v1.0.5 (js bundle)**;
+- a permission inspector now shows the release build requests **none** of the
+  five template permissions (only the harmless androidx
+  `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` marker remains — see v1.0.4
+  notes).
+
+Rule of thumb for the future: **JS-only change → `gradlew assembleRelease`
+is enough; anything touching `app.json` (version, permissions, plugins) or
+native config → re-run `clean:native` first.**
+
 #### v1.0.4 — the REAL "stuck on Loading…" fix + no more network permission
+
+*(Rebuild note: the flow below predates the v1.0.5 discovery that the android
+folder was stale — use the v1.0.5 flow above, which adds `clean:native`.)*
 
 **The eternal "Loading…" had nothing to do with storage.** Every fix in
 v1.0.2/v1.0.3 was correct — and completely invisible to the user, because of

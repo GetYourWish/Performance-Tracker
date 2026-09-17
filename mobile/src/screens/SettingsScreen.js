@@ -11,6 +11,12 @@ import { TopAppBar, GlassCard, FilledButton, TextButton, SettingsRow, Snackbar }
 import { inputStyle } from '../components/dialogs.js'
 import { updateSettings } from '../actions.js'
 import { SPACING } from '../theme.js'
+// Bundled app.json — the version of the JS bundle actually running (the
+// native versionName can be stale when the apk was rebuilt via gradlew on an
+// old prebuild folder, as the 2026-09-17 crash report proved).
+import appJson from '../../app.json'
+
+const APP_VERSION = appJson.expo.version || ''
 
 function SectionCard({ theme, title, children }) {
   return (
@@ -230,7 +236,12 @@ export function SettingsScreen({
 
         {/* About */}
         <SectionCard theme={theme} title="About">
-          <SettingsRow theme={theme} icon="information-outline" label="Version" hint="1.0.0 (schemaVersion 1 supported)" />
+          <SettingsRow
+            theme={theme}
+            icon="information-outline"
+            label="Version"
+            hint={`v${APP_VERSION} (js bundle) — schemaVersion 1 supported`}
+          />
           <SettingsRow
             theme={theme}
             icon="file-document-outline"

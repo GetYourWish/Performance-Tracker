@@ -19,6 +19,18 @@
 // that THROW 'deprecated … will throw in runtime'), which silently killed
 // the whole crash reporter: reports were never written, never read, never
 // shown. The lazy require keeps this module out of the Node test env.
+//
+// VERSION is read from the BUNDLED app.json (inlined by Metro at bundle
+// time), NOT from the native PackageInfo: the JS bundle and the native
+// android project can be out of sync when the apk is rebuilt via gradlew
+// alone on a stale prebuild folder — the 2026-09-17 crash report claimed
+// "app version: 1.0.1" (stale native versionName) while the JS bundle
+// already contained 1.0.4 code. The bundled app.json always identifies the
+// code that actually crashed.
+
+import appJson from '../app.json'
+
+const APP_VERSION = appJson.expo.version || 'unknown'
 
 let _fs = null
 function legacyFs() {
@@ -54,6 +66,7 @@ export function installReleaseCrashReporter() {
           message: error && error.message ? String(error.message) : String(error),
           stack: error && error.stack ? String(error.stack).slice(0, MAX_STACK_CHARS) : null,
           isFatal: !!isFatal,
+          version: APP_VERSION,
           at: new Date().toISOString()
         }
         legacyFs()

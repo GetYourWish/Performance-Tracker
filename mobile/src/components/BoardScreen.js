@@ -13,7 +13,15 @@ import React, { useMemo, useState, useCallback } from 'react'
 import { View, Text, RefreshControl } from 'react-native'
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { DraggableFlatList, ScaleDecorator } from 'react-native-draggable-flatlist'
+// DraggableFlatList is the package's DEFAULT export (v4's index does
+// `export default DraggableFlatList`; only ScaleDecorator & friends are
+// named). Importing it as a named binding yields `undefined` at runtime —
+// the release bundle then dies with "Element type is invalid: … got:
+// undefined" the first time the board renders on a real device (exactly
+// what the 2026-09-17 crash report showed). Jest never caught it because
+// the old jest mock invented a named export that the real package does
+// not have.
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist'
 import {
   calculateDayScore,
   getCurrentDate,

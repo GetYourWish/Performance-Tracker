@@ -5,7 +5,11 @@
 // quick-create form (name + color swatches, priorityMultiplier 1).
 
 import React, { useMemo, useState } from 'react'
-import { View, Text, Modal, Pressable, ScrollView } from 'react-native'
+// NOTE: TextInput is required by the create-category form below — it was
+// missing from this import list, so the form rendered <TextInput> as
+// `undefined` and crashed with "Element type is invalid" the moment the
+// user tapped "New category" (found by the JSX-binding audit).
+import { View, Text, Modal, Pressable, ScrollView, TextInput } from 'react-native'
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { TextButton, FilledButton } from './ui.js'

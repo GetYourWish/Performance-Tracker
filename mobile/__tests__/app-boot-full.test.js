@@ -38,11 +38,18 @@ jest.mock('react-native-safe-area-context', () => {
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 )
+// HONEST module shape: react-native-draggable-flatlist v4 exports the list as
+// the DEFAULT export only; ScaleDecorator is a named export. The previous
+// stub invented a named DraggableFlatList export and thereby masked the
+// release crash ("Element type is invalid: … got: undefined" at BoardScreen,
+// 2026-09-17 crash report). If BoardScreen ever regresses to a named import,
+// the board-branch tests in this file now throw right here in CI.
 jest.mock('react-native-draggable-flatlist', () => {
   const React = require('react')
   const RN = require('react-native')
   return {
-    DraggableFlatList: props => React.createElement(RN.FlatList, props),
+    __esModule: true,
+    default: props => React.createElement(RN.FlatList, props),
     ScaleDecorator: ({ children }) => children
   }
 })

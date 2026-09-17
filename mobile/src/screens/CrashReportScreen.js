@@ -7,12 +7,16 @@ import React from 'react'
 import { View, Text, ScrollView, StyleSheet, Pressable } from 'react-native'
 
 export function CrashReportScreen({ report, onDismiss }) {
+  const meta = [
+    report.version ? `app version (js bundle): v${report.version}` : null,
+    report.at ? `at: ${report.at}` : null,
+    report.isFatal ? 'fatal: yes' : 'fatal: no'
+  ].filter(Boolean)
   const body = [
     report.name ? String(report.name) : 'Error',
     report.message ? String(report.message) : '',
     '',
-    report.at ? 'at: ' + report.at : '',
-    report.isFatal ? 'fatal: yes' : 'fatal: no',
+    meta.join('\n'),
     '',
     report.stack ? String(report.stack) : '(no stack available)'
   ].join('\n')
