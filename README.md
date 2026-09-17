@@ -131,6 +131,75 @@ theme.
 - **Conflicts**: Syncthing `-conflict-` copies are surfaced on the board and in
   Settings — never auto-loaded, never auto-deleted
 
+#### v1.0.6 — the corrupt tracker.json fix (data-loss class) + built-in recovery
+
+**Symptom (2026-09-17, remote-reported):** fiddling with the theme in Settings
+worked at first, then changes silently stopped applying; after restarting the
+app:
+
+```
+Could not load tracker.json
+Corrupt JSON: JSON Parse error: Unexpected character: s
+```
+
+**Root cause — the app corrupted its own file with overlapping writes.**
+expo's legacy `writeAsStringAsync` (verified in
+`expo-file-system/…/legacy/FileSystemLegacyModule.kt`) implements a SAF
+document write as `contentResolver.openOutputStream(uri, "w")` — which
+**truncates the document at open** — and then streams the string through an
+`OutputStreamWriter` in 8 KB chunks **on its own coroutine**. Meanwhile the
+store's `mutate()` had *no serialization between concurrent calls*: every
+theme tap launched a full rebase → tmp-write → verify → target-write
+pipeline, and two pipelines in flight meant two truncating, chunked writes
+interleaving inside the document provider → a structurally broken file.
+The very next mutation's rebase then failed to parse the damaged file, so
+every further change errored out ("it stopped making any changes"), and the
+restart showed the parse error above.
+
+Two aggravating gaps turned a corruption into a near-loss:
+- backups only rotated when overwriting an **external** change — a
+  self-inflicted corruption left **no recovery point at all**;
+- the corrupt-file screen was a dead end (error text, no way forward).
+
+**Fixes shipped (all four layers):**
+1. **Write serialization** — all storage access now goes through a
+   readers-writer lock (loads may share; writes are exclusive against
+   everything, write-preferring). Two overlapping writes from this app are
+   structurally impossible now.
+2. **Mutation batching** — mutations queued while a batch writes (theme
+   fiddling, quick edits) are composed in order and written in **one**
+   verified cycle. One disk write per burst instead of a racing write per tap.
+3. **Backup before EVERY real write** — the current on-disk content is
+   copied into the app-private rolling `.backups/` window (20) before each
+   write, no matter who wrote those bytes. A damaged write can never be the
+   last copy of anything.
+4. **Corrupt-file recovery screen** — the damaged bytes are preserved
+   verbatim in the app-private `.corrupt/` window (10) *before anything
+   else happens*, then the error screen offers, in order of trust:
+   - **Restore last verified copy** — the `.tracker.tmp.json` sibling
+     (byte-verified content of an interrupted write cycle),
+   - **Restore latest backup** — from the pre-write backup window,
+   - **Salvage readable data** — a structural salvager
+     (`mobile/src/storage/salvage.js`) that keeps every complete value and
+     drops only the damaged seam; the result re-runs the same schema gate +
+     heal as a normal load,
+   - **Try loading again** — after a manual/sync-software repair.
+   Saves onto a damaged file are refused (`CORRUPT_FILE`) with a clear
+   message instead of silently erroring per tap.
+
+**If your tracker.json is already damaged:** install v1.0.6, open the app,
+and use **Salvage readable data** on the recovery screen (earlier builds
+made no backup of local writes, so salvage is usually the only in-app
+source). The damaged original is preserved untouched in the app's private
+storage — and if you also run the desktop, check Syncthing's versioning on
+the desktop side before salvaging.
+
+Version 1.0.6 / versionCode 7. Mobile jest 196/196 (the concurrency model,
+pre-write backups and all three recovery paths were additionally verified
+out-of-tree against instrumented adapters — concurrent mutations now provably
+never overlap an adapter write op), core vitest 42/42, core-pin guard OK,
+eslint 0 errors, metro export OK.
+
 #### v1.0.5 — the board crash fix ("Element type is invalid") + REGENERATE YOUR ANDROID FOLDER
 
 **Symptom (2026-09-17 crash report, captured by the on-device crash logger):**

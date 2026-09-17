@@ -9,11 +9,12 @@ import { SafeAreaProvider, useSafeAreaInsets, initialWindowMetrics } from 'react
 import { buildTheme, SPACING } from './src/theme.js'
 import { useTracker } from './src/hooks/useTracker.js'
 import { readLastCrash, clearLastCrash } from './src/diagnostics.js'
-import { AuroraBackground, GlassCard, BottomNav } from './src/components/ui.js'
+import { AuroraBackground, BottomNav } from './src/components/ui.js'
 import { BoardScreen } from './src/components/BoardScreen.js'
 import { SetupScreen, SchemaErrorScreen } from './src/screens/SetupScreen.js'
 import { SettingsScreen } from './src/screens/SettingsScreen.js'
 import { CrashReportScreen } from './src/screens/CrashReportScreen.js'
+import { ErrorScreen } from './src/screens/ErrorScreen.js'
 import appJson from './app.json'
 
 // Shown on every loading/error screen so a screenshot identifies the exact
@@ -112,23 +113,20 @@ function AppShell() {
     )
   }
 
-  if (state.status === 'loading' || state.status === 'error') {
+  if (state.status === 'error') {
+    // corrupt tracker.json → recovery surface (restore verified copy /
+    // latest backup, structural salvage, plain reload). The damaged bytes
+    // were already preserved in the app's private .corrupt/ folder by the
+    // store before this screen renders — every option is non-destructive.
+    return <ErrorScreen theme={theme} state={state} store={store} />
+  }
+
+  if (state.status === 'loading') {
     return (
       <View style={[styles.fill, styles.center, { backgroundColor: theme.canvas[0] }]}>
         <AuroraBackground theme={theme} />
-        {state.status === 'error' ? (
-          <GlassCard theme={theme} style={{ padding: SPACING.xl, margin: SPACING.xl }}>
-            <Text style={{ color: theme.textPrimary, fontWeight: '600', marginBottom: SPACING.sm }}>
-              Could not load tracker.json
-            </Text>
-            <Text style={{ color: theme.textSecondary, fontSize: 14 }}>{state.errorMessage}</Text>
-          </GlassCard>
-        ) : (
-          <>
-            <ActivityIndicator size="large" color="#8b5cf6" />
-            <Text style={{ color: theme.textSecondary, marginTop: SPACING.md }}>{LOADING_TEXT}</Text>
-          </>
-        )}
+        <ActivityIndicator size="large" color="#8b5cf6" />
+        <Text style={{ color: theme.textSecondary, marginTop: SPACING.md }}>{LOADING_TEXT}</Text>
       </View>
     )
   }
