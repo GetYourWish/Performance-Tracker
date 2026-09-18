@@ -14,7 +14,7 @@ import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { TextButton, FilledButton } from './ui.js'
 import { inputStyle } from './dialogs.js'
-import { SPACING, RADIUS } from '../theme.js'
+import { SPACING, RADIUS, TYPE } from '../theme.js'
 
 const PRESET_COLORS = ['#60a5fa', '#8b5cf6', '#f472b6', '#f87171', '#fbbf24', '#4ade80', '#34d399', '#94a3b8']
 
@@ -66,12 +66,12 @@ export function CategorySheet({ theme, visible, categories, onAddMarker, onCreat
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: theme.border }} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingTop: SPACING.md }}>
-            <Text style={{ flex: 1, color: theme.textPrimary, fontSize: 18, fontWeight: '600' }}>
+            <Text style={{ flex: 1, color: theme.textPrimary, fontSize: 18, fontWeight: '700', letterSpacing: 0.1 }}>
               Categories
             </Text>
             <TextButton theme={theme} label="Close" onPress={close} />
           </View>
-          <Text style={{ color: theme.textMuted, fontSize: 12.5, paddingHorizontal: SPACING.xl, marginBottom: SPACING.sm }}>
+          <Text style={{ color: theme.textMuted, ...TYPE.caption, paddingHorizontal: SPACING.xl, marginBottom: SPACING.sm }}>
             Tap a category to place its marker at the end of the board.
           </Text>
 
@@ -97,15 +97,15 @@ export function CategorySheet({ theme, visible, categories, onAddMarker, onCreat
                     })}
                   >
                     <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: category.color }} />
-                    <Text style={{ flex: 1, color: theme.textPrimary, fontSize: 15.5 }}>{category.name}</Text>
+                    <Text style={{ flex: 1, color: theme.textPrimary, ...TYPE.body }}>{category.name}</Text>
                     {typeof category.priorityMultiplier === 'number' && category.priorityMultiplier !== 1 ? (
-                      <Text style={{ color: theme.textMuted, fontSize: 12.5 }}>×{category.priorityMultiplier}</Text>
+                      <Text style={{ color: theme.textMuted, ...TYPE.caption }}>×{category.priorityMultiplier}</Text>
                     ) : null}
                     <Icon name="plus-circle-outline" size={22} color={theme.textSecondary} />
                   </Pressable>
                 ))}
                 {sorted.length === 0 ? (
-                  <Text style={{ color: theme.textMuted, fontSize: 14, padding: SPACING.lg, textAlign: 'center' }}>
+                  <Text style={{ color: theme.textMuted, ...TYPE.body, padding: SPACING.lg, textAlign: 'center' }}>
                     No categories yet — create the first one below.
                   </Text>
                 ) : null}

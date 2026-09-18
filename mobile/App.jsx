@@ -4,9 +4,9 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native'
 import { useColorScheme } from 'react-native'
-import { GestureHandlerRootView } from 'react-native-gesture-handler'
-import { SafeAreaProvider, useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context'
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
 import { buildTheme, SPACING } from './src/theme.js'
+import { updateSettings } from './src/actions.js'
 import { useTracker } from './src/hooks/useTracker.js'
 import { readLastCrash, clearLastCrash } from './src/diagnostics.js'
 import { AuroraBackground, BottomNav } from './src/components/ui.js'
@@ -15,6 +15,7 @@ import { SetupScreen, SchemaErrorScreen } from './src/screens/SetupScreen.js'
 import { SettingsScreen } from './src/screens/SettingsScreen.js'
 import { CrashReportScreen } from './src/screens/CrashReportScreen.js'
 import { ErrorScreen } from './src/screens/ErrorScreen.js'
+import ErrorBoundary from './src/components/ErrorBoundary.js'
 import appJson from './app.json'
 
 // Shown on every loading/error screen so a screenshot identifies the exact
@@ -40,11 +41,16 @@ export default function App() {
 
 function AppShell() {
   const scheme = useColorScheme()
-  const insets = useSafeAreaInsets()
   const [tab, setTab] = useState('board')
   const [refreshing, setRefreshing] = useState(false)
   // undefined = not checked yet, null = no crash recorded, object = report
   const [crashReport, setCrashReport] = useState(undefined)
+  // Optimistic theme: applied the instant the user taps an option so the
+  // UI responds immediately; the store write (which takes a full verified
+  // SAF write cycle, ~1–2 s on real hardware) lands underneath and then
+  // this override clears. Cleared on failure too, so a failed save never
+  // leaves a lie on screen.
+  const [pendingTheme, setPendingTheme] = useState(null)
 
   useEffect(() => {
     let alive = true
@@ -63,9 +69,32 @@ function AppShell() {
 
   const { store, state, folderUri, autoSync, booted, pickFolder, setAutoSync, refresh, forgetFolder } = useTracker()
 
-  // theme preference follows data.settings.theme (desktop parity)
-  const preference = state.data?.settings?.theme || 'system'
+  // theme preference follows data.settings.theme (desktop parity); the
+  // optimistic override wins until the write settles
+  const savedPreference = state.data?.settings?.theme || 'system'
+  const preference = pendingTheme || savedPreference
   const theme = buildTheme(preference, scheme)
+
+  // Theme changes apply INSTANTLY (optimistic) and persist through the same
+  // serialized, backed-up write cycle as every other mutation. If the write
+  // fails the visual override is rolled back and the Settings screen shows
+  // the save failure — "it stopped making changes" can never silently
+  // happen again.
+  const handleThemeChange = useCallback(
+    async value => {
+      if (value === savedPreference && pendingTheme == null) return
+      setPendingTheme(value)
+      try {
+        await store.mutate((d, now) => updateSettings(d, { theme: value }, now))
+        setPendingTheme(null)
+      } catch (e) {
+        // roll the visual override back and let the caller surface the error
+        setPendingTheme(null)
+        throw e
+      }
+    },
+    [store, savedPreference, pendingTheme]
+  )
 
   const handleRefresh = useCallback(async () => {
     if (refreshing) return
@@ -99,17 +128,19 @@ function AppShell() {
   if (state.status === 'no-folder' || state.status === 'missing') {
     const mode = state.status === 'missing' ? 'missing' : folderUri ? 'regrant' : 'fresh'
     return (
-      <SetupScreen
-        theme={theme}
-        mode={mode}
-        folderUri={folderUri}
-        errorMessage={state.errorMessage}
-        onPickFolder={pickFolder}
-        onCreateDefault={async () => {
-          await store.initializeDefault()
-        }}
-        onReload={() => store.load()}
-      />
+      <ErrorBoundary onReloadData={() => store.load()}>
+        <SetupScreen
+          theme={theme}
+          mode={mode}
+          folderUri={folderUri}
+          errorMessage={state.errorMessage}
+          onPickFolder={pickFolder}
+          onCreateDefault={async () => {
+            await store.initializeDefault()
+          }}
+          onReload={() => store.load()}
+        />
+      </ErrorBoundary>
     )
   }
 
@@ -118,7 +149,11 @@ function AppShell() {
     // latest backup, structural salvage, plain reload). The damaged bytes
     // were already preserved in the app's private .corrupt/ folder by the
     // store before this screen renders — every option is non-destructive.
-    return <ErrorScreen theme={theme} state={state} store={store} />
+    return (
+      <ErrorBoundary onReloadData={() => store.load()}>
+        <ErrorScreen theme={theme} state={state} store={store} />
+      </ErrorBoundary>
+    )
   }
 
   if (state.status === 'loading') {
@@ -131,11 +166,15 @@ function AppShell() {
     )
   }
 
+  // The main app. ErrorBoundary converts any render error (which in a
+  // release build would otherwise KILL THE PROCESS — the remote-reported
+  // "create a task / change the theme → crash") into an in-app recovery
+  // card; the store underneath keeps every data guarantee.
   return (
-    <GestureHandlerRootView style={[styles.fill, { backgroundColor: theme.canvas[0] }]}>
-      <View style={[styles.fill, { backgroundColor: theme.canvas[0] }]}>
-        <AuroraBackground theme={theme} />
-        <View style={{ flex: 1 }}>
+    <View style={[styles.fill, { backgroundColor: theme.canvas[0] }]}>
+      <AuroraBackground theme={theme} />
+      <View style={{ flex: 1 }}>
+        <ErrorBoundary onReloadData={() => store.load()}>
           {tab === 'board' ? (
             <BoardScreen
               theme={theme}
@@ -154,20 +193,22 @@ function AppShell() {
               autoSync={autoSync}
               onSetAutoSync={setAutoSync}
               onPickFolder={pickFolder}
+              themeValue={preference}
+              onThemeChange={handleThemeChange}
             />
           )}
-          <BottomNav
-            theme={theme}
-            active={tab}
-            onChange={setTab}
-            tabs={[
-              { key: 'board', label: 'Board', icon: 'view-dashboard-outline', iconActive: 'view-dashboard' },
-              { key: 'settings', label: 'Settings', icon: 'cog-outline', iconActive: 'cog' }
-            ]}
-          />
-        </View>
+        </ErrorBoundary>
+        <BottomNav
+          theme={theme}
+          active={tab}
+          onChange={setTab}
+          tabs={[
+            { key: 'board', label: 'Board', icon: 'view-dashboard-outline', iconActive: 'view-dashboard' },
+            { key: 'settings', label: 'Settings', icon: 'cog-outline', iconActive: 'cog' }
+          ]}
+        />
       </View>
-    </GestureHandlerRootView>
+    </View>
   )
 }
 

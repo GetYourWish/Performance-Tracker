@@ -1,6 +1,13 @@
 // ui.js — the Android-native component kit.
 // Material behavior (ripple, elevation, FAB, bottom navigation, dialogs,
 // edge-to-edge safe areas) with the desktop app's aurora-glass skin.
+//
+// v1.0.7 typography: every text style in the kit now comes from the shared
+// TYPE scale (theme.js) — and every control color from the theme object,
+// which now actually DEFINES flowState/flowStatePressed (they were missing
+// until v1.0.7: the FAB rendered with no background at all, filled buttons
+// were transparent with white labels, and text buttons fell back to the
+// system default color — unreadable in dark mode).
 
 import React, { useEffect } from 'react'
 import {
@@ -8,14 +15,12 @@ import {
   Text,
   Pressable,
   Modal,
-  StyleSheet,
-  Animated,
-  Easing
+  StyleSheet
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { RADIUS, SPACING } from '../theme.js'
+import { RADIUS, SPACING, TYPE } from '../theme.js'
 
 // Canvas: indigo gradient + the three aurora blobs (desktop .aurora-background)
 export function AuroraBackground({ theme }) {
@@ -76,6 +81,7 @@ export function IconBtn({ name, color, onPress, disabled, size = 22, accessibili
         borderRadius: 20
       })}
       accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
     >
       <Icon name={name} size={size} color={color} />
     </Pressable>
@@ -104,11 +110,11 @@ export function TopAppBar({ theme, title, subtitle, actions }) {
         }}
       >
         <View style={{ flex: 1, marginLeft: SPACING.sm }}>
-          <Text style={{ color: theme.textPrimary, fontSize: 20, fontWeight: '600' }} numberOfLines={1}>
+          <Text style={{ color: theme.textPrimary, ...TYPE.appTitle }} numberOfLines={1}>
             {title}
           </Text>
           {subtitle ? (
-            <Text style={{ color: theme.textMuted, fontSize: 12 }} numberOfLines={1}>
+            <Text style={{ color: theme.textMuted, ...TYPE.appSubtitle }} numberOfLines={1}>
               {subtitle}
             </Text>
           ) : null}
@@ -141,6 +147,8 @@ export function BottomNav({ theme, tabs, active, onChange }) {
             android_ripple={{ color: theme.ripple }}
             style={{ flex: 1, alignItems: 'center', paddingTop: SPACING.sm, paddingBottom: SPACING.sm }}
             accessibilityLabel={tab.label}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isActive }}
           >
             <View
               style={{
@@ -150,15 +158,19 @@ export function BottomNav({ theme, tabs, active, onChange }) {
                 backgroundColor: isActive ? theme.rowFillSelected : 'transparent'
               }}
             >
-              <Icon name={isActive ? tab.iconActive || tab.icon : tab.icon} size={24}
-                color={isActive ? theme.textPrimary : theme.textMuted} />
+              <Icon
+                name={isActive ? tab.iconActive || tab.icon : tab.icon}
+                size={24}
+                color={isActive ? theme.flowState : theme.textMuted}
+              />
             </View>
             <Text
               style={{
-                fontSize: 12,
+                fontSize: 11,
                 marginTop: 2,
+                letterSpacing: 0.4,
                 color: isActive ? theme.textPrimary : theme.textMuted,
-                fontWeight: isActive ? '600' : '400'
+                fontWeight: isActive ? '700' : '500'
               }}
             >
               {tab.label}
@@ -183,7 +195,7 @@ export function Fab({ theme, label, icon, onPress, bottomInset = 96 }) {
         flexDirection: 'row',
         alignItems: 'center',
         gap: SPACING.sm,
-        backgroundColor: pressed ? theme.flowStatePressed || '#7c3aed' : theme.flowState,
+        backgroundColor: pressed ? theme.flowStatePressed : theme.flowState,
         borderRadius: RADIUS.fab,
         paddingHorizontal: SPACING.lg,
         paddingVertical: SPACING.md,
@@ -194,22 +206,20 @@ export function Fab({ theme, label, icon, onPress, bottomInset = 96 }) {
         elevation: 6
       })}
       accessibilityLabel={label}
+      accessibilityRole="button"
     >
       <Icon name={icon} size={22} color="#ffffff" />
-      <Text style={{ color: '#ffffff', fontWeight: '600', fontSize: 15 }}>{label}</Text>
+      <Text style={{ color: '#ffffff', ...TYPE.button, fontSize: 15 }}>{label}</Text>
     </Pressable>
   )
 }
 
-// Material 3 dialog: scrim + centered 28dp-rounded surface
+// Material 3 dialog: scrim + centered 28dp-rounded surface.
+// The open/close animation is the Modal's own animationType="fade" — the
+// previous hand-rolled Animated.Value here was dead code (never attached to
+// any view) and its cleanup crashed under test renderers where the Animated
+// mock has no .stop().
 export function Dialog({ theme, visible, title, onClose, children, actions, wide }) {
-  useEffect(() => {
-    if (!visible) return undefined
-    const anim = new Animated.Value(0)
-    Animated.timing(anim, { toValue: 1, duration: 150, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start()
-    return () => anim.stop()
-  }, [visible])
-
   if (!visible) return null
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -231,12 +241,12 @@ export function Dialog({ theme, visible, title, onClose, children, actions, wide
             { shadowColor: theme.shadow, shadowOpacity: 0.4, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 12 }
           ]}
         >
-          <Text style={{ color: theme.textPrimary, fontSize: 20, fontWeight: '600', marginBottom: SPACING.md }}>
+          <Text style={{ color: theme.textPrimary, fontSize: 18, fontWeight: '700', letterSpacing: 0.1, marginBottom: SPACING.md }}>
             {title}
           </Text>
           {children}
           {actions ? (
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.lg }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: SPACING.xs, marginTop: SPACING.lg }}>
               {actions}
             </View>
           ) : null}
@@ -259,15 +269,14 @@ export function TextButton({ theme, label, onPress, disabled, destructive }) {
         borderRadius: RADIUS.md,
         opacity: disabled ? 0.38 : pressed ? 0.8 : 1
       })}
+      accessibilityRole="button"
     >
-      <Text style={{ color: destructive ? ACCENT_DANGER : theme.flowState, fontWeight: '600', fontSize: 15 }}>
+      <Text style={{ color: destructive ? theme.danger : theme.flowState, ...TYPE.button }}>
         {label}
       </Text>
     </Pressable>
   )
 }
-
-const ACCENT_DANGER = '#dc2626'
 
 // M3 filled button
 export function FilledButton({ theme, label, icon, onPress, disabled, destructive, style }) {
@@ -285,7 +294,7 @@ export function FilledButton({ theme, label, icon, onPress, disabled, destructiv
           backgroundColor: disabled
             ? theme.rowFillSelected
             : destructive
-              ? ACCENT_DANGER
+              ? theme.danger
               : theme.flowState,
           borderRadius: RADIUS.xl,
           paddingHorizontal: SPACING.xl,
@@ -294,9 +303,10 @@ export function FilledButton({ theme, label, icon, onPress, disabled, destructiv
         },
         style
       ]}
+      accessibilityRole="button"
     >
       {icon ? <Icon name={icon} size={18} color={disabled ? theme.textMuted : '#ffffff'} /> : null}
-      <Text style={{ color: disabled ? theme.textMuted : '#ffffff', fontWeight: '600', fontSize: 15, textAlign: 'center' }}>
+      <Text style={{ color: disabled ? theme.textMuted : '#ffffff', ...TYPE.button, textAlign: 'center' }}>
         {label}
       </Text>
     </Pressable>
@@ -309,9 +319,9 @@ export function SettingsRow({ theme, icon, label, hint, control, onPress }) {
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.md }}>
       <Icon name={icon} size={22} color={theme.textSecondary} />
       <View style={{ flex: 1 }}>
-        <Text style={{ color: theme.textPrimary, fontSize: 16 }}>{label}</Text>
+        <Text style={{ color: theme.textPrimary, ...TYPE.bodyStrong }}>{label}</Text>
         {hint ? (
-          <Text style={{ color: theme.textMuted, fontSize: 12.5, marginTop: 2 }}>{hint}</Text>
+          <Text style={{ color: theme.textMuted, marginTop: 2, ...TYPE.caption }}>{hint}</Text>
         ) : null}
       </View>
       {control}
@@ -352,7 +362,9 @@ export function Snackbar({ theme, message, onDone, duration = 2600 }) {
         shadowOffset: { width: 0, height: 4 }
       }}
     >
-      <Text style={{ color: theme.dark ? '#1a1a1a' : '#f0f0f0', fontSize: 14 }}>{message}</Text>
+      <Text style={{ color: theme.dark ? '#1a1a1a' : '#f0f0f0', fontSize: 13.5, lineHeight: 19 }}>
+        {message}
+      </Text>
     </View>
   )
 }

@@ -386,6 +386,12 @@ describe('patchWindowsCmake filesystem walk', () => {
     const nm = hoisted ? path.join(tmp, 'node_modules') : path.join(mobileRoot, 'node_modules')
     fs.mkdirSync(mobileRoot, { recursive: true })
     for (const lib of NATIVE_LIBS) {
+      // every real node_modules package has a package.json — v1.0.7 made its
+      // presence the "this lib is actually installed" signal (reanimated and
+      // worklets are intentionally gone from the app now, and their absence
+      // must be a clean skip, not drift)
+      fs.mkdirSync(path.join(nm, lib.name), { recursive: true })
+      fs.writeFileSync(path.join(nm, lib.name, 'package.json'), JSON.stringify({ name: lib.name }))
       const cmakeFile = path.join(nm, lib.name, lib.cmakeRel)
       fs.mkdirSync(path.dirname(cmakeFile), { recursive: true })
       fs.writeFileSync(cmakeFile, lib.name.includes('safe-area') ? SAFEAREA_CMAKELISTS : REANIMATED_CMAKELISTS)
@@ -444,6 +450,20 @@ describe('patchWindowsCmake filesystem walk', () => {
     const result = patchWindowsCmake(mobileRoot)
     expect(result.ok).toBe(true)
     expect(result.patched).toBe(expectedPatchedCount())
+  })
+
+  test('v1.0.7: a lib that is not installed at all is a CLEAN skip, not drift', () => {
+    // reanimated + worklets were removed from the app; their absence must
+    // not fail the postinstall (the v1.0.6 patcher exited 1 and broke
+    // `npm install` the moment the packages were gone)
+    const { mobileRoot, nm } = seedLayout({ hoisted: false })
+    fs.rmSync(path.join(nm, 'react-native-reanimated'), { recursive: true, force: true })
+    fs.rmSync(path.join(nm, 'react-native-worklets'), { recursive: true, force: true })
+    const result = patchWindowsCmake(mobileRoot)
+    expect(result.ok).toBe(true)
+    expect(result.missing).toEqual([])
+    // only safe-area-context + the RN app cmake remain to patch
+    expect(result.patched).toBe(2)
   })
 
   test('second run is a no-op (alreadyOk, no extra writes)', () => {

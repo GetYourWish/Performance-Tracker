@@ -26,24 +26,10 @@ import App from '../App'
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 )
-// The drag-and-drop stack's native runtime (reanimated worklets) cannot boot
-// under jest, so the module is stubbed — but the stub must mirror the REAL
-// package's export shape: DraggableFlatList is the DEFAULT export only (v4
-// index: `export default DraggableFlatList`). The previous stub invented a
-// NAMED DraggableFlatList export, which masked the on-device crash where
-// `import { DraggableFlatList }` resolved to undefined and the release bundle
-// died with "Element type is invalid" the first time the board rendered.
-// With this honest shape, a regression back to a named import makes the
-// board-branch render tests below throw — in CI, not on the user's phone.
-jest.mock('react-native-draggable-flatlist', () => {
-  const React = require('react')
-  const RN = require('react-native')
-  return {
-    __esModule: true,
-    default: props => React.createElement(RN.FlatList, props),
-    ScaleDecorator: ({ children }) => children
-  }
-})
+// v1.0.7: no drag-and-drop stack to stub anymore — react-native-
+// draggable-flatlist (and reanimated/worklets/gesture-handler with it) was
+// removed from the app entirely; the board is a plain RN FlatList now, so
+// the FULL tree boots under jest with zero component mocks.
 
 describe('app boot with REAL safe-area-context (crash regression guard)', () => {
   afterEach(async () => {

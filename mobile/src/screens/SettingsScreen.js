@@ -2,6 +2,13 @@
 // mobile-relevant controls. Every write goes through store.mutate → rebase →
 // no-change-no-write, so settings edits sync to the desktop like any other
 // mutation (desktop Settings edits the same settings object).
+//
+// The theme Segmented control is OPTIMISTIC (v1.0.7): the visual selection
+// and the whole app's theme flip the instant the user taps an option; the
+// persistence lands through the same serialized write cycle as everything
+// else. Theme taps used to take a full SAF write cycle (~1–2 s on device)
+// to show ANY feedback — which read exactly like "it stopped making
+// changes" while a write was merely in flight.
 
 import React, { useEffect, useState, useCallback } from 'react'
 import { View, Text, ScrollView, TextInput, Switch, Pressable, Alert } from 'react-native'
@@ -10,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { TopAppBar, GlassCard, FilledButton, TextButton, SettingsRow, Snackbar } from '../components/ui.js'
 import { inputStyle } from '../components/dialogs.js'
 import { updateSettings } from '../actions.js'
-import { SPACING } from '../theme.js'
+import { SPACING, TYPE } from '../theme.js'
 // Bundled app.json — the version of the JS bundle actually running (the
 // native versionName can be stale when the apk was rebuilt via gradlew on an
 // old prebuild folder, as the 2026-09-17 crash report proved).
@@ -21,7 +28,7 @@ const APP_VERSION = appJson.expo.version || ''
 function SectionCard({ theme, title, children }) {
   return (
     <GlassCard theme={theme} style={{ padding: SPACING.lg, marginBottom: SPACING.md }}>
-      <Text style={{ color: theme.textSecondary, fontSize: 12.5, fontWeight: '700', letterSpacing: 0.8, marginBottom: SPACING.xs }}>
+      <Text style={{ color: theme.textSecondary, ...TYPE.sectionTitle, marginBottom: SPACING.sm }}>
         {title.toUpperCase()}
       </Text>
       {children}
@@ -41,7 +48,7 @@ function Segmented({ theme, options, value, onChange }) {
             android_ripple={{ color: theme.ripple, borderless: true }}
             style={({ pressed }) => ({
               flex: 1,
-              paddingVertical: 8,
+              paddingVertical: 9,
               borderRadius: 999,
               alignItems: 'center',
               backgroundColor: selected ? theme.bgPrimary : 'transparent',
@@ -51,7 +58,14 @@ function Segmented({ theme, options, value, onChange }) {
             accessibilityRole="radio"
             accessibilityState={{ selected }}
           >
-            <Text style={{ color: selected ? theme.textPrimary : theme.textSecondary, fontSize: 13.5, fontWeight: selected ? '600' : '400' }}>
+            <Text
+              style={{
+                color: selected ? theme.flowState : theme.textSecondary,
+                fontSize: 13.5,
+                fontWeight: selected ? '700' : '500',
+                letterSpacing: 0.2
+              }}
+            >
               {opt.label}
             </Text>
           </Pressable>
@@ -69,7 +83,9 @@ export function SettingsScreen({
   autoSync,
   onSetAutoSync,
   onPickFolder,
-  onShowSnack
+  onShowSnack,
+  themeValue,
+  onThemeChange
 }) {
   const insets = useSafeAreaInsets()
   const data = state.data
@@ -98,6 +114,21 @@ export function SettingsScreen({
     [store]
   )
 
+  // Optimistic theme change: App applies the override instantly; we only
+  // surface failures here (the override is rolled back by the App).
+  const handleThemeTap = useCallback(
+    value => {
+      if (!onThemeChange) {
+        run((d, now) => updateSettings(d, { theme: value }, now))
+        return
+      }
+      Promise.resolve(onThemeChange(value)).catch(e =>
+        setSnack('Save failed: ' + ((e && e.message) || e))
+      )
+    },
+    [onThemeChange, run]
+  )
+
   const commitNumber = (key, raw, fallback, parse) => {
     if (raw.trim() === '') return
     const value = parse(raw.trim())
@@ -124,6 +155,8 @@ export function SettingsScreen({
       ]
     )
   }
+
+  const themeSelection = themeValue || settings.theme || 'system'
 
   return (
     <View style={{ flex: 1 }}>
@@ -178,27 +211,32 @@ export function SettingsScreen({
 
         {/* Appearance */}
         <SectionCard theme={theme} title="Appearance">
-          <Text style={{ color: theme.textPrimary, fontSize: 15, marginBottom: SPACING.sm }}>Theme</Text>
+          <Text style={{ color: theme.textPrimary, ...TYPE.bodyStrong, marginBottom: SPACING.sm }}>Theme</Text>
           <Segmented
             theme={theme}
-            value={settings.theme || 'system'}
-            onChange={value => run((d, now) => updateSettings(d, { theme: value }, now))}
+            value={themeSelection}
+            onChange={handleThemeTap}
             options={[
               { label: 'System', value: 'system' },
               { label: 'Light', value: 'light' },
               { label: 'Dark', value: 'dark' }
             ]}
           />
+          <Text style={{ color: theme.textMuted, marginTop: SPACING.sm, ...TYPE.caption }}>
+            Applies instantly; saved to tracker.json like every other change.
+          </Text>
         </SectionCard>
 
         {/* Scoring */}
         <SectionCard theme={theme} title="Scoring">
-          <Text style={{ color: theme.textMuted, fontSize: 12.5, marginBottom: SPACING.md, lineHeight: 18 }}>
+          <Text style={{ color: theme.textMuted, marginBottom: SPACING.md, ...TYPE.caption }}>
             score(task i) = base × min(1.0 + i × increment, cap) × category multiplier — shared with the desktop via @performance-tracker/core.
           </Text>
           <View style={{ flexDirection: 'row', gap: SPACING.md }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.textSecondary, fontSize: 13, marginBottom: 6 }}>Fatigue increment</Text>
+              <Text style={{ color: theme.textSecondary, ...TYPE.secondary, marginBottom: 6 }}>
+                Fatigue increment
+              </Text>
               <TextInput
                 style={inputStyle(theme)}
                 value={fatigueIncrement}
@@ -209,7 +247,7 @@ export function SettingsScreen({
               />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.textSecondary, fontSize: 13, marginBottom: 6 }}>Fatigue cap</Text>
+              <Text style={{ color: theme.textSecondary, ...TYPE.secondary, marginBottom: 6 }}>Fatigue cap</Text>
               <TextInput
                 style={inputStyle(theme)}
                 value={fatigueCap}
@@ -221,7 +259,7 @@ export function SettingsScreen({
             </View>
           </View>
           <View style={{ marginTop: SPACING.lg }}>
-            <Text style={{ color: theme.textPrimary, fontSize: 15, marginBottom: SPACING.sm }}>Week starts on</Text>
+            <Text style={{ color: theme.textPrimary, ...TYPE.bodyStrong, marginBottom: SPACING.sm }}>Week starts on</Text>
             <Segmented
               theme={theme}
               value={settings.weekStartsOn ?? 1}
@@ -263,9 +301,9 @@ export function SettingsScreen({
           onPress={() => store.load().catch(() => {})}
           style={{ marginTop: SPACING.sm }}
         />
-
-        <Snackbar theme={theme} message={snack} onDone={() => setSnack(null)} />
       </ScrollView>
+
+      <Snackbar theme={theme} message={snack} onDone={() => setSnack(null)} />
     </View>
   )
 }

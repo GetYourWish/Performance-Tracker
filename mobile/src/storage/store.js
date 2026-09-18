@@ -327,7 +327,11 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
 
   // Core load body (runs under a READ token; no lock acquisition inside —
   // callers own the token). Generation-guarded via notifyIfCurrent.
-  async function runLoad(gen) {
+  // `quiet` skips the intermediate 'loading' repaint: a background poll that
+  // finds an external change must NOT flash the full-screen loading spinner
+  // over a perfectly good board — it repaints straight to the fresh content
+  // (or the error state if the fresh content is damaged).
+  async function runLoad(gen, { quiet = false } = {}) {
     const notifyIfCurrent = next => {
       if (gen === loadSeq) notify(next)
       return gen === loadSeq
@@ -336,7 +340,7 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
       notifyIfCurrent({ status: 'no-folder' })
       return state
     }
-    notifyIfCurrent({ status: 'loading', errorMessage: null })
+    if (!quiet) notifyIfCurrent({ status: 'loading', errorMessage: null })
     try {
       const conflicts = await listFolder()
       lastStat = targetUri ? await adapter.statDocument(targetUri) : null
@@ -431,7 +435,9 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
 
       notifyConflictsIfChanged(conflicts)
       if (!force && sameStat && state.status !== 'schema-too-new') return false
-      await runLoad(++loadSeq)
+      // quiet: the user is looking at a working board — an external change
+      // (Syncthing landed a desktop edit) repaints in place, no loading flash
+      await runLoad(++loadSeq, { quiet: true })
       return true
     } catch (e) {
       // permission lost while backgrounded — surface setup screen

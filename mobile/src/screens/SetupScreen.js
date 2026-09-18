@@ -11,7 +11,7 @@ import { View, Text, ScrollView, ActivityIndicator } from 'react-native'
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AuroraBackground, GlassCard, FilledButton } from '../components/ui.js'
-import { SPACING, RADIUS } from '../theme.js'
+import { SPACING, RADIUS, TYPE } from '../theme.js'
 import appJson from '../../app.json'
 
 // Build marker in the setup screen footer — a screenshot of any pre-board
@@ -88,7 +88,7 @@ export function SetupScreen({ theme, mode, folderUri, errorMessage, onPickFolder
               elevation: 3
             }}
           >
-            <Icon name="chart-bar" size={44} color={theme.flowState || '#8b5cf6'} />
+            <Icon name="chart-bar" size={44} color={theme.flowState} />
           </View>
           <Text style={{ color: theme.textPrimary, fontSize: 24, fontWeight: '700', marginTop: SPACING.lg, textAlign: 'center' }}>
             Performance Tracker
@@ -96,15 +96,15 @@ export function SetupScreen({ theme, mode, folderUri, errorMessage, onPickFolder
         </View>
 
         <GlassCard theme={theme} style={{ padding: SPACING.xl }}>
-          <Text style={{ color: theme.textPrimary, fontSize: 18, fontWeight: '600', marginBottom: SPACING.sm }}>
+          <Text style={{ color: theme.textPrimary, fontSize: 18, fontWeight: '700', letterSpacing: 0.1, marginBottom: SPACING.sm }}>
             {headline}
           </Text>
-          <Text style={{ color: theme.textSecondary, fontSize: 14.5, lineHeight: 21, marginBottom: SPACING.lg }}>
+          <Text style={{ color: theme.textSecondary, ...TYPE.body, marginBottom: SPACING.lg }}>
             {description}
           </Text>
 
           {busy ? (
-            <ActivityIndicator color={theme.flowState || '#8b5cf6'} style={{ padding: SPACING.md }} />
+            <ActivityIndicator color={theme.flowState} style={{ padding: SPACING.md }} />
           ) : (
             <View style={{ gap: SPACING.md }}>
               <FilledButton theme={theme} label={mode === 'regrant' ? 'Re-grant folder access' : 'Choose Syncthing folder'} onPress={handlePick} />
@@ -121,7 +121,7 @@ export function SetupScreen({ theme, mode, folderUri, errorMessage, onPickFolder
           )}
 
           {(error || (mode !== 'missing' && errorMessage)) ? (
-            <Text style={{ color: '#dc2626', fontSize: 13.5, marginTop: SPACING.md }}>
+            <Text style={{ color: theme.danger, ...TYPE.secondary, marginTop: SPACING.md }}>
               {error || errorMessage}
             </Text>
           ) : null}
@@ -161,7 +161,7 @@ export function SchemaErrorScreen({ theme, schemaVersion }) {
       >
         <GlassCard theme={theme} style={{ padding: SPACING.xl, borderRadius: RADIUS.lg }}>
           <View style={{ alignItems: 'center', gap: SPACING.md }}>
-            <Icon name="file-alert-outline" size={48} color="#dc2626" />
+            <Icon name="file-alert-outline" size={48} color={theme.danger} />
             <Text style={{ color: theme.textPrimary, fontSize: 19, fontWeight: '700', textAlign: 'center' }}>
               Data file is from a newer version
             </Text>

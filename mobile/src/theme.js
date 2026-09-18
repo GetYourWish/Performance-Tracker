@@ -23,6 +23,13 @@ export const AURORA = {
   ]
 }
 
+// flowState / flowStatePressed are REQUIRED on every theme object: the FAB,
+// filled buttons, text buttons and the Switch track all read them. They were
+// missing until v1.0.7, which made every one of those controls render with an
+// UNDEFINED color — the FAB had no background pill, filled buttons were
+// transparent with white labels (invisible), and text buttons fell back to the
+// system default (near-black — unreadable on the dark theme). That was the
+// remote-reported "the text doesnt look well enough".
 export const LIGHT = {
   dark: false,
   bgPrimary: '#ffffff',
@@ -38,7 +45,11 @@ export const LIGHT = {
   rowFillSelected: 'rgba(15,23,42,0.10)',
   ripple: 'rgba(15,23,42,0.12)',
   scrim: 'rgba(15,23,42,0.45)',
-  shadow: '#0f172a'
+  shadow: '#0f172a',
+  // violet-600 family — readable on white surfaces
+  flowState: '#7c3aed',
+  flowStatePressed: '#6d28d9',
+  danger: '#dc2626'
 }
 
 export const DARK = {
@@ -56,7 +67,11 @@ export const DARK = {
   rowFillSelected: 'rgba(255,255,255,0.10)',
   ripple: 'rgba(255,255,255,0.10)',
   scrim: 'rgba(0,0,0,0.60)',
-  shadow: '#000000'
+  shadow: '#000000',
+  // violet-500 family — pops on dark surfaces
+  flowState: '#8b5cf6',
+  flowStatePressed: '#7c3aed',
+  danger: '#ef4444'
 }
 
 // Shared accents (theme-independent, same values as desktop)
@@ -65,6 +80,21 @@ export const ACCENTS = {
   danger: '#dc2626',
   success: '#4ade80',
   warning: '#fbbf24'
+}
+
+// Shared type scale — one place so every screen renders text with the same
+// voice (sizes are dp, mirroring the desktop CSS px values 1:1).
+export const TYPE = {
+  appTitle: { fontSize: 20, fontWeight: '700', letterSpacing: 0.15 },
+  appSubtitle: { fontSize: 12, fontWeight: '400', letterSpacing: 0.3 },
+  sectionTitle: { fontSize: 11.5, fontWeight: '700', letterSpacing: 1.0 },
+  cardTitle: { fontSize: 16, fontWeight: '600', letterSpacing: 0.1 },
+  body: { fontSize: 15, fontWeight: '400', lineHeight: 21 },
+  bodyStrong: { fontSize: 15, fontWeight: '600', lineHeight: 21 },
+  secondary: { fontSize: 13, fontWeight: '400', lineHeight: 18 },
+  caption: { fontSize: 12.5, fontWeight: '400', lineHeight: 17 },
+  button: { fontSize: 14.5, fontWeight: '600', letterSpacing: 0.2 },
+  score: { fontSize: 32, fontWeight: '800', letterSpacing: -0.5 }
 }
 
 // Desktop component CSS is scaled 1:1 (px) — RN density-independent pixels
@@ -81,4 +111,23 @@ export function buildTheme(preference, systemScheme) {
       : (systemScheme === 'dark' ? 'dark' : 'light')
   const base = resolved === 'dark' ? DARK : LIGHT
   return { ...base, resolved, canvas: CANVAS[resolved], aurora: AURORA[resolved] }
+}
+
+// Guard used by tests: every control color the UI kit reads must exist on
+// every theme object (the missing-flowState bug shipped invisible buttons).
+export function themeColorGuard(theme) {
+  const required = [
+    'flowState',
+    'flowStatePressed',
+    'textPrimary',
+    'textSecondary',
+    'textMuted',
+    'bgPrimary',
+    'bgSecondary',
+    'border',
+    'ripple',
+    'scrim'
+  ]
+  const missing = required.filter(k => typeof theme[k] !== 'string' || theme[k].length === 0)
+  return { ok: missing.length === 0, missing }
 }

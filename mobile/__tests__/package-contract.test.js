@@ -1,75 +1,111 @@
-// Package contract test — the app's imports must match the REAL export shape
-// of react-native-draggable-flatlist, not the shape we imagine it has.
+// Package contract test — v1.0.7 edition.
 //
-// REGRESSION THIS GUARDS (2026-09-17 crash report):
-//   BoardScreen did `import { DraggableFlatList, ScaleDecorator } from
-//   'react-native-draggable-flatlist'`. The package's v4 entry exports the
-//   list component as the DEFAULT export only — the named binding was
-//   `undefined` in the release bundle, and the first board render on a real
-//   device died with:
-//     "Element type is invalid: expected a string (for built-in components)
-//      or a class/function (for composite components) but got: undefined"
-//   The jest mocks had invented a named DraggableFlatList export, so every
-//   test passed while the app crashed on device. (Same failure class as the
-//   SAF createFileAsync(parentUri, mimeType, fileName) arg-order bug: a mock
-//   that mirrors the app's wrong assumption instead of the real API.)
+// HISTORY: this file used to pin react-native-draggable-flatlist's real
+// export shape (the 2026-09-17 "Element type is invalid" crash was a named
+// import of a default-only export — Metro bundles missing exports
+// silently). In v1.0.7 the ENTIRE drag library (plus reanimated, worklets
+// and gesture-handler) was REMOVED: it is unmaintained for React 19 /
+// reanimated 4 / RN 0.87 (last release 4.0.3, open crash issues #496/#524/
+// #558) and it was the prime suspect for the remote-reported "create a
+// task → crash".
 //
-// This test reads the ACTUAL installed package (both entries Metro can pick:
-// the `react-native` field src/index.tsx and the `main` field
-// lib/commonjs/index.js) and pins its export shape. If the package ever
-// changes its export shape (major upgrade), this fails BEFORE the app ships
-// with a silently-undefined import.
+// The contract now guards the removal itself:
+//  1. the risky packages are NOT direct dependencies of the app
+//  2. no app source file imports them (a stray import of a package that is
+//     no longer installed fails the Metro bundle — but a TRANSITIVE install
+//     would silently revive it, so we pin the source scan too)
+//  3. every runtime dependency in package.json actually resolves
+//  4. the babel config no longer registers the worklets plugin
+//
+// Same failure class as before: the build tooling is happy while the app
+// ships a runtime landmine. CI must catch it first.
 
 const fs = require('fs')
 const path = require('path')
 
-const pkgRoot = path.dirname(require.resolve('react-native-draggable-flatlist/package.json'))
+const mobileRoot = path.join(__dirname, '..')
 
-function readIfExists(p) {
-  try {
-    return fs.readFileSync(p, 'utf8')
-  } catch (e) {
-    return null
+const REMOVED_PACKAGES = [
+  'react-native-draggable-flatlist',
+  'react-native-reanimated',
+  'react-native-worklets',
+  'react-native-gesture-handler'
+]
+
+function listSourceFiles(dir, out = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules' || entry.name === 'android' || entry.name === '.bundle-check') continue
+      listSourceFiles(p, out)
+    } else if (/\.(js|jsx|ts|tsx)$/.test(entry.name)) {
+      out.push(p)
+    }
   }
+  return out
 }
 
-describe('react-native-draggable-flatlist export contract', () => {
-  const srcEntry = readIfExists(path.join(pkgRoot, 'src', 'index.tsx'))
-  const cjsEntry = readIfExists(path.join(pkgRoot, 'lib', 'commonjs', 'index.js'))
-
-  test('package is installed and both entries are readable', () => {
-    expect(srcEntry).toBeTruthy()
-    expect(cjsEntry).toBeTruthy()
+describe('removed risky packages stay removed', () => {
+  test('none of the removed packages is a direct dependency', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(mobileRoot, 'package.json'), 'utf8'))
+    for (const name of REMOVED_PACKAGES) {
+      expect(pkg.dependencies).not.toHaveProperty(name)
+      expect(pkg.devDependencies).not.toHaveProperty(name)
+    }
   })
 
-  test('src entry (Metro "react-native" field): list is the DEFAULT export, ScaleDecorator named', () => {
-    expect(srcEntry).toMatch(/export\s+default\s+DraggableFlatList/)
-    expect(srcEntry).toMatch(/export\s+\*\s+from\s+"\.\/components\/CellDecorators"/)
-    // no named re-export of the list itself
-    expect(srcEntry).not.toMatch(/export\s*\{[^}]*DraggableFlatList/)
+  test('no app source file imports a removed package', () => {
+    const files = [
+      ...listSourceFiles(path.join(mobileRoot, 'src')),
+      path.join(mobileRoot, 'App.jsx'),
+      path.join(mobileRoot, 'index.js')
+    ]
+    const offenders = []
+    for (const file of files) {
+      const src = fs.readFileSync(file, 'utf8')
+      // comments that mention the removal are fine — only import/require
+      // statements count
+      const importRe = /(?:import\s[^;]*?from\s*|require\s*\(\s*)['"]([^'"]+)['"]/g
+      let m
+      while ((m = importRe.exec(src)) !== null) {
+        for (const name of REMOVED_PACKAGES) {
+          if (m[1] === name || m[1].startsWith(name + '/')) {
+            offenders.push(path.relative(mobileRoot, file) + ' → ' + m[1])
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([])
   })
 
-  test('CJS entry (package "main"): exports.default carries the list, no named DraggableFlatList', () => {
-    expect(cjsEntry).toMatch(/exports\.default/)
-    expect(cjsEntry).not.toMatch(/exports\.DraggableFlatList\b/)
-    // ScaleDecorator is re-exported as a named getter from CellDecorators
-    expect(cjsEntry).toMatch(/_CellDecorators/)
+  test('every runtime dependency resolves (no phantom imports)', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(mobileRoot, 'package.json'), 'utf8'))
+    for (const name of Object.keys(pkg.dependencies)) {
+      expect(() => require.resolve(path.join(name, 'package.json'))).not.toThrow()
+    }
   })
 
-  test('CellDecorators really exports ScaleDecorator (named)', () => {
-    const cjs = readIfExists(path.join(pkgRoot, 'lib', 'commonjs', 'components', 'CellDecorators.js'))
-    expect(cjs).toBeTruthy()
-    expect(cjs).toMatch(/exports\.ScaleDecorator\s*=/)
+  test('babel config no longer registers the worklets plugin', () => {
+    const babel = fs.readFileSync(path.join(mobileRoot, 'babel.config.js'), 'utf8')
+    expect(babel).not.toMatch(/react-native-worklets\/plugin/)
+    expect(babel).not.toMatch(/react-native-reanimated\/plugin/)
+  })
+})
+
+describe('BoardScreen renders the board with first-party components only', () => {
+  test('the board list is a plain RN FlatList (no drag library)', () => {
+    const board = fs.readFileSync(path.join(mobileRoot, 'src', 'components', 'BoardScreen.js'), 'utf8')
+    expect(board).toMatch(/import\s*\{[^}]*FlatList[^}]*\}\s*from\s+'react-native'/)
+    expect(board).toMatch(/<FlatList/)
+    // the reorder flow uses the moveItem action (desktop parity)
+    expect(board).toMatch(/\bmoveItem\b/)
   })
 
-  test("BoardScreen imports the list as the DEFAULT export (a named import resolves to undefined)", () => {
-    const board = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'BoardScreen.js'), 'utf8')
-    expect(board).toMatch(
-      /import\s+DraggableFlatList\s*,\s*\{[^}]*ScaleDecorator[^}]*\}\s*from\s+'react-native-draggable-flatlist'/
-    )
-    // and NOT as a named-only import
-    expect(board).not.toMatch(
-      /import\s*\{\s*DraggableFlatList/
-    )
+  test('rows support rearrange mode with up/down move buttons', () => {
+    const rows = fs.readFileSync(path.join(mobileRoot, 'src', 'components', 'rows.js'), 'utf8')
+    expect(rows).toMatch(/onMoveUp/)
+    expect(rows).toMatch(/onMoveDown/)
+    expect(rows).toMatch(/canMoveUp/)
+    expect(rows).toMatch(/canMoveDown/)
   })
 })

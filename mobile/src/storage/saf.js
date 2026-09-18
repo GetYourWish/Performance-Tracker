@@ -186,8 +186,17 @@ export async function appWriteFile(fileUri, content) {
 
 export async function appListDir(dirUri) {
   try {
-    const uris = await withTimeout(() => expoFs().readDirectoryAsync(dirUri), 'Reading backups')
-    return Array.isArray(uris) ? uris : []
+    const entries = await withTimeout(() => expoFs().readDirectoryAsync(dirUri), 'Reading backups')
+    if (!Array.isArray(entries)) return []
+    // DEVICE-PARITY BUG (remote-reported 2026-09-18 class): Android's legacy
+    // readDirectoryAsync returns BARE FILE NAMES for file:// directories
+    // (native: `children.map { it?.name }`), not URIs. Every consumer of this
+    // adapter (backup rotation pruning, the .corrupt window, restore-from-
+    // backup) treats the entries as full URIs — on a real device deleteAsync/
+    // readAsStringAsync got a bare name like "tracker-backup-….json", which
+    // parses as a scheme-less URI and fails ("Location '…' isn't deletable").
+    // Normalize names to full URIs here so the adapter contract is uniform.
+    return entries.map(e => (typeof e === 'string' && e.includes('://') ? e : dirUri + e))
   } catch (e) {
     return []
   }

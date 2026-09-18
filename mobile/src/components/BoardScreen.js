@@ -1,27 +1,22 @@
 // BoardScreen — the main tab, desktop Board.jsx parity on Android:
-//  - DraggableFlatList over visible board items (markers + active tasks) in
-//    board order; long-press the handle to drag (desktop: drag handle)
+//  - FlatList over visible board items (markers + active tasks) in board
+//    order. Reordering is the desktop's own move-buttons model: tap ⋮⋮ on
+//    any row to enter rearrange mode, move with ↑/↓, tap ✓ to finish.
+//    (react-native-draggable-flatlist was removed in v1.0.7 — unmaintained
+//    for React 19 + reanimated 4 and the prime suspect for the on-device
+//    "create a task → crash"; see rows.js.)
 //  - today summary card scored by core calculateDayScore (identical numbers)
 //  - FAB → add task (desktop header input); rows: star/check/trash
 //  - marker pills: note (i), add-task-below (+), delete (✕)
 //  - category sheet ≙ desktop category sidebar (place marker / create)
 //  - pull-to-refresh + 15 s polling reload the file when Syncthing lands a
-//    desktop edit (external change → full re-gate + heal + repaint)
+//    desktop edit (external change → full re-gate + heal + repaint in place)
 // Every mutation flows through store.mutate → rebase → no-change-no-write.
 
 import React, { useMemo, useState, useCallback } from 'react'
-import { View, Text, RefreshControl } from 'react-native'
+import { View, Text, FlatList, RefreshControl } from 'react-native'
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-// DraggableFlatList is the package's DEFAULT export (v4's index does
-// `export default DraggableFlatList`; only ScaleDecorator & friends are
-// named). Importing it as a named binding yields `undefined` at runtime —
-// the release bundle then dies with "Element type is invalid: … got:
-// undefined" the first time the board renders on a real device (exactly
-// what the 2026-09-17 crash report showed). Jest never caught it because
-// the old jest mock invented a named export that the real package does
-// not have.
-import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist'
 import {
   calculateDayScore,
   getCurrentDate,
@@ -47,9 +42,9 @@ import {
   addTaskBelowMarker,
   updateMarkerNote,
   createCategory,
-  reorderBoard
+  moveItem
 } from '../actions.js'
-import { SPACING } from '../theme.js'
+import { SPACING, TYPE } from '../theme.js'
 
 export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShowConflictInfo }) {
   const insets = useSafeAreaInsets()
@@ -62,6 +57,7 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
   const [notingMarker, setNotingMarker] = useState(null) // marker object
   const [addingBelowMarker, setAddingBelowMarker] = useState(null) // marker object
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [rearranging, setRearranging] = useState(false)
 
   const data = state.data
 
@@ -190,56 +186,70 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
     run((d, now) => deleteMarker(d, marker.id, now), 'Marker removed')
   }
 
-  const handleDragEnd = useCallback(
-    ({ data: ordered }) => {
-      const orderedIds = ordered.map(item => item.key)
-      const sameOrder =
-        orderedIds.length === visibleItems.length &&
-        orderedIds.every((id, i) => id === visibleItems[i].key)
-      if (sameOrder) return
-      run((d, now) => reorderBoard(d, orderedIds, now))
+  // Reorder via the move buttons. Each tap is its own mutation; the store's
+  // mutation queue composes rapid bursts in order into ONE verified write
+  // (write serialization — see store.js), so holding ↓↓↓ is safe.
+  const handleMove = useCallback(
+    (itemId, direction) => {
+      run((d, now) => moveItem(d, itemId, direction, now))
     },
-    [run, visibleItems]
+    [run]
   )
 
+  const toggleRearrange = useCallback(() => setRearranging(r => !r), [])
+
   const renderItem = useCallback(
-    ({ item, drag, isActive }) => {
-      const dragProps = { drag, isActive }
+    ({ item, index }) => {
+      const moveProps = {
+        rearranging,
+        onToggleRearrange: toggleRearrange,
+        onMoveUp: () => handleMove(item.key, 'up'),
+        onMoveDown: () => handleMove(item.key, 'down'),
+        canMoveUp: index > 0,
+        canMoveDown: index < visibleItems.length - 1
+      }
       if (item.kind === 'task') {
         return (
-          <ScaleDecorator>
-            <TaskRow
-              theme={theme}
-              task={item.task}
-              category={categoryLookup.get(item.key) || null}
-              isWorkingOn={workingOnSet.has(item.key)}
-              flowStateColor={flowStateColor}
-              onOpen={() => setEditingTask(item.task)}
-              onComplete={() => setCompletingTask(item.task)}
-              onDelete={() => setDeletingTask(item.task)}
-              onToggleWorkingOn={() => run((d, now) => toggleWorkingOn(d, item.key, now))}
-              {...dragProps}
-            />
-          </ScaleDecorator>
+          <TaskRow
+            theme={theme}
+            task={item.task}
+            category={categoryLookup.get(item.key) || null}
+            isWorkingOn={workingOnSet.has(item.key)}
+            flowStateColor={flowStateColor}
+            onOpen={() => setEditingTask(item.task)}
+            onComplete={() => setCompletingTask(item.task)}
+            onDelete={() => setDeletingTask(item.task)}
+            onToggleWorkingOn={() => run((d, now) => toggleWorkingOn(d, item.key, now))}
+            {...moveProps}
+          />
         )
       }
       const marker = item.marker
       const category = categoriesById.get(marker.categoryId)
       return (
-        <ScaleDecorator>
-          <MarkerRow
-            theme={theme}
-            marker={marker}
-            category={category}
-            onNote={() => setNotingMarker(marker)}
-            onAddBelow={() => setAddingBelowMarker(marker)}
-            onDelete={() => setDeletingMarker(marker)}
-            {...dragProps}
-          />
-        </ScaleDecorator>
+        <MarkerRow
+          theme={theme}
+          marker={marker}
+          category={category}
+          onNote={() => setNotingMarker(marker)}
+          onAddBelow={() => setAddingBelowMarker(marker)}
+          onDelete={() => setDeletingMarker(marker)}
+          {...moveProps}
+        />
       )
     },
-    [theme, categoryLookup, workingOnSet, flowStateColor, categoriesById, run]
+    [
+      theme,
+      categoryLookup,
+      workingOnSet,
+      flowStateColor,
+      categoriesById,
+      run,
+      rearranging,
+      toggleRearrange,
+      handleMove,
+      visibleItems.length
+    ]
   )
 
   const scoreText =
@@ -275,13 +285,10 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
         }
       />
 
-      <DraggableFlatList
+      <FlatList
         data={visibleItems}
         keyExtractor={item => item.key}
         renderItem={renderItem}
-        onDragEnd={handleDragEnd}
-        activationDistance={6}
-        containerStyle={{ flex: 1 }}
         contentContainerStyle={{
           paddingHorizontal: SPACING.lg,
           paddingTop: SPACING.md,
@@ -298,15 +305,15 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: SPACING.sm,
-                  borderColor: '#dc2626'
+                  borderColor: theme.danger
                 }}
               >
-                <Icon name="alert-octagon" size={20} color="#dc2626" />
+                <Icon name="alert-octagon" size={20} color={theme.danger} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: theme.textPrimary, fontWeight: '600', fontSize: 14 }}>
                     Sync conflict copies found
                   </Text>
-                  <Text style={{ color: theme.textSecondary, fontSize: 12.5, marginTop: 2 }}>
+                  <Text style={{ color: theme.textSecondary, marginTop: 2, ...TYPE.caption }}>
                     Syncthing kept both versions. Nothing was changed automatically.
                   </Text>
                 </View>
@@ -315,6 +322,36 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
                   color={theme.textSecondary}
                   onPress={onShowConflictInfo}
                   accessibilityLabel="Show conflict details"
+                />
+              </GlassCard>
+            ) : null}
+
+            {rearranging ? (
+              <GlassCard
+                theme={theme}
+                style={{
+                  padding: SPACING.md,
+                  marginBottom: SPACING.md,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: SPACING.sm,
+                  borderColor: theme.flowState
+                }}
+              >
+                <Icon name="arrow-up-down-bold" size={20} color={theme.flowState} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.textPrimary, fontWeight: '600', fontSize: 14 }}>
+                    Rearranging
+                  </Text>
+                  <Text style={{ color: theme.textSecondary, marginTop: 2, ...TYPE.caption }}>
+                    Move items with the arrows. Tap the ✓ on a row when you&apos;re done.
+                  </Text>
+                </View>
+                <IconBtn
+                  name="check-circle-outline"
+                  color={theme.flowState}
+                  onPress={toggleRearrange}
+                  accessibilityLabel="Finish rearranging"
                 />
               </GlassCard>
             ) : null}
@@ -329,18 +366,21 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
               }}
             >
               <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: '500' }}>
-                  Today · {today}
+                <Text style={{ color: theme.textSecondary, fontWeight: '600', letterSpacing: 0.8, fontSize: 11.5 }}>
+                  TODAY · {today}
                 </Text>
-                <Text style={{ color: theme.textPrimary, fontSize: 30, fontWeight: '700', marginTop: 2 }}>
+                <Text style={{ color: theme.textPrimary, marginTop: 2, ...TYPE.score }}>
                   {scoreText}
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: theme.textSecondary, letterSpacing: 0 }}>
+                    {'  '}pts
+                  </Text>
                 </Text>
               </View>
               <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
+                <Text style={{ color: theme.textSecondary, ...TYPE.secondary }}>
                   {todaySummary.count} completed
                 </Text>
-                <Text style={{ color: flowStateColor, fontSize: 13 }}>
+                <Text style={{ color: flowStateColor, ...TYPE.secondary, fontWeight: '600' }}>
                   {todaySummary.workingOn} working on
                 </Text>
               </View>
@@ -348,16 +388,17 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
 
             {visibleItems.length === 0 ? (
               <View style={{ alignItems: 'center', paddingVertical: SPACING.xxl }}>
-                <Text style={{ color: theme.textPrimary, fontSize: 17, fontWeight: '600' }}>
+                <Icon name="clipboard-check-outline" size={44} color={theme.textMuted} />
+                <Text style={{ color: theme.textPrimary, marginTop: SPACING.md, ...TYPE.cardTitle }}>
                   No tasks yet
                 </Text>
                 <Text
                   style={{
                     color: theme.textSecondary,
-                    fontSize: 14,
                     marginTop: 6,
                     textAlign: 'center',
-                    paddingHorizontal: SPACING.xl
+                    paddingHorizontal: SPACING.xl,
+                    ...TYPE.secondary
                   }}
                 >
                   Tap + to add your first task and start tracking your performance!

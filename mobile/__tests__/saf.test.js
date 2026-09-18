@@ -37,6 +37,14 @@ function mockMakeLegacyFs(state) {
   return {
     EncodingType: { UTF8: 'utf8' },
     documentDirectory: 'file://data/user/0/pt/docs/',
+    // BASE readDirectoryAsync (file:// dirs — used by the app-private
+    // .backups/.corrupt windows). The NATIVE implementation returns BARE
+    // FILE NAMES (`children.map { it?.name }` in FileSystemLegacyModule.kt) —
+    // mockLegacyState.baseDirNames reproduces that device behavior.
+    readDirectoryAsync: async dirUri => {
+      mockLegacyCalls.push(['base.readDirectoryAsync', dirUri])
+      return state.baseDirNames || []
+    },
     StorageAccessFramework: {
       requestDirectoryPermissionsAsync: async () => ({
         granted: true,
@@ -261,5 +269,61 @@ describe('createSafAdapter', () => {
   test('requestFolder maps the picker result (never timeout-guarded: user-driven)', async () => {
     const res = await requestFolder()
     expect(res).toEqual({ granted: true, directoryUri: 'content://picked/tree' })
+  })
+
+  // ---------------------------------------------------------------------------
+  // appListDir — DEVICE PARITY (v1.0.7 fix)
+  //
+  // Android's legacy readDirectoryAsync returns BARE FILE NAMES for file://
+  // directories. The store's backup rotation and restore-from-backup treat
+  // adapter listings as URIs; before the fix, deleteAsync/readAsStringAsync
+  // received a bare name on real devices, parsed it as a scheme-less URI and
+  // failed ('Location … isn't deletable') — silently killing backup pruning
+  // and the 'Restore latest backup' recovery path. Every Node in-memory
+  // adapter returned full URIs, so the whole suite was blind to it.
+  // ---------------------------------------------------------------------------
+
+  describe('appListDir device parity', () => {
+    const adapter = createSafAdapter()
+
+    test('bare file names (the real device shape) become full URIs', async () => {
+      mockLegacyState.baseDirNames = ['tracker-backup-2026.json', 'tracker-backup-2027.json']
+      try {
+        const uris = await adapter.appListDir('file://data/user/0/pt/docs/.backups/')
+        expect(uris).toEqual([
+          'file://data/user/0/pt/docs/.backups/tracker-backup-2026.json',
+          'file://data/user/0/pt/docs/.backups/tracker-backup-2027.json'
+        ])
+      } finally {
+        delete mockLegacyState.baseDirNames
+      }
+    })
+
+    test('entries that are already URIs pass through untouched', async () => {
+      mockLegacyState.baseDirNames = ['file://data/user/0/pt/docs/.backups/x.json']
+      try {
+        const uris = await adapter.appListDir('file://data/user/0/pt/docs/.backups/')
+        expect(uris).toEqual(['file://data/user/0/pt/docs/.backups/x.json'])
+      } finally {
+        delete mockLegacyState.baseDirNames
+      }
+    })
+
+    test('a failing read (missing dir on first run) yields an empty list', async () => {
+      mockLegacyState.baseDirNames = undefined
+      // the mock returns [] by default; emulate a thrown error path instead
+      const orig = mockLegacyState.baseDirNames
+      const fs = require('expo-file-system/legacy')
+      const realRead = fs.readDirectoryAsync
+      fs.readDirectoryAsync = async () => {
+        throw new Error('ENOENT')
+      }
+      try {
+        await expect(adapter.appListDir('file://data/user/0/pt/docs/.backups/')).resolves.toEqual([])
+      } finally {
+        fs.readDirectoryAsync = realRead
+        mockLegacyState.baseDirNames = orig
+      }
+    })
   })
 })

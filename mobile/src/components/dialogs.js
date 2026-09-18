@@ -2,10 +2,10 @@
 // writes through the same desktop-identical data paths (actions.js).
 
 import React, { useEffect, useState } from 'react'
-import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native'
+import { View, Text, TextInput, Pressable } from 'react-native'
 import { Dialog, TextButton, FilledButton } from './ui.js'
 import { getCurrentDate } from '@performance-tracker/core'
-import { SPACING } from '../theme.js'
+import { SPACING, TYPE } from '../theme.js'
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -18,6 +18,7 @@ export function inputStyle(theme) {
     paddingVertical: 10,
     color: theme.textPrimary,
     fontSize: 15,
+    lineHeight: 21,
     backgroundColor: theme.bgSecondary
   }
 }
@@ -101,7 +102,7 @@ export function CompleteDialog({ theme, task, difficulties, onConfirm, onClose }
         </>
       }
     >
-      <Text style={{ color: theme.textSecondary, fontSize: 15, marginBottom: SPACING.md }} numberOfLines={3}>
+      <Text style={{ color: theme.textPrimary, ...TYPE.bodyStrong, marginBottom: SPACING.md }} numberOfLines={3}>
         {String(task?.text ?? '')}
       </Text>
 
@@ -126,7 +127,7 @@ export function CompleteDialog({ theme, task, difficulties, onConfirm, onClose }
               accessibilityRole="radio"
               accessibilityState={{ selected }}
             >
-              <Text style={{ color: selected ? '#ffffff' : d.color, fontWeight: '600', fontSize: 13.5 }}>
+              <Text style={{ color: selected ? '#ffffff' : d.color, fontWeight: '700', fontSize: 13.5, letterSpacing: 0.2 }}>
                 {d.label} ({d.score})
               </Text>
             </Pressable>
@@ -148,7 +149,7 @@ export function CompleteDialog({ theme, task, difficulties, onConfirm, onClose }
         <TextButton theme={theme} label="Today" onPress={() => setDate(getCurrentDate())} />
       </View>
       {!dateValid ? (
-        <Text style={{ color: '#dc2626', fontSize: 12.5, marginTop: 4 }}>
+        <Text style={{ color: theme.danger, fontSize: 12.5, marginTop: 4 }}>
           Use the YYYY-MM-DD format.
         </Text>
       ) : null}
@@ -182,7 +183,7 @@ export function ConfirmDialog({ theme, visible, title, body, confirmLabel = 'Del
         </>
       }
     >
-      <Text style={{ color: theme.textSecondary, fontSize: 15, lineHeight: 21 }}>{body}</Text>
+      <Text style={{ color: theme.textSecondary, ...TYPE.body }}>{body}</Text>
     </Dialog>
   )
 }
@@ -223,8 +224,10 @@ export function MarkerNoteDialog({ theme, visible, categoryName, initialNote = '
 const styles = {
   label: theme => ({
     color: theme.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 6
+    fontSize: 12.5,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 8
   })
 }

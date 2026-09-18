@@ -413,6 +413,15 @@ function patchWindowsCmake(startDir) {
   console.log(`${TAG} scanning: ${candidates.join(' -> ')}`);
 
   for (const lib of NATIVE_LIBS) {
+    // v1.0.7: react-native-reanimated / react-native-worklets were REMOVED
+    // from the app entirely (drag library gone). A package that is not
+    // installed at all is a CLEAN SKIP, not drift — only a package that IS
+    // installed but missing its expected files is a problem.
+    const installed = findInNodeModules(candidates, [lib.name, 'package.json'])
+    if (!installed) {
+      console.log(`${TAG} skip: ${lib.name} is not installed (removed from the app) — nothing to patch`);
+      continue;
+    }
     const cmakeFile = findInNodeModules(candidates, [lib.name, lib.cmakeRel]);
     if (!cmakeFile) {
       console.warn(`${TAG} skip: ${lib.name} CMakeLists.txt not found`);

@@ -38,32 +38,12 @@ jest.mock('react-native-safe-area-context', () => {
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 )
-// HONEST module shape: react-native-draggable-flatlist v4 exports the list as
-// the DEFAULT export only; ScaleDecorator is a named export. The previous
-// stub invented a named DraggableFlatList export and thereby masked the
-// release crash ("Element type is invalid: … got: undefined" at BoardScreen,
-// 2026-09-17 crash report). If BoardScreen ever regresses to a named import,
-// the board-branch tests in this file now throw right here in CI.
-jest.mock('react-native-draggable-flatlist', () => {
-  const React = require('react')
-  const RN = require('react-native')
-  return {
-    __esModule: true,
-    default: props => React.createElement(RN.FlatList, props),
-    ScaleDecorator: ({ children }) => children
-  }
-})
-// the board branch mounts GestureHandlerRootView, whose real module calls a
-// native install() — mock it so the 'ready' tree can render under jest
-jest.mock('react-native-gesture-handler', () => {
-  const React = require('react')
-  const RN = require('react-native')
-  return {
-    __esModule: true,
-    GestureHandlerRootView: ({ children }) =>
-      React.createElement(RN.View, { style: { flex: 1 } }, children)
-  }
-})
+// v1.0.7: the drag-and-drop stack (draggable-flatlist + reanimated +
+// worklets + gesture-handler) is GONE — the board renders a plain RN
+// FlatList, so no component mocks are needed for the full tree anymore.
+// (The old mocks had to mirror the drag library's real export shape because
+// an honest mock once caught a silently-undefined import; with the library
+// removed, that entire failure class is structurally impossible.)
 
 // Realistic SAF adapter: child URIs shaped exactly like a real Android
 // external-storage document provider (percent-encoded document ids), so the

@@ -131,6 +131,70 @@ theme.
 - **Conflicts**: Syncthing `-conflict-` copies are surfaced on the board and in
   Settings — never auto-loaded, never auto-deleted
 
+#### v1.0.7 — the crash-proofing + UI repair release
+
+**Symptoms (2026-09-18, remote-reported):** after salvaging a corrupt file,
+*"i cant create a new task without having it crash, i cant change the theme
+without having it crash"* — and *"the text doesnt look well enough"*.
+
+Four separate defects, all fixed:
+
+1. **Render errors killed the app (release builds have no error boundary).**
+   Any component throwing during render unmounts the whole tree and the
+   process dies — the store's data guarantees hold, but the user sees a total
+   crash. Every screen is now wrapped in an `ErrorBoundary`
+   (`src/components/ErrorBoundary.js`): a render error shows a calm in-app
+   card ("your data file was NOT touched") with **Try again** and, after a
+   failed retry, **Reload data from disk**. Whatever the error is, it can no
+   longer take the app down with it.
+
+2. **The invisible controls (the "text" complaint).** `theme.flowState` /
+   `flowStatePressed` / `danger` were **never defined** on the theme objects,
+   so the FAB rendered with *no background at all*, filled buttons (Complete,
+   New category, Reload from disk) were *transparent with white labels*, and
+   text buttons (Cancel/Save/Change/Backup) fell back to the system default
+   color — near-black, unreadable in dark mode. Both themes now carry the full
+   control-color set, and `themeColorGuard()` pins it forever
+   (`ui-hardening.test.js`).
+
+3. **The drag-and-drop library was removed.** `react-native-draggable-flatlist`
+   4.0.3 (last release: 2023, built for reanimated 2/3) was running on React
+   19.2 + reanimated 4.6 + RN 0.87 — an unsupported combination with open
+   crash issues (#496/#524/#558) and the prime suspect for the
+   create-a-task crash. The board now reorders exactly like the desktop:
+   **tap the ⋮⋮ handle on any row → move with ↑/↓ → tap ✓ when done.**
+   `react-native-reanimated`, `react-native-worklets` and
+   `react-native-gesture-handler` are gone from the dependency list entirely
+   (the release bundle dropped from 3.3 MB to 2.1 MB), and `package-contract.test.js`
+   pins their absence.
+
+4. **Device-parity bug in the private backup window.** Android's legacy
+   `readDirectoryAsync` returns bare file *names*, but the store treated
+   listings as URIs — on real devices backup pruning and
+   **Restore latest backup** silently failed ("Location … isn't deletable").
+   `saf.js` now normalizes listings to full URIs, with a regression test that
+   feeds the bare-name shape straight into the real adapter.
+
+Also in this release: **theme changes apply instantly** (optimistic override —
+the old build showed zero feedback for the entire 1–2 s SAF write cycle, which
+read exactly like "it stopped making changes"), and the 15-second sync poll
+**no longer flashes the full-screen loading spinner** over a healthy board
+when Syncthing lands a desktop edit (quiet reload, tested).
+
+**Rebuilding (v1.0.7 — `clean:native` is MANDATORY, dependencies changed):**
+
+```
+git pull
+npm install
+npm run clean:native --workspace @performance-tracker/mobile
+cd mobile\android
+.\gradlew assembleRelease
+```
+
+After installing, verify: the loading screen says **v1.0.7**; Settings → About
+says **v1.0.7 (js bundle)**; the FAB is a purple pill; dialog buttons are
+readable in dark mode.
+
 #### v1.0.6 — the corrupt tracker.json fix (data-loss class) + built-in recovery
 
 **Symptom (2026-09-17, remote-reported):** fiddling with the theme in Settings

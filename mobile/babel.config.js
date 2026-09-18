@@ -1,17 +1,11 @@
 // Babel config for the Performance Tracker Android app.
-// The worklets plugin (reanimated 4 ships it as react-native-worklets/plugin,
-// older reanimated 3 as react-native-reanimated/plugin) MUST be listed last.
-let workletsPlugin
-try {
-  workletsPlugin = require.resolve('react-native-worklets/plugin')
-} catch (e) {
-  workletsPlugin = 'react-native-reanimated/plugin'
-}
-
+// v1.0.7: the worklets plugin (and reanimated/worklets themselves) are GONE —
+// react-native-draggable-flatlist was removed with them (unmaintained for
+// React 19 + reanimated 4, prime suspect for the on-device "create a task →
+// crash"); nothing in the app uses worklets anymore.
 module.exports = function (api) {
   api.cache(true)
   return {
-    presets: ['babel-preset-expo'],
-    plugins: [workletsPlugin]
+    presets: ['babel-preset-expo']
   }
 }
