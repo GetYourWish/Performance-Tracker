@@ -131,6 +131,75 @@ theme.
 - **Conflicts**: Syncthing `-conflict-` copies are surfaced on the board and in
   Settings — never auto-loaded, never auto-deleted
 
+#### v1.0.7 build fix — `jserrorhandler/ErrorUtils.h` not found (2026-09-19)
+
+**Symptom (remote-reported):** the mandatory v1.0.7 rebuild
+(`git pull` → `npm install` → `clean:native` → `gradlew assembleRelease`)
+fails at:
+
+```
+Task :expo-modules-core:buildCMakeRelWithDebInfo[arm64-v8a] FAILED
+.../react-android-0.87.1-release/prefab/modules/reactnative/include/cxxreact/ErrorUtils.h:12:10:
+fatal error: 'jserrorhandler/ErrorUtils.h' file not found
+```
+
+**Root cause (a latent trap that v1.0.7's dependency cleanup sprung):**
+
+1. react-native 0.87 moved `ErrorUtils` to `ReactCommon/jserrorhandler/` and
+   left a deprecation shim at `cxxreact/ErrorUtils.h` that only does
+   `#include <jserrorhandler/ErrorUtils.h>`. The shim **is** packaged into the
+   `react-android` prefab — but the `jserrorhandler/` headers it redirects to
+   are **not** (checked against `ReactAndroid/build.gradle.kts`'s prefab copy
+   list: cxxreact/, react/**, jsi/, yoga/ … no jserrorhandler). There is no
+   `ReactAndroid::jserrorhandler` prefab target to link either.
+2. `expo-modules-core` still compiles `EventEmitter.cpp` with
+   `#include <cxxreact/ErrorUtils.h>` (so does current upstream `main`), and
+   only puts `${REACT_NATIVE_DIR}/ReactCommon` — the one directory on disk
+   that actually contains `jserrorhandler/ErrorUtils.h` — on the include path
+   **when react-native-worklets is installed** (`cmake/main.cmake`:
+   `if (REACT_NATIVE_WORKLETS_DIR)`). Upstream Expo never noticed because
+   their default template ships reanimated+worklets, so the include path is
+   almost always present in the wild.
+3. Every previous build of this app had worklets installed, so the include
+   path was there. v1.0.7 **removed worklets** → the next full native
+   recompile (worklets' absence changes expo's cmake arguments → new `.cxx`
+   configure → everything recompiles) hit the unresolvable shim.
+
+**Fix:** `plugins/patch-expo-reactcommon-include.js` adds
+`${REACT_NATIVE_DIR}/ReactCommon` to `EXPO_COMMON` (the interface library
+both `expo-modules-core` and `expo-modules-jsi` consume) — exactly what the
+worklets-conditional block used to provide, now unconditional. It runs from
+npm `postinstall`, from `prebuild` (`with-expo-reactcommon-include`), and from
+`clean:native` (which now also wipes `expo-modules-core`'s `.cxx`).
+Idempotent and anchored like the other patchers; if a future
+`expo-modules-core` ships its own fix, it becomes a logged no-op.
+
+**Verified end-to-end before shipping:** all 58 C++ translation units of
+`expo-modules-core@57.0.14` were compiled with the exact failing build's
+flags (NDK r27b / `27.1.12297006`, arm64-v8a, RelWithDebInfo) against a
+prefab include tree rebuilt from `react-native@0.87.1`'s own copy list:
+without the fix 57/58 compile and `EventEmitter.cpp` fails with the exact
+reported error; with the fix **58/58 compile clean**. A recursive include
+audit of every other native dependency confirmed nothing else was depending
+on the worklets-gated include path (`safe-area-context` builds app-side with
+RN's own application cmake; async-storage/expo-file-system/expo-linear-gradient
+ship no Android C++).
+
+**Rebuilding after this fix (no `clean:native` needed — no dependency
+changes, `npm install` re-applies the patch to `node_modules`):**
+
+```
+git pull
+npm install
+cd mobile\android
+.\gradlew assembleRelease
+```
+
+(The patched `common.cmake` is picked up automatically: cmake re-runs because
+the file changed, then recompiles `expo-modules-core` with the new include
+path. If the build still behaves oddly, `npm run clean:native` now also wipes
+`expo-modules-core`'s stale `.cxx`.)
+
 #### v1.0.7 — the crash-proofing + UI repair release
 
 **Symptoms (2026-09-18, remote-reported):** after salvaging a corrupt file,

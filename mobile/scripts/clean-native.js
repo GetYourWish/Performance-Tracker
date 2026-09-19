@@ -32,16 +32,27 @@
 // in-place edits of two autolinked libraries, and ONLY cache/output
 // directories are deleted. Nothing downloaded, nothing source-controlled,
 // nothing user-authored.
+//
+// v1.0.7 build fix: also re-applies the expo-modules-core ReactCommon include
+// patch (plugins/patch-expo-reactcommon-include.js) and wipes
+// expo-modules-core's .cxx, whose full recompile is what surfaced
+// "fatal error: 'jserrorhandler/ErrorUtils.h' file not found" after
+// react-native-worklets was removed from the app.
 
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
 const { patchWindowsCmake } = require('../plugins/patch-windows-cmake')
+const { patchExpoReactCommonInclude } = require('../plugins/patch-expo-reactcommon-include')
 
 // The only autolinked libraries in this workspace that compile C/C++ through
 // CMake+ninja (their android/ folders carry CMakeLists.txt). Every other
 // dependency ships as JVM bytecode and cannot produce this failure.
-const NATIVE_CMAKE_LIBS = ['react-native-reanimated', 'react-native-worklets']
+// expo-modules-core: the jserrorhandler fix (plugins/patch-expo-reactcommon-include.js)
+// edits its cmake/common.cmake — wiping its .cxx forces the reconfigure that
+// picks the patched include path up. reanimated/worklets were removed from
+// the app in v1.0.7 but stay listed so a stale tree still gets cleaned.
+const NATIVE_CMAKE_LIBS = ['expo-modules-core', 'react-native-reanimated', 'react-native-worklets']
 
 const MOBILE_ROOT = path.resolve(__dirname, '..')
 
@@ -132,6 +143,19 @@ function main() {
     console.log('[clean-native] Windows CMake ninja fix already present')
   } else if (cmake.missing.length > 0) {
     console.log('[clean-native] CMake patch skipped (not installed: ' + cmake.missing.join(', ') + ')')
+  }
+
+  // Re-apply the jserrorhandler/ReactCommon include patch (v1.0.7 build fix):
+  // npm install already applies it, but git pull + clean:native alone must be
+  // enough too. Must run BEFORE the .cxx wipe below is rebuilt.
+  const rci = patchExpoReactCommonInclude(MOBILE_ROOT)
+  if (rci.patched > 0) {
+    console.log('[clean-native] expo-modules-core ReactCommon include patch applied')
+  } else if (rci.alreadyOk > 0) {
+    console.log('[clean-native] expo-modules-core ReactCommon include patch already present')
+  }
+  if (!rci.ok) {
+    return 1 // patcher already printed the exact build failure this prevents
   }
 
   const stop = stopGradleDaemons(androidRoot)
