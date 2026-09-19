@@ -15,18 +15,41 @@ node_modules/
 .vscode/
 .idea/
 
+# Build artifacts
+build/
+dist/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.out
+
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.Python
+env/
+venv/
+.venv/
+.egg-info/
+.eggs/
+*.egg
 
-# Build outputs
-dist/
+# Java/Gradle
+*.class
+*.jar
+*.war
+*.ear
+target/
+.gradle/
 build/
-*.egg-info/
+!gradle.properties
 
-# Compression files
+# Compression
 *.zip
 *.gz
 *.tar
@@ -49,4 +72,19 @@ build/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
+
+# System
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Testing
+.mypy_cache/
+.pytest_cache/
+.nyc_output/
+coverage.xml
 ```
