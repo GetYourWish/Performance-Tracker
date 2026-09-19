@@ -1,32 +1,47 @@
 ```
-# Dependencies
-node_modules/
+# Gradle
+.gradle/
+build/
+*.gradle
+
+# Android
+*.apk
+*.aar
+*.dex
 
 # Environment
 .env
 .env.local
-.env.*
+*.env.*
 
-# Logs and temp files
+# Logs
 *.log
-*.tmp
+
+# Dependencies
+node_modules/
+venv/
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+target/
 
 # Editors
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# System
+.DS_Store
+Thumbs.db
 
-# Build outputs
-dist/
-build/
-*.egg-info/
+# Coverage
+coverage/
+htmlcov/
+.coverage
 
-# Compression files
+# Compressed
 *.zip
 *.gz
 *.tar
@@ -45,8 +60,4 @@ build/
 *.Z
 *.lz
 *.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
 ```
