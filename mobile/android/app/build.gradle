@@ -278,7 +278,7 @@ tasks.register("verifyStandaloneApkDebug") {
             def entry = apk.getEntry("assets/index.android.bundle")
             if (entry == null) {
                 throw new GradleException(
-                    "[with-standalone-release] " + standaloneDebugApkFile.name + " does NOT contain assets/index.android.bundle - it would show the red \"Unable to load script\" screen on the device. The debug JS bundling task (createBundleDebugJsAndAssets, enabled by debuggableVariants = []) did not run or was not merged into the APK. Run: gradlew clean assembleDebug"
+                    "[with-standalone-release] " + standaloneDebugApkFile.name + " does NOT contain assets/index.android.bundle - it would show the red 'Unable to load script' screen on the device. The debug JS bundling task (createBundleDebugJsAndAssets, enabled by debuggableVariants = []) did not run or was not merged into the APK. Run: gradlew clean assembleDebug"
                 )
             }
             if (entry.getSize() < bundleMinBytes) {
