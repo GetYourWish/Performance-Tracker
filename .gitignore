@@ -17,12 +17,11 @@ app/build/
 *.iws
 
 # Logs
-*.log
-
-# Environment
-.env
-.env.local
 *.env.*
+
+# Dependencies
+node_modules/
+mobile/node_modules/
 
 # OS generated files
 .DS_Store
