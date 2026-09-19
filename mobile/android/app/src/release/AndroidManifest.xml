@@ -1,0 +1,16 @@
+<!-- [with-release-permissions] (mobile/plugins/with-release-permissions.js) -->
+<!-- Variant overlay: applies to RELEASE builds only. tools:node="remove"
+     strips each permission from the merged RELEASE manifest; the debug
+     variant keeps them (Metro / dev-server tooling). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- This app is fully offline: tracker.json is synced by SEPARATE
+         software (Syncthing) and is read/written locally through SAF.
+         None of the permissions below are used by a release build. -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove"/>
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" tools:node="remove"/>
+    <uses-permission android:name="android.permission.VIBRATE" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove"/>
+</manifest>

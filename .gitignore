@@ -1,45 +1,52 @@
-# Build artifacts
-dist/
-release/
-out/
-
+```
 # Dependencies
 node_modules/
-venv/
-.venv/
-__pycache__/
-.mypy_cache/
-.pytest_cache/
-target/
-.gradle/
-
-# Editor/IDE files
-.vs/
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
-
-# Logs
-*.log
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
 
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
 
-# System files
-.DS_Store
-Thumbs.db
-# expo export smoke-test output
-mobile/.bundle-check/
-# Expo native generation (expo prebuild / expo run:android output)
-mobile/.expo/
-mobile/android/
-mobile/ios/
+# Logs and temp files
+*.log
+*.tmp
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Compression files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
+```
