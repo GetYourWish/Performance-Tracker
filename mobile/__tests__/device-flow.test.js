@@ -15,6 +15,14 @@ import TestRenderer, { act } from 'react-test-renderer'
 import { AppState } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import App from '../App'
+import { setCorruptSettleForTests } from '../src/storage/store.js'
+
+// The corrupt-file settle window is real wall-clock time on a device
+// (700 ms × 3 retries). The corrupted-file flows below must reach the
+// recovery screen within the test's microtask flushes, so the settle is
+// collapsed to instant retries here — the settle behavior itself is
+// covered by store.test.js with a controlled adapter.
+setCorruptSettleForTests({ attempts: 2, delayMs: 0 })
 
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react')

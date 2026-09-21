@@ -201,6 +201,84 @@ the file changed, then recompiles `expo-modules-core` with the new include
 path. If the build still behaves oddly, `npm run clean:native` now also wipes
 `expo-modules-core`'s stale `.cxx`.)
 
+#### v1.0.8 — the 'every action corrupts tracker.json' fix (truncation-proof SAF writes)
+
+**Symptoms (2026-09-21, remote-reported, screenshot-confirmed):** *"whenever
+i do something in the app like changing the theme or adding a new task it
+just crashes and gives that screen"* —
+
+```
+Could not load tracker.json
+Corrupt JSON: JSON Parse error: Unexpected character: }
+```
+
+— and **Restore latest backup worked, but the very next action corrupted the
+file again**. Device timestamps sealed the diagnosis: the pre-write backup
+rotated at `19:00:26.474` and the corrupt state painted at `19:00:26.854` —
+the damage was produced by the write cycle itself, in ~380 ms, on a build
+that already contained the v1.0.6 write serialization. Overlapping writes
+were never the (whole) story.
+
+**Root cause — the provider does not truncate an EXISTING document.**
+expo's legacy `writeAsStringAsync` opens a SAF document with
+`openOutputStream(uri, "w")` — a mode whose truncation of an *existing*
+document is provider-dependent. On the affected device the new bytes land
+from offset 0 and, when the new content is SHORTER than the old, the
+previous content's tail bytes stay on disk after the write. tracker.json is
+pretty-printed JSON whose final byte is `}`, so a 1–2 byte shrink (theme
+`system` → `dark`) leaves a stray `}` after the complete new document —
+precisely *"Unexpected character: }"*. The tmp sibling always verified
+because it is created FRESH every cycle (no old bytes to leave behind), and
+"Restore latest backup" always worked because a restore rewrites the file
+with content at least as long as the damaged one — which is what made the
+loop look so confounding.
+
+**Fixes shipped (four layers, so no provider quirk can reach the user):**
+
+1. **Truncating writes at the native layer** —
+   `plugins/patch-expo-saf-truncate.js` (postinstall + prebuild plugin, same
+   wiring as the fd-leak patch) rewrites expo's open to `"rwt"`, the
+   `openOutputStream` mode that explicitly carries `MODE_TRUNCATE`, with a
+   fallback to `"w"` for any provider that rejects it.
+2. **In-cycle verify-and-recreate repair** — if the byte-verified target
+   write STILL comes back wrong, `store.writeData` recreates tracker.json as
+   a fresh document (create + write + verify — the exact sequence that just
+   succeeded for the tmp sibling) inside the same cycle. The user never sees
+   the recovery screen, even on a provider that mangles in-place overwrites.
+   A SAF name-collision guard (`tracker (1).json` dedupe) makes a half-done
+   repair structurally impossible.
+3. **Transient-damage settle** — Syncthing pulls file blocks straight into
+   the destination file, so a read landing mid-sync observes garbage for a
+   moment. Loads, rebases and post-write inspections now re-read with a
+   short settle delay before declaring corruption; a mid-sync rebase heals
+   transparently, mutation included. Only damage that persists across the
+   retries opens the recovery flow.
+4. **Recovery sources re-listed** — after a failed write cycle the recovery
+   screen now actually offers **Restore last verified copy** (the tmp
+   sibling); the folder listing it consulted used to predate the tmp the
+   failing cycle had just created, so the most trustworthy recovery source
+   was invisible exactly when it existed.
+
+Also in this release: a same-name-collision guard on the initial target
+create, and a version bump to **1.0.8 (versionCode 9)** — check the loading
+screen says v1.0.8 after installing.
+
+**Rebuilding (no `clean:native` needed — no dependency changes; `npm
+install` re-applies the patch to `node_modules`):**
+
+```
+git pull
+npm install
+cd mobile\android
+.\gradlew assembleRelease
+```
+
+Mobile jest 250/250 (14 new: the patch transform + wiring, the
+non-truncating-provider repair, mid-sync settle for loads and rebases,
+persistent-corruption recovery sources, and the dedupe guard), core vitest
+42/42, desktop 6/6, core-pin guard OK, eslint 0 errors, metro export OK
+(2.1 MB).
+
 #### v1.0.7 — the crash-proofing + UI repair release
 
 **Symptoms (2026-09-18, remote-reported):** after salvaging a corrupt file,

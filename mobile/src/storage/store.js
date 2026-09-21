@@ -32,6 +32,25 @@
 //    no rename-clobber, so the final replace is a full-document write; the
 //    verified tmp copy + the pre-write backup are the crash-recovery
 //    layers. Partial content never reaches the target on purpose.
+//  - TRUNCATION-PROOF TARGET WRITE (the 2026-09-21 'every action corrupts
+//    the file' incident): several Android document providers do NOT
+//    truncate an existing document opened for writing — a shorter write
+//    leaves the previous content's tail bytes behind (a complete new JSON
+//    followed by the old final '}' → "JSON Parse error: Unexpected
+//    character: }"). The native layer now opens with the truncating "rwt"
+//    mode (plugins/patch-expo-saf-truncate.js), and if the byte-verified
+//    target write STILL comes back wrong, the target is RECREATED as a
+//    fresh document (create + write + verify — the exact sequence that just
+//    succeeded for the tmp sibling) inside the same cycle. A provider that
+//    mangles in-place overwrites can no longer push the user into the
+//    recovery flow.
+//  - TRANSIENT-DAMAGE SETTLE: Syncthing pulls file blocks straight into the
+//    destination file, so a read landing mid-sync observes garbage for a
+//    moment. Before the corrupt-file state is entered (load, rebase or
+//    post-write inspection), the document is re-read with a short settle
+//    delay; only damage that persists across the retries is declared real
+//    corruption — and a mid-sync rebase heals transparently, mutation
+//    included.
 //  - PRE-WRITE BACKUP (also from the 2026-09 incident): the CURRENT on-disk
 //    content is copied into the app-private rolling .backups/ window before
 //    EVERY real write — not just when overwriting an external change. A
@@ -83,6 +102,40 @@ export const CONFLICT_PATTERN = /tracker.*-conflict-/
 export const LOAD_TIMEOUT_MS = 15000
 export const LOAD_TIMEOUT_MESSAGE =
   'Reading the data folder timed out. This usually means Android no longer honors the saved folder permission. Tap "Re-grant folder access" below and pick the folder again — your data was not modified.'
+
+// Transient-damage settle (sync-client races): Syncthing pulls file blocks
+// straight into the destination file, so a read that lands mid-sync observes
+// garbage bytes for a moment — after which the very same document parses
+// again. Declaring the file corrupt on such a transient read sends the user
+// into the recovery flow for no reason (and can interrupt a legitimate
+// mutation with CORRUPT_FILE). Before the corrupt state is entered, the
+// document is re-read with a short settle delay; only damage that PERSISTS
+// across the retries is treated as real corruption.
+export const CORRUPT_SETTLE_ATTEMPTS = 3
+export const CORRUPT_SETTLE_DELAY_MS = 700
+
+// Test seam: the settle window is real wall-clock time on a device; tests
+// need it instant (or shaped) to stay fast and deterministic. Production
+// code always uses the constants above — this hook only ever runs from test
+// setup files.
+const settleCfg = { attempts: CORRUPT_SETTLE_ATTEMPTS, delayMs: CORRUPT_SETTLE_DELAY_MS }
+export function setCorruptSettleForTests({ attempts, delayMs } = {}) {
+  settleCfg.attempts = Number.isFinite(attempts) && attempts >= 0 ? attempts : settleCfg.attempts
+  settleCfg.delayMs = Number.isFinite(delayMs) && delayMs >= 0 ? delayMs : settleCfg.delayMs
+}
+
+function tryParseRaw(raw) {
+  try {
+    return { ok: true, value: JSON.parse(raw) }
+  } catch (e) {
+    return { ok: false, error: e }
+  }
+}
+
+function delay(ms) {
+  if (ms <= 0) return Promise.resolve() // fast path: stays on the microtask queue
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 function compactOf(value) {
   return JSON.stringify(value)
@@ -254,12 +307,19 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
     return name
   }
 
-  // Which recovery sources exist for a damaged tracker.json. Uses the
-  // folder listing the failing load already fetched (tmp sibling) plus an
-  // app-private listing (newest backup). Lock-free: app-private only.
+  // Which recovery sources exist for a damaged tracker.json. The folder is
+  // RE-LISTED first: when the corruption was caught by a mutation's write
+  // cycle, the cached listing predates the tmp sibling that very cycle just
+  // created — without the refresh, "Restore last verified copy" (the
+  // byte-verified tmp) would be invisible exactly when it exists.
   async function findRecoverySources() {
     const sources = {}
     const tn = mobileTmpName()
+    try {
+      await listFolder()
+    } catch (e) {
+      /* listing failed — fall back to the cached listing below */
+    }
     if (dirListing.some(u => adapter.fileNameOf(u) === tn)) sources.tmp = tn
     try {
       const backupDir = adapter.appDocumentsDir() + '.backups/'
@@ -295,6 +355,23 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
     const gateErr = gateOrThrow(parsed)
     if (gateErr) throw gateErr
     return validateAndHealData(parsed)
+  }
+
+  // Settle a document that just failed to parse: re-read with a short delay
+  // until it parses or the retries run out (see CORRUPT_SETTLE_* above).
+  // Returns { raw, parse } where `parse` is the final parse attempt — the
+  // caller decides what to do with a still-damaged document.
+  async function readSettled(uri) {
+    let raw = await adapter.readDocument(uri)
+    for (let i = 0; i < settleCfg.attempts; i++) {
+      const parse = tryParseRaw(raw)
+      if (parse.ok) return { raw, parse }
+      await delay(settleCfg.delayMs)
+      const retry = await adapter.readDocument(uri).catch(() => null)
+      if (retry == null) return { raw, parse } // unreadable now — report the last good read
+      raw = retry
+    }
+    return { raw, parse: tryParseRaw(raw) }
   }
 
   // Corrupt-file entry: preserve evidence, discover sources, paint the
@@ -351,15 +428,23 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
       }
 
       const raw = await adapter.readDocument(targetUri)
-      let parsed
-      try {
-        parsed = JSON.parse(raw)
-      } catch (e) {
-        await enterCorruptState(raw, e, notifyIfCurrent)
-        return state
+      let parse = tryParseRaw(raw)
+      let currentRaw = raw
+      if (!parse.ok) {
+        // transient mid-sync damage (Syncthing writes blocks into the
+        // destination file) heals within a moment — settle before declaring
+        // the file corrupt
+        const settled = await readSettled(targetUri)
+        currentRaw = settled.raw
+        if (settled.parse.ok) {
+          parse = settled.parse
+        } else {
+          await enterCorruptState(settled.raw, settled.parse.error, notifyIfCurrent)
+          return state
+        }
       }
 
-      const gateErr = gateOrThrow(parsed)
+      const gateErr = gateOrThrow(parse.value)
       if (gateErr) {
         notifyIfCurrent({
           status: 'schema-too-new',
@@ -370,8 +455,8 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
         return state
       }
 
-      const healed = validateAndHealData(parsed)
-      knownRaw = raw
+      const healed = validateAndHealData(parse.value)
+      knownRaw = currentRaw
       healedCompact = compactOf(healed)
       notifyIfCurrent({
         status: 'ready',
@@ -507,16 +592,46 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
     // 2) replace the target (full-document write; tmp remains as recovery
     //    copy until the very end)
     if (!targetUri) {
-      targetUri = await adapter.createDocument(state.folderUri, state.fileName)
+      const created = await adapter.createDocument(state.folderUri, state.fileName)
+      // SAF dedupes on a name collision ("tracker (1).json") — a tracker.json
+      // that appeared between the listing and this create must not silently
+      // redirect our writes into a misnamed sibling.
+      if (adapter.fileNameOf(created) !== state.fileName) {
+        await adapter.removeDocument(created).catch(() => {})
+        throw new Error('tracker.json appeared in the folder mid-save — nothing was overwritten; try again')
+      }
+      targetUri = created
     }
     await adapter.writeDocument(targetUri, pretty)
 
-    // The temp copy is byte-verified before replacement. Verify the final
-    // target too, because a SAF provider or sync client can still interfere
-    // with the full-document write to tracker.json itself.
-    const finalVerify = await adapter.readDocument(targetUri)
+    let finalVerify = await adapter.readDocument(targetUri)
     if (finalVerify !== pretty) {
-      throw new Error('Final write verification failed — tracker.json was not accepted as saved')
+      // PROVIDER-QUIRK REPAIR (the 2026-09-21 'every action corrupts the
+      // file' incident): some Android document providers do not truncate an
+      // EXISTING document when it is opened for writing — a shorter write
+      // leaves the previous content's tail bytes behind (a complete new JSON
+      // followed by the old final '}' → "JSON Parse error: Unexpected
+      // character: }"). The write that just FAILED against the existing
+      // document is the same write that SUCCEEDED against the freshly
+      // created tmp sibling moments ago, so the reliable path on this
+      // device is: recreate the target as a FRESH document. The byte-verified
+      // tmp copy is still on disk and the pre-write backup is already
+      // rotated — the repair runs inside the same crash-recovery envelope.
+      await adapter.removeDocument(targetUri).catch(() => {})
+      const recreated = await adapter.createDocument(state.folderUri, state.fileName)
+      if (adapter.fileNameOf(recreated) !== state.fileName) {
+        // SAF dedupes the display name on collision ("tracker (1).json") —
+        // the old document never went away. Drop the misnamed copy; the
+        // recovery surface (tmp + backup) stays intact for the user.
+        await adapter.removeDocument(recreated).catch(() => {})
+        throw new Error('Could not replace tracker.json — a same-named document stayed locked in the folder')
+      }
+      targetUri = recreated
+      await adapter.writeDocument(targetUri, pretty)
+      finalVerify = await adapter.readDocument(targetUri)
+      if (finalVerify !== pretty) {
+        throw new Error('Final write verification failed twice (in-place and recreated) — tracker.json was not accepted as saved')
+      }
     }
 
     // 3) drop the tmp artifact
@@ -551,21 +666,26 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
       freshRaw = null // file vanished — write will recreate it
     }
     if (freshRaw != null && freshRaw !== knownRaw) {
-      let parsed
-      try {
-        parsed = JSON.parse(freshRaw)
-      } catch (e) {
-        // A sync client can damage the file after a successful load. Preserve
-        // those bytes and move straight to recovery; keeping the settings or
-        // board screen active would invite further unsaveable edits.
-        await enterCorruptState(freshRaw, e, next => notify(next))
+      let parse = tryParseRaw(freshRaw)
+      if (!parse.ok && targetUri) {
+        // transient mid-sync damage (Syncthing writing blocks into the
+        // destination) must not kill a legitimate mutation — settle first
+        const settled = await readSettled(targetUri)
+        freshRaw = settled.raw
+        parse = settled.parse
+      }
+      if (!parse.ok) {
+        // The damage persists: preserve those bytes and move straight to
+        // recovery; keeping the settings or board screen active would invite
+        // further unsaveable edits.
+        await enterCorruptState(freshRaw, parse.error, next => notify(next))
         const err = new Error(
           'tracker.json on disk is damaged. Recovery is now open; nothing was saved over the damaged file.'
         )
         err.code = 'CORRUPT_FILE'
         throw err
       }
-      const gateErr = gateOrThrow(parsed)
+      const gateErr = gateOrThrow(parse.value)
       if (gateErr) {
         notify({
           status: 'schema-too-new',
@@ -574,7 +694,7 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
         })
         throw gateErr
       }
-      base = validateAndHealData(parsed)
+      base = validateAndHealData(parse.value)
       knownRaw = freshRaw
       healedCompact = compactOf(base)
     } else {
@@ -593,16 +713,16 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
     try {
       result = await writeData(next, { backupRaw: freshRaw })
     } catch (writeError) {
-      // If final verification failed, inspect the target once more. A damaged
-      // target follows the same evidence-preserving recovery route as a
-      // damaged rebase read instead of leaving a deceptive ready screen.
-      try {
-        const observed = targetUri ? await adapter.readDocument(targetUri) : null
-        if (observed != null) JSON.parse(observed)
-      } catch (parseError) {
-        const raw = targetUri ? await adapter.readDocument(targetUri).catch(() => null) : null
-        if (raw != null) {
-          await enterCorruptState(raw, parseError, nextState => notify(nextState))
+      // If final verification failed (even after the recreate repair), inspect
+      // the target once more — with the transient settle guard, because a
+      // sync client can also be mid-flight on the destination right now. A
+      // persistently damaged target follows the same evidence-preserving
+      // recovery route as a damaged rebase read instead of leaving a
+      // deceptive ready screen.
+      if (targetUri) {
+        const settled = await readSettled(targetUri).catch(() => null)
+        if (settled && !settled.parse.ok) {
+          await enterCorruptState(settled.raw, settled.parse.error, nextState => notify(nextState))
           const err = new Error('tracker.json was damaged during saving. Recovery is now open; nothing else will be written.')
           err.code = 'CORRUPT_FILE'
           throw err
