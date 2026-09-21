@@ -44,6 +44,7 @@ const path = require('path')
 const { spawnSync } = require('child_process')
 const { patchWindowsCmake } = require('../plugins/patch-windows-cmake')
 const { patchExpoReactCommonInclude } = require('../plugins/patch-expo-reactcommon-include')
+const { patchAppBuildGradle } = require('../plugins/with-standalone-release')
 
 // The only autolinked libraries in this workspace that compile C/C++ through
 // CMake+ninja (their android/ folders carry CMakeLists.txt). Every other
@@ -130,9 +131,37 @@ function stopGradleDaemons(androidRoot) {
   return { ran: false, note: 'gradlew --stop failed' + (res.error ? ': ' + res.error.message : '') }
 }
 
+// `clean:native` is the documented recovery command before invoking Gradle
+// directly. Repair generated Gradle plugin output here as well, because a
+// malformed marker-delimited block prevents Gradle from parsing build.gradle
+// and this command intentionally does not delete the whole android folder.
+function repairStandaloneReleaseGradle(androidRoot) {
+  if (!androidRoot || !exists(androidRoot)) {
+    return { repaired: false, note: 'no android/ folder (run prebuild first) — no standalone-release Gradle block to repair' }
+  }
+  const appGradleFile = path.join(androidRoot, 'app', 'build.gradle')
+  if (!exists(appGradleFile)) {
+    return { repaired: false, note: 'no android/app/build.gradle — no standalone-release Gradle block to repair' }
+  }
+  const original = fs.readFileSync(appGradleFile, 'utf8')
+  const { contents, warnings } = patchAppBuildGradle(original)
+  if (contents === original) {
+    return { repaired: false, note: 'standalone-release Gradle block is already current' }
+  }
+  fs.writeFileSync(appGradleFile, contents)
+  return {
+    repaired: true,
+    note: 'repaired generated standalone-release Gradle configuration' +
+      (warnings.length ? ' (warnings: ' + warnings.join('; ') + ')' : '')
+  }
+}
+
 function main() {
   const androidRoot = path.join(MOBILE_ROOT, 'android')
   console.log('[clean-native] mobile root: ' + MOBILE_ROOT)
+
+  const standaloneRelease = repairStandaloneReleaseGradle(androidRoot)
+  console.log('[clean-native] ' + standaloneRelease.note)
 
   // Apply the CMakeLists patch first so the NEXT cmake configure (after we
   // wipe .cxx) writes a ninja manifest that does not loop.
@@ -190,4 +219,4 @@ function main() {
 
 if (require.main === module) process.exit(main())
 
-module.exports = { collectTargets, removeAll, NATIVE_CMAKE_LIBS, findLibAndroidDir }
+module.exports = { collectTargets, removeAll, NATIVE_CMAKE_LIBS, findLibAndroidDir, repairStandaloneReleaseGradle }

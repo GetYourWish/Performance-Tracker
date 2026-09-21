@@ -112,6 +112,21 @@ describe('with-standalone-release plugin', () => {
       )
     })
 
+    test('replaces an older marker-delimited verify block so Gradle parsing is self-healed', () => {
+      const broken = TEMPLATE_EXCERPT + `
+${TAG} // unrelated text
+// >>> with-standalone-release (mobile/plugins/with-standalone-release.js)
+tasks.register("verifyStandaloneApk") {
+    println "the red "Unable to load script" screen"
+}
+// <<< with-standalone-release
+`
+      const { contents } = patchAppBuildGradle(broken)
+      expect(contents).toContain('red \\"Unable to load script\\"')
+      expect(contents).not.toContain('red "Unable to load script" screen')
+      expect(contents.match(/tasks\.register\("verifyStandaloneApk"\)/g)).toHaveLength(1)
+    })
+
     test('injects debuggableVariants = [] into the react block so debug bundles the JS', () => {
       const { contents } = patched
       // exactly ONE active assignment, placed inside the react block
