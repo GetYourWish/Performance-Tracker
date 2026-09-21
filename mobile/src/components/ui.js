@@ -50,7 +50,7 @@ export function GlassCard({ theme, style, children }) {
     <View
       style={[
         {
-          backgroundColor: theme.glassBg,
+          backgroundColor: theme.surface,
           borderColor: theme.glassBorder,
           borderRadius: RADIUS.lg,
           borderWidth: 1,
@@ -95,7 +95,7 @@ export function TopAppBar({ theme, title, subtitle, actions }) {
     <View
       style={{
         paddingTop: insets.top + SPACING.xs,
-        backgroundColor: theme.glassBg,
+        backgroundColor: theme.surface,
         borderBottomColor: theme.border,
         borderBottomWidth: StyleSheet.hairlineWidth
       }}
@@ -131,7 +131,7 @@ export function BottomNav({ theme, tabs, active, onChange }) {
   return (
     <View
       style={{
-        backgroundColor: theme.glassBg,
+        backgroundColor: theme.surface,
         borderTopColor: theme.border,
         borderTopWidth: StyleSheet.hairlineWidth,
         paddingBottom: insets.bottom,

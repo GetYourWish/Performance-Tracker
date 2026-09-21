@@ -511,6 +511,14 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
     }
     await adapter.writeDocument(targetUri, pretty)
 
+    // The temp copy is byte-verified before replacement. Verify the final
+    // target too, because a SAF provider or sync client can still interfere
+    // with the full-document write to tracker.json itself.
+    const finalVerify = await adapter.readDocument(targetUri)
+    if (finalVerify !== pretty) {
+      throw new Error('Final write verification failed — tracker.json was not accepted as saved')
+    }
+
     // 3) drop the tmp artifact
     await adapter.removeDocument(tmpUri).catch(() => {})
 
@@ -547,8 +555,12 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
       try {
         parsed = JSON.parse(freshRaw)
       } catch (e) {
+        // A sync client can damage the file after a successful load. Preserve
+        // those bytes and move straight to recovery; keeping the settings or
+        // board screen active would invite further unsaveable edits.
+        await enterCorruptState(freshRaw, e, next => notify(next))
         const err = new Error(
-          'tracker.json on disk is damaged, so nothing was saved. Your change is kept in the app only — use the recovery screen (reload the app) to restore or salvage the file.'
+          'tracker.json on disk is damaged. Recovery is now open; nothing was saved over the damaged file.'
         )
         err.code = 'CORRUPT_FILE'
         throw err
@@ -577,7 +589,27 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
       next = m.buildNext(next, new Date().toISOString())
     }
 
-    const result = await writeData(next, { backupRaw: freshRaw })
+    let result
+    try {
+      result = await writeData(next, { backupRaw: freshRaw })
+    } catch (writeError) {
+      // If final verification failed, inspect the target once more. A damaged
+      // target follows the same evidence-preserving recovery route as a
+      // damaged rebase read instead of leaving a deceptive ready screen.
+      try {
+        const observed = targetUri ? await adapter.readDocument(targetUri) : null
+        if (observed != null) JSON.parse(observed)
+      } catch (parseError) {
+        const raw = targetUri ? await adapter.readDocument(targetUri).catch(() => null) : null
+        if (raw != null) {
+          await enterCorruptState(raw, parseError, nextState => notify(nextState))
+          const err = new Error('tracker.json was damaged during saving. Recovery is now open; nothing else will be written.')
+          err.code = 'CORRUPT_FILE'
+          throw err
+        }
+      }
+      throw writeError
+    }
     notify({ data: next, status: 'ready', errorMessage: null })
     return { ...result, data: next }
   }
@@ -625,6 +657,15 @@ export function createTrackerStore({ adapter, dirUri, fileName = 'tracker.json' 
         for (const m of batch) {
           if (failure) m.reject(failure)
           else m.resolve(outcome)
+        }
+        if (failure && failure.code === 'CORRUPT_FILE') {
+          // Do not process taps queued while recovery was opening: state.data
+          // is deliberately cleared, and applying them could overwrite the
+          // damaged file with a fresh default document.
+          const aborted = pendingMutations
+          pendingMutations = []
+          for (const m of aborted) m.reject(failure)
+          return
         }
       }
     } finally {
