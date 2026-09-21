@@ -20,6 +20,7 @@ const {
   composeVerifyBlock,
   patchDebugStringsXml,
   composeDebugAppName,
+  groovyEscape,
   TAG
 } = require('../plugins/with-standalone-release')
 
@@ -207,6 +208,25 @@ describe('with-standalone-release plugin', () => {
       // every dynamic Groovy value is built by concatenation, never GString
       // (once per variant block: release + debug)
       expect(block.match(/entry\.getSize\(\) \+ " bytes/g) || []).toHaveLength(2)
+    })
+
+    test('escapes every quote injected into generated Groovy strings (regression: build.gradle:226 compile failure)', () => {
+      const block = composeVerifyBlock()
+      // The 2026-09-21 bug: the red-screen note and the debug banner carried
+      // raw double quotes into Groovy "..." literals, so the generated
+      // app/build.gradle failed to COMPILE — gradlew assembleRelease died
+      // with '226: Unexpected input ... it would show the red "Unable'.
+      // The quotes must now appear escaped, in BOTH variant blocks.
+      expect(block.match(/red \\"Unable to load script\\"/g) || []).toHaveLength(2)
+      expect(block).not.toContain('red "Unable')
+      expect(block.match(/shows as \\"\.\.\. DEBUG\\"/g) || []).toHaveLength(1)
+      expect(block).not.toContain('as "... DEBUG"')
+    })
+
+    test('groovyEscape neutralizes quotes and backslashes for Groovy literals', () => {
+      expect(groovyEscape('say "hi"')).toBe('say \\"hi\\"')
+      expect(groovyEscape('back\\slash')).toBe('back\\\\slash')
+      expect(groovyEscape('plain text')).toBe('plain text')
     })
   })
 

@@ -58,10 +58,31 @@ const BUNDLE_ENTRY = 'assets/index.android.bundle';
 const BUNDLE_MIN_BYTES = '1000000L'; // real Hermes bundles for this app are ~2.8 MB
 
 /**
+ * Escape a JS string for use INSIDE a Groovy double-quoted literal:
+ * backslashes first, then double quotes. Every dynamic value interpolated
+ * into a generated Groovy "..." string MUST pass through this.
+ *
+ * History (both were real build-breaking bugs — never reintroduce either):
+ *   - GString ${} inside generated println strings (fixed by using string
+ *     concatenation),
+ *   - raw double quotes inside the injected text: the red-screen note
+ *     ('the red "Unable to load script" screen') and the debug banner
+ *     ('shows as "... DEBUG" on the launcher') terminated the Groovy string
+ *     early, so the generated app/build.gradle failed to COMPILE with
+ *     "226: Unexpected input" and gradlew assembleRelease died before
+ *     building anything (2026-09-21).
+ */
+function groovyEscape(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+/**
  * Build the Gradle block for one variant's verify task. Pure string function
  * so it can be unit-tested without Gradle. All dynamic Groovy values use
  * string concatenation (GString ${} inside generated println strings was the
- * earlier JS-escaping bug — never reintroduce it).
+ * earlier JS-escaping bug — never reintroduce it), and every value placed
+ * inside a Groovy "..." literal is escaped with groovyEscape() — never
+ * reintroduce raw quotes either.
  *
  * The APK path is resolved at CONFIGURATION time (config-cache safe); the
  * task body only touches files and prints.
@@ -93,11 +114,11 @@ function composeVariantVerifyBlock({ taskName, assembleTask, apkRelPath, debug }
     '// EVERY variant must contain assets/index.android.bundle (ExpoReactHostFactory\n' +
     '// loads exactly that asset on cold start); a bundle-less APK fails here, at\n' +
     '// build time, instead of red-screening on the device after install.\n' +
-    'def ' + apkFileVar + ' = new File(layout.buildDirectory.get().asFile, "' + apkRelPath + '")\n' +
-    'tasks.register("' + taskName + '") {\n' +
+    'def ' + apkFileVar + ' = new File(layout.buildDirectory.get().asFile, "' + groovyEscape(apkRelPath) + '")\n' +
+    'tasks.register("' + groovyEscape(taskName) + '") {\n' +
     '    doLast {\n' +
     '        if (!' + apkFileVar + '.exists()) {\n' +
-    '            println "' + TAG + ' ' + notFoundNote + '"\n' +
+    '            println "' + groovyEscape(TAG + ' ' + notFoundNote) + '"\n' +
     '            return\n' +
     '        }\n' +
     '        def bundleMinBytes = ' + BUNDLE_MIN_BYTES + '\n' +
@@ -106,39 +127,39 @@ function composeVariantVerifyBlock({ taskName, assembleTask, apkRelPath, debug }
     '            apk = new java.util.zip.ZipFile(' + apkFileVar + ')\n' +
     '        } catch (java.util.zip.ZipException e) {\n' +
     '            throw new GradleException(\n' +
-    '                "' + TAG + ' " + ' + apkFileVar + '.name + " is not a readable APK/zip (" + e.getMessage() + "). " +\n' +
-    '                "The packaging step likely produced a corrupt file - run: ' + cleanHint + '"\n' +
+    '                "' + groovyEscape(TAG) + ' " + ' + apkFileVar + '.name + " is not a readable APK/zip (" + e.getMessage() + "). " +\n' +
+    '                "The packaging step likely produced a corrupt file - run: ' + groovyEscape(cleanHint) + '"\n' +
     '            )\n' +
     '        }\n' +
     '        try {\n' +
-    '            def entry = apk.getEntry("' + BUNDLE_ENTRY + '")\n' +
+    '            def entry = apk.getEntry("' + groovyEscape(BUNDLE_ENTRY) + '")\n' +
     '            if (entry == null) {\n' +
     '                throw new GradleException(\n' +
-    '                    "' + TAG + ' " + ' + apkFileVar + '.name + " does NOT contain ' + BUNDLE_ENTRY + ' - ' + missingBundleReason + '"\n' +
+    '                    "' + groovyEscape(TAG) + ' " + ' + apkFileVar + '.name + " does NOT contain ' + groovyEscape(BUNDLE_ENTRY) + ' - ' + groovyEscape(missingBundleReason) + '"\n' +
     '                )\n' +
     '            }\n' +
     '            if (entry.getSize() < bundleMinBytes) {\n' +
     '                throw new GradleException(\n' +
-    '                    "' + TAG + ' ' + BUNDLE_ENTRY + ' is only " + entry.getSize() + " bytes - too small to be " +\n' +
-    '                    "the real Hermes bundle. Run: ' + cleanHint + '"\n' +
+    '                    "' + groovyEscape(TAG + ' ' + BUNDLE_ENTRY) + ' is only " + entry.getSize() + " bytes - too small to be " +\n' +
+    '                    "the real Hermes bundle. Run: ' + groovyEscape(cleanHint) + '"\n' +
     '                )\n' +
     '            }\n' +
     '            def bundleMb = String.format(\'%.1f\', entry.getSize() / (1024.0 * 1024.0))\n' +
     '            def apkMb = String.format(\'%.1f\', ' + apkFileVar + '.length() / (1024.0 * 1024.0))\n' +
     '            println ""\n' +
-    '            println "' + TAG + ' ================================================================"\n' +
-    '            println "' + TAG + ' ' + label + ' - ' + BUNDLE_ENTRY + ' present (" + bundleMb + " MB)"\n' +
-    '            println "' + TAG + ' APK: " + ' + apkFileVar + '.absolutePath + " (" + apkMb + " MB)"\n' +
-    '            println "' + TAG + ' Install it on the device with:"\n' +
-    '            println "' + TAG + '     adb install -r \\"" + ' + apkFileVar + '.absolutePath + "\\""\n' +
-    '            println "' + TAG + ' ' + bannerNote + '"\n' +
-    '            println "' + TAG + ' ================================================================"\n' +
+    '            println "' + groovyEscape(TAG) + ' ================================================================"\n' +
+    '            println "' + groovyEscape(TAG + ' ' + label + ' - ' + BUNDLE_ENTRY) + ' present (" + bundleMb + " MB)"\n' +
+    '            println "' + groovyEscape(TAG) + ' APK: " + ' + apkFileVar + '.absolutePath + " (" + apkMb + " MB)"\n' +
+    '            println "' + groovyEscape(TAG) + ' Install it on the device with:"\n' +
+    '            println "' + groovyEscape(TAG) + '     adb install -r \\"" + ' + apkFileVar + '.absolutePath + "\\""\n' +
+    '            println "' + groovyEscape(TAG + ' ' + bannerNote) + '"\n' +
+    '            println "' + groovyEscape(TAG) + ' ================================================================"\n' +
     '        } finally {\n' +
     '            apk.close()\n' +
     '        }\n' +
     '    }\n' +
     '}\n' +
-    'tasks.matching { it.name == "' + assembleTask + '" }.configureEach { it.finalizedBy "' + taskName + '" }\n' +
+    'tasks.matching { it.name == "' + groovyEscape(assembleTask) + '" }.configureEach { it.finalizedBy "' + groovyEscape(taskName) + '" }\n' +
     MARKER_CLOSE + '\n'
   );
 }
@@ -330,6 +351,7 @@ function withStandaloneRelease(config) {
 module.exports = withStandaloneRelease;
 module.exports.patchAppBuildGradle = patchAppBuildGradle;
 module.exports.composeVerifyBlock = composeVerifyBlock;
+module.exports.groovyEscape = groovyEscape;
 module.exports.patchDebugStringsXml = patchDebugStringsXml;
 module.exports.composeDebugAppName = composeDebugAppName;
 module.exports.TAG = TAG;
