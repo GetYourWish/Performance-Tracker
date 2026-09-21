@@ -125,9 +125,10 @@ theme.
 - **Writes**: rebased on the freshest file before every save, skipped when
   content is unchanged, written to a verified temp document first, with a
   rolling backup window (20) in the app's private storage
-- **Sync detection**: 15-second polling (same cadence as the desktop watcher)
-  plus an immediate check when the app returns to the foreground and
-  pull-to-refresh
+- **Sync detection**: 15-second polling (same cadence as the desktop watcher),
+  an immediate check when the app returns to the foreground, and
+  pull-to-refresh. This avoids showing stale data after Android suspended the
+  app while Syncthing updated the shared folder.
 - **Conflicts**: Syncthing `-conflict-` copies are surfaced on the board and in
   Settings — never auto-loaded, never auto-deleted
 

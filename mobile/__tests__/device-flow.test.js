@@ -12,6 +12,7 @@
 
 import React from 'react'
 import TestRenderer, { act } from 'react-test-renderer'
+import { AppState } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import App from '../App'
 
@@ -350,6 +351,33 @@ describe('post-salvage device flow (create task / change theme)', () => {
 
     const onDisk = JSON.parse(mockFolderFiles.get('tracker.json'))
     expect(onDisk.settings.theme).toBe('dark')
+  })
+
+  test('returning to the foreground immediately reloads a Syncthing update', async () => {
+    let foregroundListener = null
+    const remove = jest.fn()
+    const appStateSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation((event, listener) => {
+      if (event === 'change') foregroundListener = listener
+      return { remove }
+    })
+    await AsyncStorage.setItem('pt.folderUri', SAVED_FOLDER)
+    mockFolderFiles.set('tracker.json', healthyRaw())
+
+    const tree = await bootApp()
+    expect(typeof foregroundListener).toBe('function')
+
+    const externallyUpdated = JSON.parse(mockFolderFiles.get('tracker.json'))
+    externallyUpdated.tasks[0].text = 'Syncthing update while backgrounded'
+    mockFolderFiles.set('tracker.json', JSON.stringify(externallyUpdated))
+
+    await act(async () => {
+      foregroundListener('active')
+    })
+    await flushMicrotasks()
+
+    expect(findByText(tree, 'Syncthing update while backgrounded')).toBe(true)
+    expect(remove).not.toHaveBeenCalled()
+    appStateSpy.mockRestore()
   })
 
   test('rapid theme taps after salvage never corrupt and never crash', async () => {

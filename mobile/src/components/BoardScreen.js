@@ -279,6 +279,7 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
               name={refreshing ? 'loading' : 'refresh'}
               color={theme.textSecondary}
               onPress={onRefresh}
+              disabled={refreshing}
               accessibilityLabel="Refresh data"
             />
           </>
