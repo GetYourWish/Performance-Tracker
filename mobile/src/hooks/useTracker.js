@@ -6,6 +6,7 @@
 //  - pull-to-refresh / manual refresh route through checkExternal(true)
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useCallback } from 'react'
+import { AppState } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { createTrackerStore } from '../storage/store.js'
 import { createSafAdapter } from '../storage/saf.js'
@@ -57,13 +58,24 @@ export function useTracker() {
 
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot)
 
-  // external-change polling + foreground refresh (Android has no file events)
+  // External-change polling + foreground refresh (Android has no file events).
+  // Intervals do not run reliably while Android has suspended the app, so a
+  // Syncthing update that lands while it is backgrounded must be checked as
+  // soon as the user returns—not up to 15 seconds later.
   useEffect(() => {
     if (!folderUri || !autoSync) return undefined
     const timer = setInterval(() => {
       store.checkExternal().catch(() => {})
     }, FILE_POLL_INTERVAL_MS)
-    return () => clearInterval(timer)
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') store.checkExternal().catch(() => {})
+    })
+    return () => {
+      clearInterval(timer)
+      // Native AppState returns a subscription. The optional form also keeps
+      // cleanup safe with older/test implementations that expose no handle.
+      subscription?.remove?.()
+    }
   }, [folderUri, autoSync, store])
 
   const pickFolder = useCallback(async () => {
