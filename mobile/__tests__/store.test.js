@@ -396,6 +396,23 @@ describe('tracker store', () => {
     expect(adapter._files.get(backups[0]).content).toBe(externalRaw)
   })
 
+  test('REBASE: a newly corrupted file opens recovery and is never overwritten by a settings/task mutation', async () => {
+    const adapter = createMemoryAdapter()
+    const store = await createReadyStore(adapter, sampleData())
+    const corrupt = '{"schemaVersion":1,"tasks":[}'
+    adapter._files.set(DIR + FILE, { content: corrupt, mtime: 88 })
+
+    await expect(
+      store.mutate(d => createTask(d, 'must not be written', '2026-02-01T10:00:00.000Z'))
+    ).rejects.toMatchObject({ code: 'CORRUPT_FILE' })
+
+    expect(adapter._files.get(DIR + FILE).content).toBe(corrupt)
+    expect(store.getSnapshot().status).toBe('error')
+    expect(store.getSnapshot().data).toBeNull()
+    expect(store.getSnapshot().recovery.canSalvage).toBe(true)
+    expect([...adapter._files.values()].some(file => file.content === corrupt)).toBe(true)
+  })
+
   test('REBASE: newer schemaVersion during rebase aborts the mutation', async () => {
     const adapter = createMemoryAdapter()
     const store = await createReadyStore(adapter, sampleData())
