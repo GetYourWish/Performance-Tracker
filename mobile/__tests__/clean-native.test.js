@@ -12,7 +12,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
-const { collectTargets, removeAll, NATIVE_CMAKE_LIBS, findLibAndroidDir } = require('../scripts/clean-native.js')
+const { collectTargets, removeAll, NATIVE_CMAKE_LIBS, findLibAndroidDir, repairStandaloneReleaseGradle } = require('../scripts/clean-native.js')
 
 let tmp
 
@@ -131,5 +131,26 @@ describe('clean-native removeAll', () => {
   test('does not throw when a target vanishes between collect and remove', () => {
     const failures = removeAll([{ path: path.join(tmp, 'gone'), kind: 'x' }])
     expect(failures).toEqual([])
+  })
+})
+
+describe('clean-native standalone-release Gradle repair', () => {
+  test('replaces the old quote-broken generated block before Gradle runs', () => {
+    const androidRoot = path.join(tmp, 'mobile', 'android')
+    const appGradle = path.join(androidRoot, 'app', 'build.gradle')
+    touch(appGradle, `plugins {}\n// >>> with-standalone-release (mobile/plugins/with-standalone-release.js)\ntasks.register("verifyStandaloneApk") { println "red "Unable to load script"" }\n// <<< with-standalone-release\n`)
+
+    const result = repairStandaloneReleaseGradle(androidRoot)
+    const repaired = fs.readFileSync(appGradle, 'utf8')
+
+    expect(result.repaired).toBe(true)
+    expect(repaired).toContain('red \\"Unable to load script\\"')
+    expect(repaired).not.toContain('red "Unable to load script"')
+  })
+
+  test('does nothing when the Android project has not been generated', () => {
+    const result = repairStandaloneReleaseGradle(path.join(tmp, 'missing-android'))
+    expect(result.repaired).toBe(false)
+    expect(result.note).toContain('no android/ folder')
   })
 })
