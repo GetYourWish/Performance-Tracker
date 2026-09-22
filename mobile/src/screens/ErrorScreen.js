@@ -21,7 +21,7 @@ import React, { useState } from 'react'
 import { View, Text, ScrollView, Alert } from 'react-native'
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { AuroraBackground, GlassCard, FilledButton, TextButton } from '../components/ui.js'
+import { AppBackground, GlassCard, FilledButton, TextButton } from '../components/ui.js'
 import { SPACING } from '../theme.js'
 
 function RecoveryAction({ theme, icon, title, hint, onPress, disabled, busy }) {
@@ -75,8 +75,8 @@ export function ErrorScreen({ theme, state, store }) {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.canvas[0] }}>
-      <AuroraBackground theme={theme} />
+    <View style={{ flex: 1, backgroundColor: theme.bgCanvas }}>
+      <AppBackground theme={theme} />
       <ScrollView
         contentContainerStyle={{
           flexGrow: 1,

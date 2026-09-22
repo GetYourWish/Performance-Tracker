@@ -4,6 +4,16 @@
 //    working-on star (flowState highlight), complete ✓, delete 🗑
 //  - marker rows: centered pill with category.color+'4D' background,
 //    "/Name" label, note indicator (i), add-task-below (+), delete ✕
+//    - consecutive markers (previous visible board item is ALSO a marker)
+//      get the settings-driven extra gap above them (desktop
+//      .marker-row.consecutive-marker: margin-top var(--consecutive-marker-margin,
+//      150px)) — the v1.0.11 "consecutive marker spacing aint working" fix:
+//      the setting existed in mobile Settings but the board never applied it
+//    - consecutive markers (previous visible board item is ALSO a marker)
+//      get the settings-driven extra gap above them (desktop
+//      .marker-row.consecutive-marker: margin-top var(--consecutive-marker-margin,
+//      150px) — the v1.0.11 "consecutive marker spacing aint working" fix:
+//      the setting existed in mobile Settings but the board never applied it)
 //  - REARRANGE MODE (v1.0.7): react-native-draggable-flatlist was REMOVED —
 //    it is unmaintained for React 19 / reanimated 4 (open crash issues
 //    #496/#524/#558, last release 4.0.3 in 2023-era reanimated 2/3 land) and
@@ -197,6 +207,8 @@ export function MarkerRow({
   marker,
   category,
   flash,
+  consecutive,
+  spacing = 150,
   onNote,
   onAddBelow,
   onDelete,
@@ -208,7 +220,15 @@ export function MarkerRow({
   canMoveDown
 }) {
   return (
-    <View style={{ alignItems: 'center', paddingVertical: SPACING.sm }}>
+    <View
+      style={{
+        alignItems: 'center',
+        paddingVertical: SPACING.sm,
+        // desktop .marker-row.consecutive-marker margin-top (BoardScreen
+        // parses settings.consecutiveMarkerMargin, default 150px)
+        marginTop: consecutive ? spacing : 0
+      }}
+    >
       <View
         style={[
           {

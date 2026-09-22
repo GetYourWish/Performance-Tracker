@@ -32,6 +32,7 @@ import {
   formatShortDate
 } from '../../dates.js'
 import { SPACING, TYPE } from '../../theme.js'
+import { withAlpha } from '../rows.js'
 
 // --- score cache (desktop Dashboard.buildScoreCache, verbatim semantics) ---
 
@@ -148,50 +149,227 @@ function ChartEmpty({ theme, label }) {
   )
 }
 
-// --- Flow State bars (desktop ChronoStream area chart → mobile bar rows) ----
-// Vertical score bars: one per day, colored with the user's Flow State
-// color (settings.flowStateColor), future days dimmed, tap → that day.
-export function FlowStateBars({ theme, series, flowStateColor, onDayPress }) {
-  const real = series.filter(d => !d.isFuture)
-  if (real.length === 0) return <ChartEmpty theme={theme} label="No completions in this range yet" />
-  const max = Math.max(...real.map(d => d.score), 1)
+// --- Flow State area (desktop ChronoStream — recharts monotone AreaChart) --
+// The v1.0.10 port rendered plain BARS ("the flow shows a bar chart instead
+// of having the actual flow"); this is the actual desktop shape: a smooth
+// monotone AREA of the daily score in the user's flow-state color (fill at
+// desktop's 0.4 opacity + a solid top edge), broken at future days exactly
+// like recharts connectNulls={false}, with a tappable dot on every day that
+// has completions (the desktop's clickable r=6 dots). No chart library —
+// the curve is subdivided into contiguous micro-columns of plain Views.
+//
+// Interpolation: Fritsch–Carlson monotone cubic — the same family recharts'
+// type="monotone" uses. It cannot overshoot: every sample stays between the
+// two neighboring day scores (and therefore never dips below 0).
 
-  const barFor = d => {
-    const h = d.isFuture ? 0 : Math.max(4, Math.round((d.score / max) * 120))
-    return (
-      <Pressable
-        key={d.date}
-        onPress={() => !d.isFuture && onDayPress && onDayPress(d.date)}
-        disabled={d.isFuture}
-        style={{ flex: 1, alignItems: 'center', gap: 4 }}
-        accessibilityLabel={`${d.fullDate}: ${d.isFuture ? 'no data yet' : `${Math.round(d.score * 10) / 10} points, ${d.count} tasks`}`}
-        accessibilityRole="button"
-      >
-        <Text style={{ color: theme.textMuted, fontSize: 9.5 }}>
-          {d.isFuture ? '' : String(Math.round(d.score * 10) / 10)}
-        </Text>
-        <View
-          style={{
-            width: '78%',
-            maxWidth: 34,
-            minHeight: 4,
-            height: h,
-            borderRadius: 5,
-            backgroundColor: d.isFuture ? theme.bgTertiary : flowStateColor,
-            opacity: d.isFuture ? 0.5 : d.score > 0 ? 1 : 0.45
-          }}
-        />
-        <Text style={{ color: theme.textSecondary, fontSize: 10 }}>{d.dayName}</Text>
-        <Text style={{ color: theme.textMuted, fontSize: 9 }}>{d.fullDate}</Text>
-      </Pressable>
-    )
+// Tangents for monotone cubic Hermite interpolation (uniform spacing).
+export function monotoneTangents(ys) {
+  const n = ys.length
+  if (n === 0) return []
+  if (n === 1) return [0]
+  const d = []
+  for (let i = 0; i < n - 1; i++) d.push(ys[i + 1] - ys[i])
+  const m = [d[0]]
+  for (let i = 1; i < n - 1; i++) {
+    if (d[i - 1] * d[i] <= 0) {
+      m.push(0)
+    } else {
+      // weighted harmonic mean of the neighboring slopes (Fritsch–Carlson)
+      m.push((3 * (d[i - 1] + d[i])) / (1 / d[i - 1] + 1 / d[i] + 2))
+    }
   }
+  m.push(d[n - 2])
+  // clamp so no tangent exceeds 3x the local slope (monotonicity guarantee)
+  for (let i = 0; i < n; i++) {
+    const dLeft = i > 0 ? d[i - 1] : d[0]
+    const dRight = i < n - 1 ? d[i] : d[n - 2]
+    const bound = 3 * Math.min(Math.abs(dLeft), Math.abs(dRight))
+    if (Math.abs(m[i]) > bound) m[i] = Math.sign(m[i]) * bound
+  }
+  return m
+}
+
+// One monotone-cubic sample on the segment [y0, y1].
+export function hermiteSample(y0, y1, m0, m1, t) {
+  const t2 = t * t
+  const t3 = t2 * t
+  return (
+    (2 * t3 - 3 * t2 + 1) * y0 +
+    (t3 - 2 * t2 + t) * m0 +
+    (-2 * t3 + 3 * t2) * y1 +
+    (t3 - t2) * m1
+  )
+}
+
+// Chart geometry, pure + exported for tests:
+//  - long ranges ('all') are bucketed to ≤ MAX_POINTS days (each bucket
+//    keeps its PEAK day — score and date — so the dot opens the best day)
+//  - every consecutive point pair subdivides into `k` micro-samples; pairs
+//    touching a future/null point leave those slots EMPTY (connectNulls=false)
+//  - heights are normalized 0..1 against the max day score (min 1)
+export const FLOW_MAX_POINTS = 120
+
+export function buildFlowGeometry(series, maxPoints = FLOW_MAX_POINTS) {
+  const clean = (series || []).filter(Boolean)
+  const bucketSize = Math.max(1, Math.ceil(clean.length / maxPoints))
+  const points = []
+  if (bucketSize === 1) {
+    for (const d of clean) points.push(d)
+  } else {
+    for (let i = 0; i < clean.length; i += bucketSize) {
+      const bucket = clean.slice(i, i + bucketSize)
+      let peak = null
+      for (const d of bucket) {
+        if (d.isFuture || d.score == null) continue
+        if (!peak || d.score > peak.score) peak = d
+      }
+      points.push(peak || { ...bucket[bucket.length - 1], score: 0 })
+    }
+  }
+
+  const isReal = p => p && !p.isFuture && p.score != null
+  const real = points.filter(isReal)
+  const max = Math.max(1, ...real.map(p => p.score || 0))
+  const n = points.length
+  const k = Math.max(1, Math.min(12, Math.floor(96 / Math.max(1, n))))
+  const totalSlots = Math.max(1, (n - 1) * k)
+
+  const samples = new Array(totalSlots).fill(null)
+  for (let i = 0; i < n - 1; i++) {
+    const a = points[i]
+    const b = points[i + 1]
+    if (!isReal(a) || !isReal(b)) continue // gap (future/null) — stays empty
+    const ya = (a.score || 0) / max
+    const yb = (b.score || 0) / max
+    if (k === 1) {
+      samples[i] = ya
+      continue
+    }
+    // tangents recomputed per PAIR keeps segments independent and gap-safe
+    const m = monotoneTangents([ya, yb])
+    for (let s = 0; s < k; s++) {
+      samples[i * k + s] = Math.max(0, hermiteSample(ya, yb, m[0], m[1], s / k))
+    }
+  }
+  // boundary columns: a real day directly before a gap still gets its own
+  // column at its exact height — the area must REACH that day, then stop
+  for (let i = 0; i < n - 1; i++) {
+    if (isReal(points[i]) && samples[i * k] == null) {
+      samples[i * k] = (points[i].score || 0) / max
+    }
+  }
+  if (n > 0 && isReal(points[n - 1]) && totalSlots > 0) {
+    samples[totalSlots - 1] = (points[n - 1].score || 0) / max
+  }
+
+  // dots: one per real day (bucket peak) with completions, x in 0..1
+  const dots = []
+  points.forEach((p, i) => {
+    if (!isReal(p) || !p.count || p.count === 0) return
+    dots.push({ date: p.date, fullDate: p.fullDate, score: p.score, count: p.count, x: n > 1 ? i / (n - 1) : 0.5 })
+  })
+
+  return { points, samples, dots, max, k, totalSlots }
+}
+
+export function FlowStateArea({ theme, series, flowStateColor, onDayPress, height = 150 }) {
+  const geo = buildFlowGeometry(series)
+  if (geo.dots.length === 0 && geo.samples.every(s => s == null || s === 0)) {
+    return <ChartEmpty theme={theme} label="No completions in this range yet" />
+  }
+
+  const n = geo.points.length
+  const isWeek = n <= 8 // weekday labels only when every day has room
+  // sparse labels: ≤ 8 on the axis, always including the last point
+  const step = Math.max(1, Math.ceil(n / 8))
 
   return (
     <View>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 4 }}>{series.map(barFor)}</View>
+      {/* the chart: micro-columns (fill + solid top edge) + tappable dots */}
+      <View style={{ height, flexDirection: 'row', alignItems: 'flex-end' }}>
+        {geo.samples.map((v, i) =>
+          v == null ? (
+            <View key={i} style={{ flex: 1, height: 0 }} />
+          ) : (
+            <View
+              key={i}
+              style={{
+                flex: 1,
+                height: `${Math.max(v * 100, v > 0 ? 1.5 : 0)}%`,
+                backgroundColor: withAlpha(flowStateColor, '66'), // desktop fillOpacity 0.4
+                overflow: 'hidden',
+                alignItems: 'stretch'
+              }}
+            >
+              {/* solid top edge — reads as the curve's stroke line */}
+              <View style={{ height: 2, backgroundColor: flowStateColor }} />
+            </View>
+          )
+        )}
+        {geo.dots.map(d => {
+          const yFrac = Math.min(1, (d.score || 0) / geo.max)
+          return (
+            <Pressable
+              key={d.date}
+              onPress={() => onDayPress && onDayPress(d.date)}
+              style={{
+                position: 'absolute',
+                left: `${d.x * 100}%`,
+                bottom: `${yFrac * 100}%`,
+                width: 34,
+                height: 34,
+                marginLeft: -17,
+                marginBottom: -17,
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 10
+              }}
+              accessibilityLabel={`${d.fullDate}: ${Math.round(d.score * 10) / 10} points, ${d.count} ${d.count === 1 ? 'task' : 'tasks'}`}
+              accessibilityRole="button"
+            >
+              <View
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: 6,
+                  backgroundColor: flowStateColor
+                }}
+              />
+              {isWeek ? (
+                <Text
+                  style={{
+                    position: 'absolute',
+                    bottom: 34,
+                    color: theme.textSecondary,
+                    fontSize: 9.5,
+                    fontWeight: '600'
+                  }}
+                >
+                  {String(Math.round(d.score * 10) / 10)}
+                </Text>
+              ) : null}
+            </Pressable>
+          )
+        })}
+      </View>
+
+      {/* x labels: weekday (week view) or short date, thinned to fit */}
+      <View style={{ flexDirection: 'row', marginTop: 6 }}>
+        {geo.points.map((p, i) => {
+          const show = i % step === 0 || i === n - 1
+          return (
+            <View key={p.date} style={{ flex: 1, alignItems: 'center' }}>
+              {show ? (
+                <Text style={{ color: theme.textMuted, fontSize: 9.5 }} numberOfLines={1}>
+                  {isWeek ? p.dayName : p.fullDate}
+                </Text>
+              ) : null}
+            </View>
+          )
+        })}
+      </View>
       <Text style={{ color: theme.textMuted, marginTop: SPACING.sm, ...TYPE.caption, textAlign: 'center' }}>
-        Tap a bar to open that day
+        Tap a dot to open that day
       </Text>
     </View>
   )

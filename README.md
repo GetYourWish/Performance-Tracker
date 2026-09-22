@@ -201,6 +201,79 @@ the file changed, then recompiles `expo-modules-core` with the new include
 path. If the build still behaves oddly, `npm run clean:native` now also wipes
 `expo-modules-core`'s stale `.cxx`.)
 
+#### v1.0.11 — the broken teleport, solid background, light theme, real Flow chart + consecutive marker spacing
+
+**Symptoms (2026-09-23, remote-reported):** *"category teleport did not work,
+maybe the Board code doesnt have something that understands the solution you
+provided ? also i would like to fix some UI, starting with the simple Board
+background, i want it to be a solid whole color following current theme. also
+talking about themes, im gonna neeed you to fix the Light theme, it doesn't
+work correctly the letters are not right. one more thing, the flow in Reviews
+shows a bar chart instead of having the actual flow we have in the desktop
+version for example.. lastly make use that the Consecutive marker spacing is
+working correctly in this android version because it seems like it aint"* —
+five reports, five root causes, all fixed:
+
+1. **Category teleport — the v1.0.10 implementation could not work on
+   device.** Two independent bugs: (a) the per-row `onLayout` offset capture
+   recorded each row's `y` **relative to the FlatList's cell wrapper**
+   (always ~0), so the "measured" scroll always went to the board top; (b)
+   the `scrollToIndex` fallback for rows the virtualizer never rendered
+   **throws an invariant in RN 0.87** when no `onScrollToIndexFailed`
+   handler exists — the surrounding try/catch silently ate it, so far rows
+   did nothing at all. Rewritten: rows are now measured through refs +
+   `measureInWindow` (window coordinates converted to content offsets with
+   the tracked scroll offset, wrappers `collapsable={false}` so Android
+   keeps them measurable) and the FlatList carries a real
+   `onScrollToIndexFailed` handler that lands near the target using RN's own
+   average-cell-length estimate, then precisely re-centers it once rendered
+   (loop-guarded, timers cleaned up on unmount). Both the dice and the
+   category teleport ride the same path.
+
+2. **Solid board background.** The aurora canvas (a `LinearGradient` plus
+   three hard-edged blob circles — the desktop fades them with radial
+   gradients, the mobile port rendered solid discs) is now ONE solid color
+   per theme: `#EEF2FF` on light, `#0B0D12` on dark (`theme.bgCanvas`,
+   guarded by `themeColorGuard`). `expo-linear-gradient` is no longer
+   imported anywhere; the dependency stays only so the native build is
+   untouched.
+
+3. **Light theme letters.** The app never rendered a `<StatusBar>`, so with
+   edge-to-edge the system letters (clock, battery, notification icons)
+   kept the system-dark `light-content` style — white letters on the
+   near-white light canvas. The status bar now follows the APP theme
+   (`dark-content` in light, `light-content` in dark, on every screen
+   including loading/setup/error).
+
+4. **Flow State — the actual desktop flow.** The Flow tab rendered plain
+   bars; the desktop's *ChronoStream* is a smooth monotone **area** chart.
+   Ported with zero new dependencies: the per-day scores are interpolated
+   with a Fritsch–Carlson monotone cubic (the same family as recharts'
+   `type="monotone"`, proven non-overshooting by tests) into ~100
+   contiguous micro-column Views tinted at the desktop's 0.4 fill opacity,
+   a solid 2dp top edge traces the curve, future days leave their slots
+   empty exactly like `connectNulls={false}`, and every day with
+   completions carries a tappable dot (the desktop's clickable r=6 dots) —
+   week view adds weekday labels and per-dot scores, longer ranges thin to
+   short dates and bucket to ≤120 points keeping each bucket's peak day.
+
+5. **Consecutive marker spacing.** `Settings → Board → marker spacing`
+   wrote `consecutiveMarkerMargin` all along, but the board never READ it —
+   markers sat tight together no matter what. The desktop rule is now
+   applied verbatim: a marker whose previous VISIBLE board item is also a
+   marker gets `marginTop` = the parsed margin (default 150px, capped at
+   500 like the Settings input; garbage values fall back to 150).
+
+**Verification:** mobile jest **358/358** (19 new: flow-chart suite —
+sampler endpoints/monotonicity/geometry/bucketing/dots, teleport wiring —
+`onScrollToIndexFailed` present, far-index failure never throws or loops,
+`collapsable={false}` wrappers, consecutive-spacing 4-pack), core 42/42,
+desktop 6/6, root eslint clean, core-pin guard OK, metro bundle export OK
+(2.2 MB). Desktop and core workspaces untouched (mobile/ + README.md only).
+**Rebuild:** `git pull` → `npm install` → `cd mobile/android` →
+`gradlew assembleRelease` (no `clean:native` needed) — the loading screen
+must show **v1.0.11**.
+
 #### v1.0.10 — the missing Randomizer, category teleport + Working On popup (desktop feature parity)
 
 **Symptoms (2026-09-22, remote-reported):** *"some few features we need to

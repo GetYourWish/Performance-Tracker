@@ -1,4 +1,4 @@
-// board-features.test.js — v1.0.10 feature regressions (desktop parity):
+// board-features.test.js — v1.0.10/0.11 feature regressions (desktop parity):
 //   1. dice / Randomizer (desktop Board.handleRandomizeTask): picks a random
 //      board task not already working-on, writes it through addWorkingOn,
 //      teleports to the row and flashes it; every-task-taken → no write but
@@ -6,6 +6,9 @@
 //   2. category teleport (desktop Board.handleNavigateToCategory): tapping
 //      a category in the sheet jumps to its FIRST marker on the board
 //      (flash), a category with no marker gets a hint instead of silence.
+//      v1.0.11 wiring: the FlatList carries onScrollToIndexFailed (RN 0.87
+//      throws an invariant without it — the silent "teleport did not work"),
+//      and row wrappers are collapsable={false} so measureInWindow works.
 //   3. Working On popup (desktop WorkingOnMarker + WorkingOnPopup): the
 //      today-card pill (only when count > 0) opens the sheet listing the
 //      working-on tasks; completing from the list goes through the SAME
@@ -13,6 +16,10 @@
 //      off workingOn + log entry) and closes both sheet and dialog.
 //   4. addWorkingOn action unit parity (append + meta stamp; input object
 //      returned untouched when already present → store no-change-no-write).
+//   5. consecutive marker spacing (desktop .marker-row.consecutive-marker):
+//      a marker directly after another marker gets the settings-driven gap
+//      (consecutiveMarkerMargin, default 150px); the FIRST of the pair and
+//      markers after tasks get none.
 
 import React from 'react'
 import TestRenderer, { act } from 'react-test-renderer'
@@ -354,5 +361,126 @@ describe('addWorkingOn action (desktop handleRandomizeTask write)', () => {
     const before = JSON.stringify(data)
     addWorkingOn(data, 't3', NOW)
     expect(JSON.stringify(data)).toBe(before)
+  })
+})
+
+describe('teleport wiring (the v1.0.11 "category teleport did not work" fix)', () => {
+  test('the FlatList declares onScrollToIndexFailed — RN 0.87 throws without it', async () => {
+    const { tree } = await mountBoard(makeData())
+    const lists = tree.root.findAll(n => typeof n.props?.onScrollToIndexFailed === 'function')
+    expect(lists.length).toBeGreaterThan(0)
+    act(() => {
+      tree.unmount()
+    })
+  })
+
+  test('a far-index failure lands near the target and never throws or loops', async () => {
+    const { tree } = await mountBoard(makeData())
+    const list = tree.root.findAll(n => typeof n.props?.onScrollToIndexFailed === 'function')[0]
+    // simulate RN's far-index miss for the LAST marker (m2, index 5)
+    let threw = null
+    await act(async () => {
+      try {
+        for (let round = 0; round < 5; round++) {
+          list.props.onScrollToIndexFailed({
+            index: 5,
+            averageItemLength: 60,
+            highestMeasuredFrameIndex: 1
+          })
+        }
+        await sleep(520) // retry timer fires at 420 ms
+      } catch (e) {
+        threw = e
+      }
+    })
+    expect(threw).toBe(null)
+    // the board still renders every row after the failure rounds
+    expect(tree.root.findAllByType(TaskRow).length).toBe(3)
+    expect(tree.root.findAllByType(MarkerRow).length).toBe(3)
+    act(() => {
+      tree.unmount()
+    })
+  })
+
+  test('every row wrapper is collapsable={false} so measureInWindow works on device', async () => {
+    const { tree } = await mountBoard(makeData())
+    const rows = tree.root.findAllByType(TaskRow)
+    for (const row of rows) {
+      // walk up past VirtualizedList's own cell wrapper to OUR measurement
+      // wrapper — the only ancestor carrying a ref callback
+      let wrapper = row.parent
+      while (wrapper && typeof wrapper.props?.ref !== 'function') wrapper = wrapper.parent
+      expect(wrapper).toBeTruthy()
+      expect(wrapper.props.collapsable).toBe(false)
+      expect(typeof wrapper.props.ref).toBe('function')
+    }
+    act(() => {
+      tree.unmount()
+    })
+  })
+})
+
+describe('consecutive marker spacing (desktop .marker-row.consecutive-marker)', () => {
+  // board order: [m1 DeepWork] [m1b DeepWork] [t1] [m2 Admin] [t3]
+  // → m1b is the only marker directly after another marker
+  const consecutiveBoard = {
+    board: [
+      { type: 'marker', markerId: 'm1' },
+      { type: 'marker', markerId: 'm1b' },
+      { type: 'task', taskId: 't1' },
+      { type: 'marker', markerId: 'm2' },
+      { type: 'task', taskId: 't3' }
+    ]
+  }
+
+  function markerRow(tree, id) {
+    return tree.root.findAllByType(MarkerRow).find(r => r.props.marker.id === id)
+  }
+
+  test('only the marker directly after another marker gets the gap', async () => {
+    const { tree } = await mountBoard(makeData(consecutiveBoard))
+    expect(markerRow(tree, 'm1').props.consecutive).toBe(false) // first of the pair
+    expect(markerRow(tree, 'm1b').props.consecutive).toBe(true) // follows m1
+    expect(markerRow(tree, 'm2').props.consecutive).toBe(false) // follows task t1
+    act(() => {
+      tree.unmount()
+    })
+  })
+
+  test('default spacing is 150 (desktop --consecutive-marker-margin default)', async () => {
+    const { tree } = await mountBoard(makeData(consecutiveBoard))
+    for (const id of ['m1', 'm1b', 'm2']) {
+      expect(markerRow(tree, id).props.spacing).toBe(150)
+    }
+    act(() => {
+      tree.unmount()
+    })
+  })
+
+  test('settings.consecutiveMarkerMargin drives the gap (Settings → Board section)', async () => {
+    const { tree } = await mountBoard(
+      makeData({
+        ...consecutiveBoard,
+        settings: { theme: 'system', fatigueIncrement: 0.1, fatigueCap: 3.0, consecutiveMarkerMargin: '220px' }
+      })
+    )
+    expect(markerRow(tree, 'm1b').props.spacing).toBe(220)
+    expect(markerRow(tree, 'm1').props.spacing).toBe(220) // spacing applies only when consecutive
+    act(() => {
+      tree.unmount()
+    })
+  })
+
+  test('a garbage margin value falls back to 150', async () => {
+    const { tree } = await mountBoard(
+      makeData({
+        ...consecutiveBoard,
+        settings: { theme: 'system', consecutiveMarkerMargin: 'big' }
+      })
+    )
+    expect(markerRow(tree, 'm1b').props.spacing).toBe(150)
+    act(() => {
+      tree.unmount()
+    })
   })
 })

@@ -70,17 +70,30 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
   const [workingOnOpen, setWorkingOnOpen] = useState(false)
   const [flashKey, setFlashKey] = useState(null)
 
-  // Teleport plumbing: the FlatList ref, per-row layouts captured through
-  // onLayout (row key → { y, height }), the viewport height, and the flash
-  // timer (cleared on unmount so no setState lands on a dead screen).
+  // Teleport plumbing (v1.0.11 rewrite — the v1.0.10 approach never worked
+  // on device, two independent bugs):
+  //  - per-row onLayout offsets are RELATIVE TO THE FLATLIST CELL WRAPPER
+  //    (always ~0), so the "measured" scroll always went to the board top;
+  //  - the scrollToIndex fallback for never-rendered rows THROWS in RN 0.87
+  //    (invariant: needs getItemLayout or onScrollToIndexFailed) and the
+  //    try/catch silently ate it — far rows did nothing at all.
+  // Rows are now measured through refs + measureInWindow (window coords →
+  // content offset); far rows go through an onScrollToIndexFailed handler
+  // that lands near the target with RN's own average-cell estimate, then
+  // precisely re-centers it once it has rendered.
   const listRef = useRef(null)
-  const rowLayoutsRef = useRef(new Map())
-  const listHeightRef = useRef(600)
+  const listHostRef = useRef(null) // View wrapping the list — window-space Y
+  const rowRefs = useRef(new Map()) // row key → wrapper node (measurable)
+  const scrollMetricsRef = useRef({ offset: 0, listY: 0, listHeight: 600 })
   const flashTimerRef = useRef(null)
+  const retryTimerRef = useRef(null)
+  const indexFailCountRef = useRef(new Map()) // scrollToIndex loop guard
+  const visibleItemsRef = useRef([]) // latest list for the retry timer
 
   useEffect(
     () => () => {
       if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
     },
     []
   )
@@ -155,6 +168,9 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
     return out
   }, [data?.board, tasksById, markersById])
 
+  // latest list for the teleport retry timer (avoids stale closures)
+  visibleItemsRef.current = visibleItems
+
   const today = getCurrentDate()
   const todaySummary = useMemo(() => {
     const settings = data?.settings || {}
@@ -173,6 +189,14 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
 
   const workingOnSet = useMemo(() => new Set(data?.workingOn || []), [data?.workingOn])
   const flowStateColor = data?.settings?.flowStateColor || '#8b5cf6'
+
+  // desktop CSS --consecutive-marker-margin (settings; default 150px, capped
+  // at 500 exactly like the Settings input) — applied by MarkerRow when the
+  // previous visible board item is also a marker
+  const markerSpacing = useMemo(() => {
+    const px = parseInt(String(data?.settings?.consecutiveMarkerMargin || '150px'), 10)
+    return Number.isFinite(px) && px >= 0 ? Math.min(px, 500) : 150
+  }, [data?.settings?.consecutiveMarkerMargin])
 
   // The tasks the desktop WorkingOnPopup lists — workingOn ids resolved to
   // task objects (missing ids filtered out, desktop .map/.filter parity).
@@ -242,20 +266,31 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
 
   // --- teleport + flash (desktop scrollIntoView + .random-flash) -----------
 
-  // Scroll the board so the row with this key sits mid-viewport (desktop
-  // scrollIntoView({ block: 'center' })). Exact offsets come from onLayout;
-  // a row too far offscreen to ever have been laid out falls back to the
-  // FlatList index estimate. try/catch — a scroll that cannot happen (test
-  // renderers, unmount races) must never take anything down with it.
+  // Center the row mid-viewport (desktop scrollIntoView({ block: 'center' })).
+  // A mounted row is measured exactly through measureInWindow (window
+  // coords converted to a content offset with the tracked scroll offset);
+  // a row the virtualizer never rendered falls through to scrollToIndex,
+  // whose far-index misses route through handleScrollToIndexFailed. try/
+  // catch everywhere — a scroll that cannot happen (test renderers, unmount
+  // races) must never take anything down with it.
   const scrollToItem = useCallback(
     key => {
       const list = listRef.current
       if (!list) return
       try {
-        const layout = rowLayoutsRef.current.get(key)
-        if (layout) {
-          const center = Math.max(0, layout.y - listHeightRef.current / 2 + layout.height / 2)
-          list.scrollToOffset({ offset: center, animated: true })
+        const node = rowRefs.current.get(key)
+        if (node && typeof node.measureInWindow === 'function') {
+          node.measureInWindow((x, y, w, h) => {
+            try {
+              if (typeof y !== 'number' || Number.isNaN(y)) return
+              const m = scrollMetricsRef.current
+              const contentY = y - m.listY + m.offset
+              const center = Math.max(0, contentY - m.listHeight / 2 + (h || 0) / 2)
+              list.scrollToOffset({ offset: center, animated: true })
+            } catch {
+              // scrolling is a nicety, never a correctness requirement
+            }
+          })
         } else {
           const index = visibleItems.findIndex(i => i.key === key)
           if (index >= 0) list.scrollToIndex({ index, viewPosition: 0.5, animated: true })
@@ -267,11 +302,44 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
     [visibleItems]
   )
 
-  // Amber highlight on the target row for ~1.4 s (desktop .random-flash).
+  // RN 0.87 scrollToIndex throws an INVARIANT when the index was never
+  // measured unless this handler exists — the silent failure behind the
+  // v1.0.10 "category teleport did not work" report. Land near the target
+  // with RN's own average-cell-length estimate (instant, not animated, so
+  // the target cell renders), then precisely re-center it once mounted.
+  // Two rounds per index is plenty — the counter keeps a pathological
+  // estimate from spinning forever.
+  const handleScrollToIndexFailed = useCallback(
+    info => {
+      const list = listRef.current
+      if (!list) return
+      try {
+        const fails = (indexFailCountRef.current.get(info.index) || 0) + 1
+        indexFailCountRef.current.set(info.index, fails)
+        if (fails > 2) return
+        const m = scrollMetricsRef.current
+        const estimate = Math.max(0, info.averageItemLength * info.index - m.listHeight / 2)
+        list.scrollToOffset({ offset: estimate, animated: false })
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null
+          indexFailCountRef.current.delete(info.index)
+          const item = visibleItemsRef.current[info.index]
+          if (item) scrollToItem(item.key)
+        }, 420)
+      } catch {
+        // scrolling is a nicety, never a correctness requirement
+      }
+    },
+    [scrollToItem]
+  )
+
+  // Amber highlight on the target row (desktop .random-flash) — long
+  // enough to survive the far-row estimate→render→re-center sequence.
   const flashItem = useCallback(key => {
     setFlashKey(key)
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
-    flashTimerRef.current = setTimeout(() => setFlashKey(null), 1400)
+    flashTimerRef.current = setTimeout(() => setFlashKey(null), 1600)
   }, [])
 
   // desktop Board.handleRandomizeTask — the dice: pick a random board task
@@ -333,14 +401,17 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
         canMoveDown: index < visibleItems.length - 1
       }
       const flashing = flashKey === item.key
+      // desktop Board.jsx: a marker directly after another (visible) marker
+      // gets the settings-driven consecutive gap above it
+      const consecutive = index > 0 && visibleItems[index - 1].kind === 'marker'
       return (
-        // layout capture for the teleport scroll (row key → y/height)
+        // teleport measurement point — collapsable={false} keeps the wrapper
+        // in the native hierarchy so measureInWindow works on Android
         <View
-          onLayout={e => {
-            rowLayoutsRef.current.set(item.key, {
-              y: e.nativeEvent.layout.y,
-              height: e.nativeEvent.layout.height
-            })
+          collapsable={false}
+          ref={el => {
+            if (el) rowRefs.current.set(item.key, el)
+            else rowRefs.current.delete(item.key)
           }}
         >
           {item.kind === 'task' ? (
@@ -363,6 +434,8 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
               marker={item.marker}
               category={categoriesById.get(item.marker.categoryId)}
               flash={flashing}
+              consecutive={consecutive}
+              spacing={markerSpacing}
               onNote={() => setNotingMarker(item.marker)}
               onAddBelow={() => setAddingBelowMarker(item.marker)}
               onDelete={() => setDeletingMarker(item.marker)}
@@ -382,7 +455,8 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
       rearranging,
       toggleRearrange,
       handleMove,
-      visibleItems.length,
+      visibleItems,
+      markerSpacing,
       flashKey
     ]
   )
@@ -427,14 +501,43 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
         }
       />
 
+      {/* the host View is the teleport's measurement anchor: its window Y
+          converts row window coords into list-content offsets (collapsable
+          keeps it measurable on Android) */}
+      <View
+        ref={listHostRef}
+        collapsable={false}
+        style={{ flex: 1 }}
+        onLayout={e => {
+          const { height } = e.nativeEvent.layout
+          if (height) scrollMetricsRef.current.listHeight = height
+          try {
+            const host = listHostRef.current
+            if (host && typeof host.measureInWindow === 'function') {
+              host.measureInWindow((wx, wy) => {
+                if (typeof wy === 'number' && !Number.isNaN(wy)) {
+                  scrollMetricsRef.current.listY = wy
+                }
+              })
+            }
+          } catch {
+            // measurement nicety
+          }
+        }}
+      >
       <FlatList
         ref={listRef}
-        onLayout={e => {
-          listHeightRef.current = e.nativeEvent.layout.height || listHeightRef.current
-        }}
         data={visibleItems}
         keyExtractor={item => item.key}
         renderItem={renderItem}
+        // current scroll offset — the other half of the teleport math
+        onScroll={e => {
+          scrollMetricsRef.current.offset = e.nativeEvent.contentOffset.y
+        }}
+        scrollEventThrottle={16}
+        // far-index scrollToIndex misses land here instead of throwing the
+        // RN invariant that silently killed the v1.0.10 teleport
+        onScrollToIndexFailed={handleScrollToIndexFailed}
         contentContainerStyle={{
           paddingHorizontal: SPACING.lg,
           paddingTop: SPACING.md,
@@ -611,6 +714,7 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
           />
         }
       />
+      </View>
 
       <Fab theme={theme} icon="plus" label="Task" onPress={() => setAddOpen(true)} />
 

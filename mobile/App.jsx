@@ -2,14 +2,14 @@
 // Mirrors desktop App.jsx: loading → schema gate → setup → (board | settings).
 
 import React, { useState, useCallback, useEffect } from 'react'
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native'
+import { View, Text, ActivityIndicator, StyleSheet, StatusBar } from 'react-native'
 import { useColorScheme } from 'react-native'
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
 import { buildTheme, SPACING } from './src/theme.js'
 import { updateSettings } from './src/actions.js'
 import { useTracker } from './src/hooks/useTracker.js'
 import { readLastCrash, clearLastCrash } from './src/diagnostics.js'
-import { AuroraBackground, BottomNav } from './src/components/ui.js'
+import { AppBackground, BottomNav } from './src/components/ui.js'
 import { BoardScreen } from './src/components/BoardScreen.js'
 import { ReviewsScreen } from './src/components/ReviewsScreen.js'
 import { SetupScreen, SchemaErrorScreen } from './src/screens/SetupScreen.js'
@@ -76,6 +76,17 @@ function AppShell() {
   const preference = pendingTheme || savedPreference
   const theme = buildTheme(preference, scheme)
 
+  // v1.0.11 light-theme fix: the status-bar LETTERS (clock, battery,
+  // notification icons) now follow the APP theme — with edge-to-edge and
+  // no explicit barStyle they stayed light-content when the user picked the
+  // Light theme, i.e. white system letters on the near-white light canvas.
+  const statusBar = (
+    <StatusBar
+      barStyle={theme.dark ? 'light-content' : 'dark-content'}
+      translucent
+    />
+  )
+
   // Theme changes apply INSTANTLY (optimistic) and persist through the same
   // serialized, backed-up write cycle as every other mutation. If the write
   // fails the visual override is rolled back and the Settings screen shows
@@ -110,7 +121,12 @@ function AppShell() {
 
   // last session recorded a fatal JS error → show it before anything else
   if (crashReport) {
-    return <CrashReportScreen report={crashReport} onDismiss={handleCrashDismiss} />
+    return (
+      <>
+        {statusBar}
+        <CrashReportScreen report={crashReport} onDismiss={handleCrashDismiss} />
+      </>
+    )
   }
 
   if (!booted) {
@@ -123,25 +139,33 @@ function AppShell() {
   }
 
   if (state.status === 'schema-too-new') {
-    return <SchemaErrorScreen theme={theme} schemaVersion={state.schemaVersion} />
+    return (
+      <>
+        {statusBar}
+        <SchemaErrorScreen theme={theme} schemaVersion={state.schemaVersion} />
+      </>
+    )
   }
 
   if (state.status === 'no-folder' || state.status === 'missing') {
     const mode = state.status === 'missing' ? 'missing' : folderUri ? 'regrant' : 'fresh'
     return (
-      <ErrorBoundary onReloadData={() => store.load()}>
-        <SetupScreen
-          theme={theme}
-          mode={mode}
-          folderUri={folderUri}
-          errorMessage={state.errorMessage}
-          onPickFolder={pickFolder}
-          onCreateDefault={async () => {
-            await store.initializeDefault()
-          }}
-          onReload={() => store.load()}
-        />
-      </ErrorBoundary>
+      <>
+        {statusBar}
+        <ErrorBoundary onReloadData={() => store.load()}>
+          <SetupScreen
+            theme={theme}
+            mode={mode}
+            folderUri={folderUri}
+            errorMessage={state.errorMessage}
+            onPickFolder={pickFolder}
+            onCreateDefault={async () => {
+              await store.initializeDefault()
+            }}
+            onReload={() => store.load()}
+          />
+        </ErrorBoundary>
+      </>
     )
   }
 
@@ -151,16 +175,20 @@ function AppShell() {
     // were already preserved in the app's private .corrupt/ folder by the
     // store before this screen renders — every option is non-destructive.
     return (
-      <ErrorBoundary onReloadData={() => store.load()}>
-        <ErrorScreen theme={theme} state={state} store={store} />
-      </ErrorBoundary>
+      <>
+        {statusBar}
+        <ErrorBoundary onReloadData={() => store.load()}>
+          <ErrorScreen theme={theme} state={state} store={store} />
+        </ErrorBoundary>
+      </>
     )
   }
 
   if (state.status === 'loading') {
     return (
-      <View style={[styles.fill, styles.center, { backgroundColor: theme.canvas[0] }]}>
-        <AuroraBackground theme={theme} />
+      <View style={[styles.fill, styles.center, { backgroundColor: theme.bgCanvas }]}>
+        {statusBar}
+        <AppBackground theme={theme} />
         <ActivityIndicator size="large" color="#8b5cf6" />
         <Text style={{ color: theme.textSecondary, marginTop: SPACING.md }}>{LOADING_TEXT}</Text>
       </View>
@@ -172,8 +200,9 @@ function AppShell() {
   // "create a task / change the theme → crash") into an in-app recovery
   // card; the store underneath keeps every data guarantee.
   return (
-    <View style={[styles.fill, { backgroundColor: theme.canvas[0] }]}>
-      <AuroraBackground theme={theme} />
+    <View style={[styles.fill, { backgroundColor: theme.bgCanvas }]}>
+      {statusBar}
+      <AppBackground theme={theme} />
       <View style={{ flex: 1 }}>
         <ErrorBoundary onReloadData={() => store.load()}>
           {tab === 'board' ? (

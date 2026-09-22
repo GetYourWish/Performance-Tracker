@@ -1,27 +1,16 @@
 // Theme — visual parity with the desktop app (desktop/src/index.css).
-// The desktop theme is an "aurora glass" design on an indigo canvas; these
-// constants mirror its CSS variables so both apps look like one product.
-// Android-native behaviors (Material ripples, elevation, edge-to-edge) are
-// layered on top — native UX, familiar skin.
+// The desktop theme is an "aurora glass" design over a plain --bg-primary
+// body; these constants mirror its CSS variables so both apps look like one
+// product. Android-native behaviors (Material ripples, elevation,
+// edge-to-edge) are layered on top — native UX, familiar skin.
+//
+// v1.0.11: the background is a SINGLE SOLID COLOR per theme (bgCanvas) —
+// the aurora gradient + blobs were replaced by the user's request ("solid
+// whole color following current theme"); light keeps the desktop canvas
+// tint (#EEF2FF, indigo-50), dark keeps the deep-canvas navy (#0B0D12).
 
-export const CANVAS = {
-  light: ['#EEF2FF', '#E0E7FF'],
-  dark: ['#0B0D12', '#11141C']
-}
-
-// Aurora blobs: radial-gradient(circle at x% y%, COLOR 0%, transparent 50%)
-export const AURORA = {
-  light: [
-    { color: 'rgba(59,130,246,0.18)', top: '18%', left: '-20%' },
-    { color: 'rgba(168,85,247,0.16)', top: '55%', left: '60%' },
-    { color: 'rgba(34,197,94,0.14)', top: '72%', left: '10%' }
-  ],
-  dark: [
-    { color: 'rgba(59,130,246,0.22)', top: '18%', left: '-20%' },
-    { color: 'rgba(168,85,247,0.20)', top: '55%', left: '60%' },
-    { color: 'rgba(34,197,94,0.16)', top: '72%', left: '10%' }
-  ]
-}
+// v1.0.11: CANVAS (gradient stops) and AURORA (blob list) were removed —
+// the background is now the single solid bgCanvas color on every theme.
 
 // flowState / flowStatePressed are REQUIRED on every theme object: the FAB,
 // filled buttons, text buttons and the Switch track all read them. They were
@@ -47,6 +36,8 @@ export const LIGHT = {
   ripple: 'rgba(15,23,42,0.12)',
   scrim: 'rgba(15,23,42,0.45)',
   shadow: '#0f172a',
+  // solid app background (v1.0.11) — desktop light canvas tint
+  bgCanvas: '#EEF2FF',
   // violet-600 family — readable on white surfaces
   flowState: '#7c3aed',
   flowStatePressed: '#6d28d9',
@@ -70,6 +61,8 @@ export const DARK = {
   ripple: 'rgba(255,255,255,0.10)',
   scrim: 'rgba(0,0,0,0.60)',
   shadow: '#000000',
+  // solid app background (v1.0.11) — desktop deep canvas navy
+  bgCanvas: '#0B0D12',
   // violet-500 family — pops on dark surfaces
   flowState: '#8b5cf6',
   flowStatePressed: '#7c3aed',
@@ -112,7 +105,7 @@ export function buildTheme(preference, systemScheme) {
       ? preference
       : (systemScheme === 'dark' ? 'dark' : 'light')
   const base = resolved === 'dark' ? DARK : LIGHT
-  return { ...base, resolved, canvas: CANVAS[resolved], aurora: AURORA[resolved] }
+  return { ...base, resolved }
 }
 
 // Guard used by tests: every control color the UI kit reads must exist on
@@ -125,6 +118,7 @@ export function themeColorGuard(theme) {
     'textSecondary',
     'textMuted',
     'bgPrimary',
+    'bgCanvas',
     'surface',
     'bgSecondary',
     'border',

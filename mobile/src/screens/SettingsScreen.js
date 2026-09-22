@@ -590,7 +590,7 @@ export function SettingsScreen({
               <Text style={{ color: theme.textSecondary, ...TYPE.secondary }}>px</Text>
             </View>
             <Text style={{ color: theme.textMuted, marginTop: SPACING.sm, ...TYPE.caption }}>
-              Space between consecutive category markers on the desktop board (default: 150px).
+              Extra space inserted above a category marker that directly follows another marker on the board (default: 150px).
             </Text>
           </View>
         </SectionCard>

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Performance Tracker",
     "slug": "performance-tracker",
-    "version": "1.0.10",
+    "version": "1.0.11",
     "scheme": "performance-tracker",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "com.getyourwish.performancetracker",
-      "versionCode": 11,
+      "versionCode": 12,
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

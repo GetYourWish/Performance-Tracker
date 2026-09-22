@@ -17,31 +17,19 @@ import {
   Modal,
   StyleSheet
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { RADIUS, SPACING, TYPE } from '../theme.js'
 
-// Canvas: indigo gradient + the three aurora blobs (desktop .aurora-background)
-export function AuroraBackground({ theme }) {
+// App background: ONE solid color following the theme (v1.0.11 — replaced
+// the aurora LinearGradient + blob circles with the user's requested solid
+// canvas; light = #EEF2FF, dark = #0B0D12, both from theme.js bgCanvas).
+export function AppBackground({ theme }) {
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <LinearGradient colors={theme.canvas} style={StyleSheet.absoluteFill} />
-      {theme.aurora.map((blob, i) => (
-        <View
-          key={i}
-          style={{
-            position: 'absolute',
-            top: blob.top,
-            left: blob.left,
-            width: 420,
-            height: 420,
-            borderRadius: 210,
-            backgroundColor: blob.color
-          }}
-        />
-      ))}
-    </View>
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { backgroundColor: theme.bgCanvas }]}
+    />
   )
 }
 

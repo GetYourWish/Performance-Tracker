@@ -48,7 +48,7 @@ import {
   Snackbar
 } from './ui.js'
 import { inputStyle } from './dialogs.js'
-import { FlowStateBars, StackedCategoryBars, HeatmapGrid, buildDaySeries, buildHeatmapYear, buildScoreCache, resolveChartRange } from './reviews/charts.js'
+import { FlowStateArea, StackedCategoryBars, HeatmapGrid, buildDaySeries, buildHeatmapYear, buildScoreCache, resolveChartRange } from './reviews/charts.js'
 import { ReviewsDashboard } from './reviews/dashboard.js'
 import { updateTaskCompletion, deleteTask } from '../actions.js'
 import { SPACING, TYPE, ACCENTS } from '../theme.js'
@@ -596,7 +596,7 @@ export function ReviewsScreen({ theme, state, store }) {
           </View>
           <Segmented theme={theme} value={range} onChange={setRange} options={RANGE_TABS} accessibilityLabel="Chart range" />
           <GlassCard theme={theme} style={{ padding: SPACING.md, marginTop: SPACING.md }}>
-            <FlowStateBars theme={theme} series={series} flowStateColor={flowStateColor} onDayPress={openDay} />
+            <FlowStateArea theme={theme} series={series} flowStateColor={flowStateColor} onDayPress={openDay} />
           </GlassCard>
         </View>
       )

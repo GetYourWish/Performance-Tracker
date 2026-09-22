@@ -10,7 +10,7 @@ import React, { useState } from 'react'
 import { View, Text, ScrollView, ActivityIndicator } from 'react-native'
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { AuroraBackground, GlassCard, FilledButton } from '../components/ui.js'
+import { AppBackground, GlassCard, FilledButton } from '../components/ui.js'
 import { SPACING, RADIUS, TYPE } from '../theme.js'
 import appJson from '../../app.json'
 
@@ -63,8 +63,8 @@ export function SetupScreen({ theme, mode, folderUri, errorMessage, onPickFolder
         : 'All your tasks and history live in a single tracker.json file inside your Syncthing folder — the same file the desktop app uses. Pick that folder to begin.'
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.canvas[0] }}>
-      <AuroraBackground theme={theme} />
+    <View style={{ flex: 1, backgroundColor: theme.bgCanvas }}>
+      <AppBackground theme={theme} />
       <ScrollView
         contentContainerStyle={{
           flexGrow: 1,
@@ -148,8 +148,8 @@ export function SetupScreen({ theme, mode, folderUri, errorMessage, onPickFolder
 export function SchemaErrorScreen({ theme, schemaVersion }) {
   const insets = useSafeAreaInsets()
   return (
-    <View style={{ flex: 1, backgroundColor: theme.canvas[0] }}>
-      <AuroraBackground theme={theme} />
+    <View style={{ flex: 1, backgroundColor: theme.bgCanvas }}>
+      <AppBackground theme={theme} />
       <View
         style={{
           flex: 1,
