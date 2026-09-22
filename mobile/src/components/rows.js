@@ -20,6 +20,11 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { RADIUS, SPACING, TYPE } from '../theme.js'
 
+// The teleport/randomizer flash color — desktop components.css hardcodes
+// the same amber (`.random-flash` keyframe: rgba(251,191,36,0.5) bg + glow),
+// so the mobile highlight is the identical value instead of a theme token.
+const FLASH_COLOR = '#fbbf24'
+
 export function withAlpha(hex, alphaHex = '4D') {
   if (typeof hex !== 'string' || hex[0] !== '#' || (hex.length !== 7 && hex.length !== 4)) {
     return hex
@@ -89,6 +94,7 @@ export function TaskRow({
   category,
   isWorkingOn,
   flowStateColor,
+  flash,
   onOpen,
   onComplete,
   onDelete,
@@ -109,6 +115,13 @@ export function TaskRow({
           borderWidth: 1.5,
           borderColor: flowStateColor,
           backgroundColor: withAlpha(flowStateColor, '1A')
+        },
+        // desktop `.board-row.random-flash` — amber highlight while the
+        // dice-picked / teleported-to row is being pointed at
+        flash && {
+          borderWidth: 2,
+          borderColor: FLASH_COLOR,
+          backgroundColor: withAlpha(FLASH_COLOR, '4D')
         }
       ]}
     >
@@ -183,6 +196,7 @@ export function MarkerRow({
   theme,
   marker,
   category,
+  flash,
   onNote,
   onAddBelow,
   onDelete,
@@ -196,14 +210,21 @@ export function MarkerRow({
   return (
     <View style={{ alignItems: 'center', paddingVertical: SPACING.sm }}>
       <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: SPACING.xs,
-          backgroundColor: withAlpha(category?.color),
-          borderRadius: 20,
-          paddingRight: 4
-        }}
+        style={[
+          {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: SPACING.xs,
+            backgroundColor: withAlpha(category?.color),
+            borderRadius: 20,
+            paddingRight: 4
+          },
+          flash && {
+            borderWidth: 2,
+            borderColor: FLASH_COLOR,
+            backgroundColor: withAlpha(FLASH_COLOR, '4D')
+          }
+        ]}
         accessibilityLabel={`Category marker: ${String(category?.name ?? '')}`}
       >
         <RearrangeHandle theme={theme} rearranging={rearranging} onToggleRearrange={onToggleRearrange} />

@@ -172,6 +172,27 @@ function embedIconFont(mobileRoot, log = () => {}) {
 
   const fontsDir = path.join(mobileRoot, ANDROID_ASSETS_FONTS)
   const target = path.join(fontsDir, `${fontName}.ttf`)
+
+  // Idempotent: when the exact same font is already embedded, skip the
+  // rewrite entirely. The old unconditional copyFileSync made every
+  // postinstall/prebuild run touch the APK asset — pointless mtime churn
+  // (and the "is idempotent" test only passed when both writes happened to
+  // land inside one filesystem mtime tick, i.e. it was a timing flake).
+  const sameFont = () => {
+    try {
+      if (!fs.existsSync(target)) return false
+      const targetStat = fs.statSync(target)
+      if (targetStat.size !== size) return false
+      return Buffer.compare(fs.readFileSync(fontFile), fs.readFileSync(target)) === 0
+    } catch {
+      return false // unreadable/odd target → just re-embed
+    }
+  }
+  if (sameFont()) {
+    log(`${TAG} ${fontName}.ttf already embedded (${(size / 1024).toFixed(0)} KB) — nothing to do`)
+    return { ok: true, reason: null, fontName, target }
+  }
+
   fs.mkdirSync(fontsDir, { recursive: true })
   fs.copyFileSync(fontFile, target)
   log(`${TAG} embedded ${fontName}.ttf (${(size / 1024).toFixed(0)} KB) -> ${path.relative(mobileRoot, target)}`)

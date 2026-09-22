@@ -201,6 +201,67 @@ the file changed, then recompiles `expo-modules-core` with the new include
 path. If the build still behaves oddly, `npm run clean:native` now also wipes
 `expo-modules-core`'s stale `.cxx`.)
 
+#### v1.0.10 — the missing Randomizer, category teleport + Working On popup (desktop feature parity)
+
+**Symptoms (2026-09-22, remote-reported):** *"some few features we need to
+add are the working on pop up that is missing, the ability to click on a
+category in the categories section and have it teleport us to it at the
+board. the randomizer button is also missing from the app because i see no
+dice button that picks a task as working on"* — three desktop features the
+mobile board never had, all ported:
+
+1. **Dice / Randomizer.** The desktop's `Randomizer` button
+   (`Board.handleRandomizeTask`) is now the dice button in the board's top
+   app bar. It picks a random task from the board — preferring ones NOT
+   already being worked on — writes it into `workingOn` through the new
+   `addWorkingOn` action (the exact desktop write; when every task is
+   already being worked on the write is skipped entirely, like the desktop
+   skipping `onSave`), then teleports the list to that row and flashes it
+   with the same amber highlight as the desktop's `.random-flash` keyframe.
+   Empty board → a hint snackbar instead of a silent no-op.
+
+2. **Category teleport.** Tapping a category in the Categories sheet now
+   JUMPS to its first marker on the board (desktop chip click →
+   `handleNavigateToCategory` → `scrollIntoView` + flash) — the sheet
+   closes, the list scrolls the marker to mid-viewport and flashes it. The
+   "+" icon next to each category keeps the old behavior (place a marker at
+   the end of the board), matching the desktop chip's `+` button. A category
+   with no marker on the board gets a *"No 'X' marker on the board yet"*
+   hint instead of silence. Exact row offsets come from per-row `onLayout`
+   capture, with a `scrollToIndex` fallback for rows never laid out.
+
+3. **Working On popup.** The desktop's nav `Working On (N)` marker button +
+   `WorkingOnPopup` are now the tappable **Working On** pill on the board's
+   today card (shown only when something is being worked on, like the
+   desktop hiding the marker at 0). It opens a bottom sheet listing every
+   working-on task — category color dot + tinted row background (desktop
+   `${category.color}22` tint, categories derived with the same strict
+   marker rule) — and tapping a task completes it right there through the
+   SAME `CompleteDialog` and `completeTask` action as a board row: identical
+   scoring, log entry, board removal and `workingOn` cleanup, through the
+   same verified write cycle. Completing closes the whole stack (desktop
+   parity); cancel returns to the list. The desktop popup's *Export Image*
+   button is Electron-only (html-to-image + native save dialog) and is
+   intentionally not ported.
+
+4. **Two hardening fixes found while testing.** (a) The Settings
+   dashboard-card visibility switches rendered `check-box-outline` — not a
+   real material-community name (the real one is `checkbox-outline`) — so
+   the checked state showed a missing-glyph box; fixed, and a new
+   `icon-names.test.js` static audit now validates EVERY icon name in the
+   app against the glyphmap so this blank-glyph class of bug can never ship
+   again. (b) The icon-font embedder's `copyFileSync` ran unconditionally —
+   every `npm install` / prebuild rewrote the APK-embedded TTF for nothing,
+   and its "is idempotent" test only passed when both writes happened to
+   land inside one filesystem mtime tick (a timing flake that surfaced
+   under parallel-suite load). The embedder now skips the rewrite when the
+   identical font is already embedded (size + content compare) — same
+   behavior for both the postinstall and prebuild paths.
+
+**Rebuild:** same as v1.0.9 — `git pull`, `npm install`, then
+`cd mobile/android && ./gradlew assembleRelease`. No prebuild changes were
+made; the loading screen should show **v1.0.10**.
+
 #### v1.0.9 — the blank-icons + missing-Reviews/Appearance fix (full desktop UI parity)
 
 **Symptoms (2026-09-22, remote-reported):** *"in the android app there is

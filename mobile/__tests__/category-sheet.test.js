@@ -1,6 +1,9 @@
-// CategorySheet create-category form — behavioral regression guard.
+// CategorySheet — behavioral regression guards.
 //
-// REGRESSION THIS GUARDS:
+// v1.0.10 row semantics (desktop CategoryChip): tap the category row =
+// NAVIGATE to its first marker on the board; the "+" icon = place a marker.
+//
+// REGRESSION THE CREATE-FORM TESTS GUARD:
 //   The create-category form rendered <TextInput> while TextInput was not in
 //   the react-native import list — the first "New category" tap crashed with
 //   "Element type is invalid: … got: undefined". No previous test ever opened
@@ -26,6 +29,7 @@ const baseProps = {
     { id: 'c2', name: 'Admin', color: '#60a5fa' }
   ],
   onAddMarker: () => {},
+  onNavigate: () => {},
   onCreateCategory: () => {},
   onClose: () => {}
 }
@@ -64,6 +68,63 @@ function jsonText(tree) {
   visit(tree.toJSON())
   return texts.join(' ')
 }
+
+describe('CategorySheet category rows (v1.0.10 desktop chip semantics)', () => {
+  test('tapping a category row navigates (full category object) and closes', async () => {
+    const onNavigate = jest.fn()
+    const onClose = jest.fn()
+    const tree = await mountSheet({ ...baseProps, onNavigate, onClose })
+
+    const row = tree.root.find(
+      n => n.props?.accessibilityLabel === 'Jump to Deep Work on the board'
+    )
+    await act(async () => {
+      row.props.onPress()
+    })
+
+    expect(onNavigate).toHaveBeenCalledTimes(1)
+    expect(onNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c1', name: 'Deep Work' })
+    )
+    expect(onClose).toHaveBeenCalled()
+
+    act(() => {
+      tree.unmount()
+    })
+  })
+
+  test('tapping the + icon adds a marker (category id) without navigating', async () => {
+    const onAddMarker = jest.fn()
+    const onNavigate = jest.fn()
+    const tree = await mountSheet({ ...baseProps, onAddMarker, onNavigate })
+
+    const addBtn = tree.root.find(
+      n => n.props?.accessibilityLabel === 'Add Deep Work marker to the board'
+    )
+    await act(async () => {
+      addBtn.props.onPress()
+    })
+
+    expect(onAddMarker).toHaveBeenCalledTimes(1)
+    expect(onAddMarker).toHaveBeenCalledWith('c1')
+    expect(onNavigate).not.toHaveBeenCalled()
+
+    act(() => {
+      tree.unmount()
+    })
+  })
+
+  test('the caption explains the two actions', async () => {
+    const tree = await mountSheet(baseProps)
+    const text = jsonText(tree)
+    expect(text).toContain('jump to its marker on the board')
+    expect(text).toContain('Tap + to place a new one')
+
+    act(() => {
+      tree.unmount()
+    })
+  })
+})
 
 describe('CategorySheet create-category form', () => {
   test('category list renders and offers the create form', async () => {

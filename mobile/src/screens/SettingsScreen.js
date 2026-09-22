@@ -762,7 +762,7 @@ export function SettingsScreen({
                   accessibilityState={{ checked }}
                 >
                   <Icon
-                    name={checked ? 'check-box-outline' : 'checkbox-blank-outline'}
+                    name={checked ? 'checkbox-outline' : 'checkbox-blank-outline'}
                     size={18}
                     color={checked ? theme.flowState : theme.textMuted}
                   />

@@ -1,7 +1,9 @@
 // CategorySheet — Android bottom sheet equivalent of the desktop category
 // sidebar: active categories sorted by priorityMultiplier desc then name
-// (desktop CategorySidebar sort), tap a row to place a marker on the board
-// (desktop handleAddMarker appends to the END of the board), plus the
+// (desktop CategorySidebar sort). Desktop CategoryChip semantics: tapping
+// the chip NAVIGATES to its first marker on the board (handleNavigateToCategory
+// → scroll + flash); the separate "+" button places a marker on the board
+// (desktop handleAddMarker appends to the END of the board). Plus the
 // quick-create form (name + color swatches, priorityMultiplier 1).
 
 import React, { useMemo, useState } from 'react'
@@ -18,7 +20,7 @@ import { SPACING, RADIUS, TYPE } from '../theme.js'
 
 const PRESET_COLORS = ['#60a5fa', '#8b5cf6', '#f472b6', '#f87171', '#fbbf24', '#4ade80', '#34d399', '#94a3b8']
 
-export function CategorySheet({ theme, visible, categories, onAddMarker, onCreateCategory, onClose }) {
+export function CategorySheet({ theme, visible, categories, onAddMarker, onNavigate, onCreateCategory, onClose }) {
   const insets = useSafeAreaInsets()
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -72,7 +74,7 @@ export function CategorySheet({ theme, visible, categories, onAddMarker, onCreat
             <TextButton theme={theme} label="Close" onPress={close} />
           </View>
           <Text style={{ color: theme.textMuted, ...TYPE.caption, paddingHorizontal: SPACING.xl, marginBottom: SPACING.sm }}>
-            Tap a category to place its marker at the end of the board.
+            Tap a category to jump to its marker on the board. Tap + to place a new one.
           </Text>
 
           <ScrollView keyboardShouldPersistTaps="handled">
@@ -83,7 +85,7 @@ export function CategorySheet({ theme, visible, categories, onAddMarker, onCreat
                     key={category.id}
                     android_ripple={{ color: theme.ripple }}
                     onPress={() => {
-                      onAddMarker(category.id)
+                      onNavigate(category)
                       close()
                     }}
                     style={({ pressed }) => ({
@@ -95,13 +97,27 @@ export function CategorySheet({ theme, visible, categories, onAddMarker, onCreat
                       borderRadius: RADIUS.md,
                       opacity: pressed ? 0.8 : 1
                     })}
+                    accessibilityLabel={`Jump to ${category.name} on the board`}
+                    accessibilityRole="button"
                   >
                     <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: category.color }} />
                     <Text style={{ flex: 1, color: theme.textPrimary, ...TYPE.body }}>{category.name}</Text>
                     {typeof category.priorityMultiplier === 'number' && category.priorityMultiplier !== 1 ? (
                       <Text style={{ color: theme.textMuted, ...TYPE.caption }}>×{category.priorityMultiplier}</Text>
                     ) : null}
-                    <Icon name="plus-circle-outline" size={22} color={theme.textSecondary} />
+                    <Pressable
+                      android_ripple={{ color: theme.ripple, borderless: true, radius: 22 }}
+                      hitSlop={6}
+                      onPress={() => {
+                        onAddMarker(category.id)
+                        close()
+                      }}
+                      style={({ pressed }) => ({ padding: 7, borderRadius: 20, opacity: pressed ? 0.7 : 1 })}
+                      accessibilityLabel={`Add ${category.name} marker to the board`}
+                      accessibilityRole="button"
+                    >
+                      <Icon name="plus-circle-outline" size={22} color={theme.textSecondary} />
+                    </Pressable>
                   </Pressable>
                 ))}
                 {sorted.length === 0 ? (

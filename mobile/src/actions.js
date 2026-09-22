@@ -116,6 +116,16 @@ export function toggleWorkingOn(data, taskId, now) {
   return withMeta({ ...data, workingOn }, now)
 }
 
+// desktop Board.handleRandomizeTask write: the dice-picked task is APPENDED
+// to workingOn. The desktop only calls onSave when the id is NOT already
+// present; when it somehow is, this returns the input object untouched so
+// the store's no-change-no-write skips the disk cycle entirely.
+export function addWorkingOn(data, taskId, now) {
+  const current = data.workingOn || []
+  if (current.includes(taskId)) return data
+  return withMeta({ ...data, workingOn: [...current, taskId] }, now)
+}
+
 // desktop Board.handleCompletionConfirm — THE completion flow.
 // Category derivation uses core getTaskCategory (strict marker-above/
 // marker-below same-category rule) — the same rule the desktop board
