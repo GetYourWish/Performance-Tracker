@@ -102,6 +102,17 @@ describe('with-standalone-release plugin', () => {
       expect(contents).toContain('gradlew clean assembleRelease')
     })
 
+    test('verify task also asserts the embedded icon font (blank-icons regression)', () => {
+      const { contents } = patched
+      // The 2026-09-22 "blank spaces instead of icons" incident: an APK
+      // without assets/fonts/*.ttf renders every icon blank. The verify
+      // task must fail the build in that case.
+      expect(contents).toContain('assets/fonts/')
+      expect(contents).toContain('endsWith(".ttf")')
+      expect(contents).toContain('NO icon font under assets/fonts/')
+      expect(contents).toContain('icon font present: ')
+    })
+
     test('is idempotent: patching an already-patched file changes nothing', () => {
       const once = patchAppBuildGradle(TEMPLATE_EXCERPT).contents
       const twice = patchAppBuildGradle(once).contents
@@ -223,6 +234,9 @@ tasks.register("verifyStandaloneApk") {
       // every dynamic Groovy value is built by concatenation, never GString
       // (once per variant block: release + debug)
       expect(block.match(/entry\.getSize\(\) \+ " bytes/g) || []).toHaveLength(2)
+      // the icon font check runs in BOTH variants too
+      expect(block.match(/NO icon font under assets\/fonts/g) || []).toHaveLength(2)
+      expect(block.match(/it\.getSize\(\) > 50000L/g) || []).toHaveLength(2)
     })
 
     test('escapes every quote injected into generated Groovy strings (regression: build.gradle:226 compile failure)', () => {

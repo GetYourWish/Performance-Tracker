@@ -56,6 +56,8 @@ const MARKER_OPEN = '// >>> with-standalone-release (mobile/plugins/with-standal
 const MARKER_CLOSE = '// <<< with-standalone-release';
 const BUNDLE_ENTRY = 'assets/index.android.bundle';
 const BUNDLE_MIN_BYTES = '1000000L'; // real Hermes bundles for this app are ~2.8 MB
+// A real icon TTF is ~350 KB+; anything smaller is a broken/partial font.
+const FONT_MIN_BYTES = '50000';
 
 /**
  * Escape a JS string for use INSIDE a Groovy double-quoted literal:
@@ -101,6 +103,18 @@ function composeVariantVerifyBlock({ taskName, assembleTask, apkRelPath, debug }
       '(createBundleReleaseJsAndAssets) did not run or was not merged into the APK. ' +
       'Run: gradlew clean assembleRelease';
   const cleanHint = debug ? 'gradlew clean assembleDebug' : 'gradlew clean assembleRelease';
+  // Icon font check (the 2026-09-22 "blank spaces instead of icons"
+  // incident): the MaterialCommunityIcons TTF is embedded into
+  // assets/fonts/ by plugins/with-icon-font.js (prebuild) and
+  // plugins/embed-icon-font.js (postinstall, stale-folder repair). The
+  // font is loaded straight from APK assets by ReactFontManager - if it
+  // is missing from the APK, EVERY icon renders as a blank space and every
+  // icon-only button becomes an invisible touch target.
+  const fontMissingReason =
+    'every icon in the app would render blank and icon-only buttons would turn ' +
+    'invisible. The embedded font comes from plugins/with-icon-font.js at prebuild ' +
+    'time (or plugins/embed-icon-font.js from npm postinstall). Re-run: npm install, ' +
+    'then ' + cleanHint;
   const bannerNote = debug
     ? 'NOTE: debug APKs are large (unstripped native code, all CPU architectures) - that is normal. ' +
       'For daily use prefer app-release.apk. This install shows as "... DEBUG" on the launcher ' +
@@ -144,11 +158,21 @@ function composeVariantVerifyBlock({ taskName, assembleTask, apkRelPath, debug }
     '                    "the real Hermes bundle. Run: ' + groovyEscape(cleanHint) + '"\n' +
     '                )\n' +
     '            }\n' +
+    '            def fontEntry = apk.entries().findAll { it.getName().startsWith("assets/fonts/") && it.getName().endsWith(".ttf") }\n' +
+    '                .findAll { it.getSize() > ' + FONT_MIN_BYTES + 'L }\n' +
+    '                .find()\n' +
+    '            if (fontEntry == null) {\n' +
+    '                throw new GradleException(\n' +
+    '                    "' + groovyEscape(TAG) + ' " + ' + apkFileVar + '.name + " has NO icon font under assets/fonts/ - ' + groovyEscape(fontMissingReason) + '"\n' +
+    '                )\n' +
+    '            }\n' +
+    '            def fontKb = String.format(\'%.0f\', fontEntry.getSize() / 1024.0)\n' +
     '            def bundleMb = String.format(\'%.1f\', entry.getSize() / (1024.0 * 1024.0))\n' +
     '            def apkMb = String.format(\'%.1f\', ' + apkFileVar + '.length() / (1024.0 * 1024.0))\n' +
     '            println ""\n' +
     '            println "' + groovyEscape(TAG) + ' ================================================================"\n' +
     '            println "' + groovyEscape(TAG + ' ' + label + ' - ' + BUNDLE_ENTRY) + ' present (" + bundleMb + " MB)"\n' +
+    '            println "' + groovyEscape(TAG) + ' icon font present: " + fontEntry.getName() + " (" + fontKb + " KB)"\n' +
     '            println "' + groovyEscape(TAG) + ' APK: " + ' + apkFileVar + '.absolutePath + " (" + apkMb + " MB)"\n' +
     '            println "' + groovyEscape(TAG) + ' Install it on the device with:"\n' +
     '            println "' + groovyEscape(TAG) + '     adb install -r \\"" + ' + apkFileVar + '.absolutePath + "\\""\n' +

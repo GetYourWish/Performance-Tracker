@@ -335,6 +335,55 @@ export function SettingsRow({ theme, icon, label, hint, control, onPress }) {
   )
 }
 
+// Segmented control (Material 3 segmented button row) — the desktop's pill
+// tab groups (review tabs, range toggles, filter selects) as a compact
+// mobile control. Exported from the shared kit because both Settings and
+// Reviews use it.
+export function Segmented({ theme, options, value, onChange, accessibilityLabel }) {
+  return (
+    <View
+      style={{ flexDirection: 'row', backgroundColor: theme.bgSecondary, borderRadius: 999, padding: 3, gap: 2 }}
+      accessibilityRole="radiogroup"
+      accessibilityLabel={accessibilityLabel}
+    >
+      {options.map(opt => {
+        const selected = value === opt.value
+        return (
+          <Pressable
+            key={String(opt.value)}
+            onPress={() => onChange(opt.value)}
+            android_ripple={{ color: theme.ripple, borderless: true }}
+            style={({ pressed }) => ({
+              flex: 1,
+              paddingVertical: 9,
+              borderRadius: 999,
+              alignItems: 'center',
+              backgroundColor: selected ? theme.bgPrimary : 'transparent',
+              elevation: selected ? 1 : 0,
+              opacity: pressed && !selected ? 0.7 : 1
+            })}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            accessibilityLabel={opt.label}
+          >
+            <Text
+              style={{
+                color: selected ? theme.flowState : theme.textSecondary,
+                fontSize: 13.5,
+                fontWeight: selected ? '700' : '500',
+                letterSpacing: 0.2,
+                textAlign: 'center'
+              }}
+            >
+              {opt.label}
+            </Text>
+          </Pressable>
+        )
+      })}
+    </View>
+  )
+}
+
 // Transient snackbar pinned above the bottom nav
 export function Snackbar({ theme, message, onDone, duration = 2600 }) {
   useEffect(() => {

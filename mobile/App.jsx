@@ -11,6 +11,7 @@ import { useTracker } from './src/hooks/useTracker.js'
 import { readLastCrash, clearLastCrash } from './src/diagnostics.js'
 import { AuroraBackground, BottomNav } from './src/components/ui.js'
 import { BoardScreen } from './src/components/BoardScreen.js'
+import { ReviewsScreen } from './src/components/ReviewsScreen.js'
 import { SetupScreen, SchemaErrorScreen } from './src/screens/SetupScreen.js'
 import { SettingsScreen } from './src/screens/SettingsScreen.js'
 import { CrashReportScreen } from './src/screens/CrashReportScreen.js'
@@ -184,6 +185,8 @@ function AppShell() {
               onRefresh={handleRefresh}
               onShowConflictInfo={() => setTab('settings')}
             />
+          ) : tab === 'reviews' ? (
+            <ReviewsScreen theme={theme} state={state} store={store} />
           ) : (
             <SettingsScreen
               theme={theme}
@@ -204,6 +207,7 @@ function AppShell() {
           onChange={setTab}
           tabs={[
             { key: 'board', label: 'Board', icon: 'view-dashboard-outline', iconActive: 'view-dashboard' },
+            { key: 'reviews', label: 'Reviews', icon: 'chart-bar', iconActive: 'chart-bar' },
             { key: 'settings', label: 'Settings', icon: 'cog-outline', iconActive: 'cog' }
           ]}
         />

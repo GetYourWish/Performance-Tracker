@@ -201,6 +201,94 @@ the file changed, then recompiles `expo-modules-core` with the new include
 path. If the build still behaves oddly, `npm run clean:native` now also wipes
 `expo-modules-core`'s stale `.cxx`.)
 
+#### v1.0.9 — the blank-icons + missing-Reviews/Appearance fix (full desktop UI parity)
+
+**Symptoms (2026-09-22, remote-reported):** *"in the android app there is
+blank spaces in the places of actual icons… there is even missing settings
+specifically the appearance section and the reviews section is non existent.
+i think in the board there is the button but i cant see them since when
+fiddling around i ended up clicking something"* — four defects, all fixed:
+
+1. **Blank icons + invisible board buttons (one root cause).** Every icon in
+   the app renders through `@expo/vector-icons`, whose TTF lives in a metro
+   asset. In this monorepo the package is hoisted to the workspace-root
+   `node_modules` — OUTSIDE `mobile/` — so the RN CLI writes the font into
+   `res/raw` under a mangled `_node_modules_…` name, and expo-font must then
+   resolve the asset, look the resource up by identifier, copy it to the
+   cache dir and call `Typeface.createFromFile` before ReactFontManager can
+   use it. Five links, any of which can silently fail on a given device —
+   and when one does, the Icon component renders an **empty Text forever**:
+   blank spots where icons should be, and icon-only board controls (the
+   per-task action buttons) become *invisible but still tappable* — exactly
+   the "I clicked something I couldn't see" report. **Fix:** the
+   MaterialCommunityIcons TTF is now embedded straight into the APK at
+   `android/app/src/main/assets/fonts/material-community.ttf` (named after
+   the RN font family). Android's `ReactFontManager` loads
+   `assets/fonts/<family>.ttf` natively with **zero runtime loading code** —
+   the fragile chain is simply not on the path anymore. Wired two ways so
+   nobody has to re-run prebuild: `plugins/with-icon-font.js` (prebuild
+   plugin) and `plugins/embed-icon-font.js` (npm postinstall — repairs an
+   existing/stale `android/` folder on `npm install`). The
+   `verifyStandaloneApk` build task now also **fails the build** if an APK
+   ships without the font (same treatment as the JS bundle check).
+
+2. **The Reviews section is no longer missing.** The desktop's Reviews view
+   — five tabs: **Dashboard | Daily | Flow State | Stacked | Heatmap** —
+   now exists on Android (`ReviewsScreen` + `reviews/charts.js` +
+   `reviews/dashboard.js`, a new **Reviews** tab in the bottom nav). The
+   Dashboard tab is the desktop's Performance Cockpit with the same four
+   panels (INTENSITY / RECORDS / RHYTHM / COMPOSITION) and the same 20
+   card-visibility ids; Daily/Flow/Stacked/Heatmap render the same series
+   and the same day-score numbers (every figure comes from
+   `@performance-tracker/core` over the same tracker.json). Editing parity
+   with the desktop's TaskDetailPopup: tap any completion to edit its note,
+   completion time or completion date (the "worked past midnight"
+   correction) or delete it — every edit goes through the same
+   `store.mutate` → rebase → verify write cycle as a board edit and syncs
+   to the desktop. Charts are plain RN Views (no new native dependency),
+   and the date math lives in `src/dates.js` on core's device-local
+   calendar convention.
+
+3. **Settings now has full desktop parity.** The desktop's settings tabs
+   all exist as sections: **Difficulties** (add / rename / re-score /
+   reorder / recolor / deactivate), **Categories** (same, plus priority
+   multipliers), **Appearance** (theme + Flow State color picker +
+   consecutive marker spacing), **Calendar** (week start), **Scoring**
+   (fatigue controls + heatmap mode), **Logs** (filter All / Today / This
+   Week, per-entry score breakdown, clear) and **Dashboard Cards**
+   (visibility toggles shared with the desktop through
+   `settings.dashboard`). Desktop-only controls (keyboard multi-select,
+   window app-icon picker) are deliberately not mirrored.
+
+4. **Two latent port bugs caught by the new test suite before release.**
+   The Reviews tab bar initially used `{ key: … }` option objects where the
+   `Segmented` control reads `opt.value` — every tab tap would have called
+   `onChange(undefined)` and silently landed on the Heatmap; and three
+   `getStartOfWeek` call sites passed date-fns's `{ weekStartsOn }` options
+   object where core's API takes the bare number — both fixed and pinned by
+   tests (`reviews-screen.test.js`).
+
+Also in this release: a version bump to **1.0.9 (versionCode 10)** — check
+the loading screen says v1.0.9 after installing.
+
+**Rebuilding (no `clean:native` needed — no dependency changes; `npm
+install` embeds the icon font into the existing `android/` folder via
+postinstall):**
+
+```
+git pull
+npm install
+cd mobile\android
+.\gradlew assembleRelease
+```
+
+Mobile jest 298/298 (48 new: the icon-font embedder + wiring, the
+verify-task font assertion, Reviews tabs/dialogs/charts/heatmap parity,
+completion-edit actions, difficulty/category/log actions), core vitest
+42/42, desktop 6/6, storage format-lock 44/44 (tracker.json stays
+byte-identical to the desktop's atomicSave format), eslint 0 errors, metro
+export OK (2.2 MB).
+
 #### v1.0.8 — the 'every action corrupts tracker.json' fix (truncation-proof SAF writes)
 
 **Symptoms (2026-09-21, remote-reported, screenshot-confirmed):** *"whenever

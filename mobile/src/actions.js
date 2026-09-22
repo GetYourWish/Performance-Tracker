@@ -89,6 +89,24 @@ export function deleteTask(data, taskId, now) {
   )
 }
 
+// desktop Reviews TaskDetailPopup — edit a completed task's note, completion
+// time and/or completion date (the "worked past midnight" correction). Only
+// the provided keys are merged into the existing completion object; the
+// untouched keys (difficultyId, categoryId) stay exactly as scored.
+export function updateTaskCompletion(data, taskId, patch, now) {
+  return withMeta(
+    {
+      ...data,
+      tasks: (data.tasks || []).map(t =>
+        t.id === taskId
+          ? { ...t, updatedAt: now, completion: { ...t.completion, ...patch } }
+          : t
+      )
+    },
+    now
+  )
+}
+
 // desktop Board.handleToggleWorkingOn
 export function toggleWorkingOn(data, taskId, now) {
   const current = data.workingOn || []
@@ -244,6 +262,117 @@ export function createCategory(data, { name, color }, now) {
     priorityMultiplier: 1
   }
   return withMeta({ ...data, categories: [...(data.categories || []), newCategory] }, now)
+}
+
+// --- Difficulties (desktop Settings "Difficulties" tab) --------------------
+
+// desktop Settings.handleAddDifficulty: label 'New Difficulty', score 1,
+// color #60a5fa, order = length, active.
+export function addDifficulty(data, now) {
+  const newDifficulty = {
+    id: `diff-${Date.now()}`,
+    label: 'New Difficulty',
+    score: 1,
+    color: '#60a5fa',
+    order: (data.difficulties || []).length,
+    active: true
+  }
+  return withMeta(
+    { ...data, difficulties: [...(data.difficulties || []), newDifficulty] },
+    now
+  )
+}
+
+// desktop Settings.handleDifficultyUpdate — merge one field into a
+// difficulty. Looked up BY ID (the desktop uses the rendered array index;
+// the id survives a rebase between render and tap, the index does not).
+export function updateDifficulty(data, difficultyId, patch, now) {
+  return withMeta(
+    {
+      ...data,
+      difficulties: (data.difficulties || []).map(d =>
+        d.id === difficultyId ? { ...d, ...patch } : d
+      )
+    },
+    now
+  )
+}
+
+// desktop Settings.handleMoveDifficulty — swap with the neighbor and rewrite
+// every order value to the new index sequence (exactly what the desktop
+// does after the swap).
+export function moveDifficulty(data, difficultyId, direction, now) {
+  const difficulties = data.difficulties || []
+  const index = difficulties.findIndex(d => d.id === difficultyId)
+  const newIndex = direction === 'up' ? index - 1 : index + 1
+  if (index === -1 || newIndex < 0 || newIndex >= difficulties.length) {
+    return withMeta(data, now)
+  }
+  const updated = [...difficulties]
+  const tmp = updated[index]
+  updated[index] = updated[newIndex]
+  updated[newIndex] = tmp
+  updated.forEach((d, i) => {
+    d.order = i
+  })
+  return withMeta({ ...data, difficulties: updated }, now)
+}
+
+// --- Categories (desktop Settings "Categories" tab) -------------------------
+
+// desktop Settings.handleAddCategory: name 'New Category', color #60a5fa,
+// order = length, active, priorityMultiplier 1.
+export function addCategory(data, now) {
+  const newCategory = {
+    id: `cat-${Date.now()}`,
+    name: 'New Category',
+    color: '#60a5fa',
+    order: (data.categories || []).length,
+    active: true,
+    priorityMultiplier: 1
+  }
+  return withMeta(
+    { ...data, categories: [...(data.categories || []), newCategory] },
+    now
+  )
+}
+
+// desktop Settings.handleCategoryUpdate — merge one field, looked up BY ID.
+export function updateCategory(data, categoryId, patch, now) {
+  return withMeta(
+    {
+      ...data,
+      categories: (data.categories || []).map(c =>
+        c.id === categoryId ? { ...c, ...patch } : c
+      )
+    },
+    now
+  )
+}
+
+// desktop Settings.handleMoveCategory — swap + rewrite order values.
+export function moveCategory(data, categoryId, direction, now) {
+  const categories = data.categories || []
+  const index = categories.findIndex(c => c.id === categoryId)
+  const newIndex = direction === 'up' ? index - 1 : index + 1
+  if (index === -1 || newIndex < 0 || newIndex >= categories.length) {
+    return withMeta(data, now)
+  }
+  const updated = [...categories]
+  const tmp = updated[index]
+  updated[index] = updated[newIndex]
+  updated[newIndex] = tmp
+  updated.forEach((c, i) => {
+    c.order = i
+  })
+  return withMeta({ ...data, categories: updated }, now)
+}
+
+// --- Logs (desktop Settings "Logs" tab) --------------------------------------
+
+// desktop Settings "Clear Logs" — wipe the completion log history.
+export function clearLogs(data, now) {
+  return withMeta({ ...data, logs: [] }, now)
 }
 
 // --- Board layout --------------------------------------------------------

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Performance Tracker",
     "slug": "performance-tracker",
-    "version": "1.0.8",
+    "version": "1.0.9",
     "scheme": "performance-tracker",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "com.getyourwish.performancetracker",
-      "versionCode": 9,
+      "versionCode": 10,
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -31,6 +31,7 @@
       "./plugins/with-expo-gradle-kotlin",
       "./plugins/with-expo-fs-leak",
       "./plugins/with-expo-saf-truncate",
+      "./plugins/with-icon-font",
       "./plugins/with-expo-reactcommon-include",
       "./plugins/with-agp9-compat",
       "./plugins/with-windows-cmake",
