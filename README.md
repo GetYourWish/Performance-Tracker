@@ -1,13 +1,21 @@
 # Performance Tracker
 
-**A private, local-first record of what you accomplished.** Performance Tracker
-is a Windows desktop app with a companion Android app for capturing completed
-work, assigning it a meaningful effort score, and reviewing the history you
-build over time. Your data remains in a single portable `tracker.json` file—no
-account, server, or cloud service is required.
+> **A private, local-first record of what you accomplished.**
+
+Performance Tracker is a Windows desktop app with a companion Android app for
+capturing completed work, assigning it a meaningful effort score, and reviewing
+the history you build over time. Your data remains in a single portable
+`tracker.json` file—no account, server, or cloud service is required.
+
+**In this guide:** [Quick start](#quick-start) ·
+[Using the board](#how-to-use-the-board) ·
+[Scoring](#understand-your-score) · [Reviews](#read-your-history) ·
+[Your data](#your-data-and-backups) · [Development](#development)
 
 
-## What it is—and is not
+---
+
+## 🎯 What it is—and is not
 
 Performance Tracker is deliberately focused on **completed work**. Add items to
 the board as a lightweight prompt for yourself, then record the effort when you
@@ -19,7 +27,7 @@ cloud-synced to-do list. There are no required accounts, deadlines, assignees,
 or online services. You can use as much or as little organization as you like:
 typing a task and completing it is enough to get started.
 
-## At a glance
+## ✨ At a glance
 
 - **Desktop and Android:** Both apps use the same `tracker.json` format, so
   scores and history match across devices.
@@ -32,9 +40,11 @@ typing a task and completing it is enough to get started.
 - **Your file, your control:** Choose where the data file lives, create manual
   backups, and use Syncthing if you want to carry the same file between devices.
 
-## Quick start
+---
 
-### Windows desktop
+## 🚀 Quick start
+
+### 🖥️ Windows desktop
 
 1. Download and run the Windows build, or run the app from source as described
    in [Development](#development).
@@ -46,10 +56,11 @@ typing a task and completing it is enough to get started.
 5. Open **Reviews** to see your recorded work. Open **Settings** whenever you
    want to change scoring, categories, theme, or the data-file location.
 
-That is the complete minimum workflow. Categories, Working On, the randomizer,
-and syncing are optional additions rather than setup requirements.
+> **Minimum workflow:** That is the complete minimum workflow. Categories,
+> Working On, the randomizer, and syncing are optional additions rather than
+> setup requirements.
 
-### Android companion app
+### 📱 Android companion app
 
 1. Install the Android build.
 2. At setup, grant access to the folder containing `tracker.json`—typically the
@@ -64,7 +75,9 @@ Android uses the system folder picker and does not need broad storage access.
 For the safest shared setup, let Syncthing finish syncing before editing on the
 other device.
 
-## How to use the board
+---
+
+## 📋 How to use the board
 
 ### Add and arrange tasks
 
@@ -99,7 +112,9 @@ The task is removed from the board, added to your completion history, and
 included in the score for its selected date. Reviews allow you to inspect—and
 where available edit—the saved completion details later.
 
-## Organize with categories (optional)
+---
+
+## 🗂️ Organize with categories *(optional)*
 
 Categories give sections of the board a name and color, such as *Work*,
 *Health*, or *Learning*. Create and edit categories in **Settings**.
@@ -118,7 +133,9 @@ a new marker at the end of the board.
 Categories are not required. Tasks outside a matching marker pair remain
 uncategorized and still score normally.
 
-## Understand your score
+---
+
+## 📈 Understand your score
 
 Each difficulty has a label, color, and base score. The defaults are:
 
@@ -157,7 +174,9 @@ Changing scoring settings recalculates the views built from your history. The
 completion log retains the score breakdown recorded when each task was
 completed, which is useful for auditing what happened at the time.
 
-## Read your history
+---
+
+## 🔎 Read your history
 
 Open **Reviews** to turn completions into a useful record:
 
@@ -175,7 +194,9 @@ The exact set and presentation of review controls differs slightly between the
 desktop and Android layouts, but both read the same history and use the same
 scoring rules.
 
-## Settings you may want to change
+---
+
+## ⚙️ Settings you may want to change
 
 | Setting | Why change it? |
 | --- | --- |
@@ -187,7 +208,9 @@ scoring rules.
 | **Heatmap mode** | Show daily score or simply the number of completed tasks. |
 | **Data location** | View, open, back up, or move the folder containing `tracker.json`. |
 
-## Your data and backups
+---
+
+## 🛡️ Your data and backups
 
 Everything important lives in one UTF-8 JSON file named `tracker.json`. This
 makes your history easy to keep, move, and back up.
@@ -215,7 +238,9 @@ Do not edit `tracker.json` by hand while either app is open unless you know the
 schema. If you need to inspect or integrate with it, see the complete
 [data schema](packages/core/SCHEMA.md).
 
-## Sync with Syncthing
+---
+
+## 🔄 Sync with Syncthing
 
 Syncthing is optional, but it is a practical way to use the same history on a
 Windows computer and Android device without introducing a cloud account.
@@ -233,7 +258,9 @@ Windows computer and Android device without introducing a cloud account.
 The file watcher/polling mechanisms detect external updates, but they cannot
 merge two independently edited JSON files. Back up before resolving a conflict.
 
-## Development
+---
+
+## 🛠️ Development
 
 ### Requirements
 
@@ -288,7 +315,9 @@ npm run lint
 npm run check:core-pin
 ```
 
-## Project layout
+---
+
+## 🧭 Project layout
 
 ```text
 desktop/         Electron + React desktop application
@@ -301,6 +330,8 @@ The shared core is intentionally the source of truth for the on-disk format,
 data healing, and scoring. This is what lets desktop and Android show the same
 result for the same `tracker.json`.
 
-## License
+---
+
+## 📄 License
 
 [MIT](LICENSE)
