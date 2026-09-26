@@ -7,6 +7,9 @@ capturing completed work, assigning it a meaningful effort score, and reviewing
 the history you build over time. Your data remains in a single portable
 `tracker.json` file—no account, server, or cloud service is required.
 
+Watch the video about Performance Tracker here :
+https://gitdiagram.com/getyourwish/performance-tracker
+
 **In this guide:** [Quick start](#quick-start) ·
 [Using the board](#how-to-use-the-board) ·
 [Scoring](#understand-your-score) · [Reviews](#read-your-history) ·
