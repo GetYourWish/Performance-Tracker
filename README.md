@@ -4,6 +4,19 @@ A personal local-first desktop performance tracker for Windows. Track your tasks
 
 ---
 
+## 🧭 In this README
+
+- [Core philosophy](#-core-philosophy) · [Features](#-key-features) · [Data storage](#-data-storage)
+- [Android app](#-android-app) · [Installation and development](#-installation--development)
+- [Usage guide](#-usage-guide) · [Configuration](#-configuration) · [Project structure](#-project-structure)
+- [License](#-license) · [Repository](#-repository)
+
+> **Tip:** The Android section includes both the current app overview and a
+> detailed build, recovery, and troubleshooting reference. Expand only the
+> reference item you need.
+
+---
+
 ## 🧠 Core Philosophy
 
 | Principle | Description |
@@ -132,7 +145,11 @@ theme.
 - **Conflicts**: Syncthing `-conflict-` copies are surfaced on the board and in
   Settings — never auto-loaded, never auto-deleted
 
-#### v1.0.7 build fix — `jserrorhandler/ErrorUtils.h` not found (2026-09-19)
+### 📚 Android release, build & troubleshooting reference
+
+<details>
+<summary><strong>v1.0.7 build fix — `jserrorhandler/ErrorUtils.h` not found (2026-09-19)</strong></summary>
+
 
 **Symptom (remote-reported):** the mandatory v1.0.7 rebuild
 (`git pull` → `npm install` → `clean:native` → `gradlew assembleRelease`)
@@ -201,7 +218,12 @@ the file changed, then recompiles `expo-modules-core` with the new include
 path. If the build still behaves oddly, `npm run clean:native` now also wipes
 `expo-modules-core`'s stale `.cxx`.)
 
-#### v1.0.11 — the broken teleport, solid background, light theme, real Flow chart + consecutive marker spacing
+
+</details>
+
+<details>
+<summary><strong>v1.0.11 — the broken teleport, solid background, light theme, real Flow chart + consecutive marker spacing</strong></summary>
+
 
 **Symptoms (2026-09-23, remote-reported):** *"category teleport did not work,
 maybe the Board code doesnt have something that understands the solution you
@@ -274,7 +296,12 @@ desktop 6/6, root eslint clean, core-pin guard OK, metro bundle export OK
 `gradlew assembleRelease` (no `clean:native` needed) — the loading screen
 must show **v1.0.11**.
 
-#### v1.0.10 — the missing Randomizer, category teleport + Working On popup (desktop feature parity)
+
+</details>
+
+<details>
+<summary><strong>v1.0.10 — the missing Randomizer, category teleport + Working On popup (desktop feature parity)</strong></summary>
+
 
 **Symptoms (2026-09-22, remote-reported):** *"some few features we need to
 add are the working on pop up that is missing, the ability to click on a
@@ -335,7 +362,12 @@ mobile board never had, all ported:
 `cd mobile/android && ./gradlew assembleRelease`. No prebuild changes were
 made; the loading screen should show **v1.0.10**.
 
-#### v1.0.9 — the blank-icons + missing-Reviews/Appearance fix (full desktop UI parity)
+
+</details>
+
+<details>
+<summary><strong>v1.0.9 — the blank-icons + missing-Reviews/Appearance fix (full desktop UI parity)</strong></summary>
+
 
 **Symptoms (2026-09-22, remote-reported):** *"in the android app there is
 blank spaces in the places of actual icons… there is even missing settings
@@ -423,7 +455,12 @@ completion-edit actions, difficulty/category/log actions), core vitest
 byte-identical to the desktop's atomicSave format), eslint 0 errors, metro
 export OK (2.2 MB).
 
-#### v1.0.8 — the 'every action corrupts tracker.json' fix (truncation-proof SAF writes)
+
+</details>
+
+<details>
+<summary><strong>v1.0.8 — the 'every action corrupts tracker.json' fix (truncation-proof SAF writes)</strong></summary>
+
 
 **Symptoms (2026-09-21, remote-reported, screenshot-confirmed):** *"whenever
 i do something in the app like changing the theme or adding a new task it
@@ -501,7 +538,12 @@ persistent-corruption recovery sources, and the dedupe guard), core vitest
 42/42, desktop 6/6, core-pin guard OK, eslint 0 errors, metro export OK
 (2.1 MB).
 
-#### v1.0.7 — the crash-proofing + UI repair release
+
+</details>
+
+<details>
+<summary><strong>v1.0.7 — the crash-proofing + UI repair release</strong></summary>
+
 
 **Symptoms (2026-09-18, remote-reported):** after salvaging a corrupt file,
 *"i cant create a new task without having it crash, i cant change the theme
@@ -565,7 +607,12 @@ After installing, verify: the loading screen says **v1.0.7**; Settings → About
 says **v1.0.7 (js bundle)**; the FAB is a purple pill; dialog buttons are
 readable in dark mode.
 
-#### v1.0.6 — the corrupt tracker.json fix (data-loss class) + built-in recovery
+
+</details>
+
+<details>
+<summary><strong>v1.0.6 — the corrupt tracker.json fix (data-loss class) + built-in recovery</strong></summary>
+
 
 **Symptom (2026-09-17, remote-reported):** fiddling with the theme in Settings
 worked at first, then changes silently stopped applying; after restarting the
@@ -634,7 +681,12 @@ out-of-tree against instrumented adapters — concurrent mutations now provably
 never overlap an adapter write op), core vitest 42/42, core-pin guard OK,
 eslint 0 errors, metro export OK.
 
-#### v1.0.5 — the board crash fix ("Element type is invalid") + REGENERATE YOUR ANDROID FOLDER
+
+</details>
+
+<details>
+<summary><strong>v1.0.5 — the board crash fix ("Element type is invalid") + REGENERATE YOUR ANDROID FOLDER</strong></summary>
+
 
 **Symptom (2026-09-17 crash report, captured by the on-device crash logger):**
 the app finally got past "Loading…" — and then crashed the moment the board
@@ -714,7 +766,12 @@ Rule of thumb for the future: **JS-only change → `gradlew assembleRelease`
 is enough; anything touching `app.json` (version, permissions, plugins) or
 native config → re-run `clean:native` first.**
 
-#### v1.0.4 — the REAL "stuck on Loading…" fix + no more network permission
+
+</details>
+
+<details>
+<summary><strong>v1.0.4 — the REAL "stuck on Loading…" fix + no more network permission</strong></summary>
+
 
 *(Rebuild note: the flow below predates the v1.0.5 discovery that the android
 folder was stale — use the v1.0.5 flow above, which adds `clean:native`.)*
@@ -783,7 +840,12 @@ Install the new APK over the old one (versionCode 5) and open it — if it
 still misbehaves, the screen itself now says which version you are running
 and the store's watchdog/timeout errors are actually displayed.
 
-#### v1.0.3 — fixing "stuck on Loading…" / "created tracker.json but it can't be read"
+
+</details>
+
+<details>
+<summary><strong>v1.0.3 — fixing "stuck on Loading…" / "created tracker.json but it can't be read"</strong></summary>
+
 
 Three device-only bugs shipped in v1.0.2's storage layer, all found by reading
 expo-file-system 57.0.6's actual sources (`src/legacy/FileSystem.ts` +
@@ -830,7 +892,12 @@ Folders used with the broken v1.0.2 may contain junk documents named
 tracker.json copies the old build created; they are never read or written by
 v1.0.3 and can be deleted manually (the real `tracker.json` is untouched).
 
-#### Building the standalone APK (release) — the only APK that works without Metro
+
+</details>
+
+<details>
+<summary><strong>Building the standalone APK (release) — the only APK that works without Metro</strong></summary>
+
 
 ```bash
 npm run prebuild --workspace @performance-tracker/mobile  # regenerates mobile/android from scratch; pins Gradle via mobile/plugins/
@@ -888,7 +955,12 @@ never see a red screen on the phone. Release APKs are signed with the debug
 keystore by default (fine for personal use and sideloading; generate a real
 keystore before any store/public release).
 
-#### Why an APK says "Unable to load script" (debug vs release)
+
+</details>
+
+<details>
+<summary><strong>Why an APK says "Unable to load script" (debug vs release)</strong></summary>
+
 
 React Native apps ship their JavaScript **inside the APK**
 (`assets/index.android.bundle`). Verified against react-native 0.87.1 + expo 57
@@ -931,7 +1003,12 @@ Tracker DEBUG.
   - Android Studio's green Run button — always installs the **debug** variant
   - installing `app-debug.apk` instead of `app-release.apk`
 
-#### If the app crashes right when you open it
+
+</details>
+
+<details>
+<summary><strong>If the app crashes right when you open it</strong></summary>
+
 
 A **release** build has no red error screen — any fatal startup error just
 closes the app silently. Three layers of evidence exist, pick whichever is
@@ -980,7 +1057,12 @@ npm run test:core:rn                                    # Hermes drift guard
 npm run clean:native --workspace @performance-tracker/mobile  # repair Windows C++ build caches
 ```
 
-#### Android build troubleshooting — ninja C++ failures on Windows
+
+</details>
+
+<details>
+<summary><strong>Android build troubleshooting — ninja C++ failures on Windows</strong></summary>
+
 
 The release build compiles C++ through CMake + ninja for
 `react-native-reanimated`, `react-native-worklets`, and (via the app's
@@ -1047,7 +1129,12 @@ it is no longer the CMakeLists loop. Remaining environmental causes:
 2. **System clock drift** (ninja compares file timestamps): make sure Windows
    time sync is on (Settings → Time & language). Rare, but documented.
 
-#### The app says "No tracker.json in this folder"
+
+</details>
+
+<details>
+<summary><strong>The app says "No tracker.json in this folder"</strong></summary>
+
 
 That screen is not an error state to panic about — it means exactly what it
 says: **the folder you picked on the phone does not contain `tracker.json`
@@ -1091,7 +1178,12 @@ file and keeps a backup of its previous content in the app's private area.)
 > message instead of an endless spinner, and a stalled folder read can no
 > longer freeze the boot splash.
 
-#### Android SDK prerequisites
+
+</details>
+
+<details>
+<summary><strong>Android SDK prerequisites</strong></summary>
+
 
 `gradlew assembleDebug` needs an Android SDK (the Gradle build auto-installs
 missing platform 37 / build-tools 37 / NDK 27.1 as long as one SDK root exists
@@ -1112,6 +1204,8 @@ instructions when no SDK is found.
 > It is rebuilt by `npm run prebuild` (which passes `--clean`), and build
 > customizations like the Gradle version are enforced by the config plugins in
 > [`mobile/plugins/`](mobile/plugins).
+
+</details>
 
 See [`docs/SYNC-DESIGN.md`](docs/SYNC-DESIGN.md) for how the two apps share one
 file safely, and [`mobile/`](mobile) for the app source.
@@ -1276,4 +1370,3 @@ https://github.com/GetYourWish/Performance-Tracker
 <div align="center">
   <p>Made with ❤️ for productivity enthusiasts</p>
 </div>
-
