@@ -6,9 +6,6 @@ work, assigning it a meaningful effort score, and reviewing the history you
 build over time. Your data remains in a single portable `tracker.json` file—no
 account, server, or cloud service is required.
 
-> **Suggested repository description:** Local-first desktop and Android app for
-> tracking completed work, effort scores, and productivity history in one
-> portable JSON file.
 
 ## What it is—and is not
 
