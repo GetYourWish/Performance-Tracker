@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { getCurrentDate } from '@performance-tracker/core'
+import { getCurrentDate, deadlineState } from '@performance-tracker/core'
 
 function CompletionPopup({ task, difficulties, onConfirm, onCancel }) {
   const [selectedDifficulty, setSelectedDifficulty] = useState(null)
@@ -7,6 +7,7 @@ function CompletionPopup({ task, difficulties, onConfirm, onCancel }) {
   const [note, setNote] = useState('')
   
   const activeDifficulties = difficulties.filter(d => d.active !== false)
+  const deadlineInfo = deadlineState(task.deadline, getCurrentDate())
   
   const handleConfirm = useCallback(() => {
     if (!selectedDifficulty) return
@@ -40,6 +41,17 @@ function CompletionPopup({ task, difficulties, onConfirm, onCancel }) {
           <h3 id="completion-popup-title">Complete Task</h3>
           
           <div className="task-text">{task.text}</div>
+
+          {deadlineInfo && (
+            <div className="completion-deadline-row">
+              <span
+                className={`task-deadline-chip ${deadlineInfo.overdue ? 'overdue' : ''} ${deadlineInfo.dueToday ? 'due-today' : ''}`}
+                title={`Deadline: ${task.deadline}`}
+              >
+                ⏱ {deadlineInfo.label} (deadline {task.deadline})
+              </span>
+            </div>
+          )}
 
           <div className="form-group">
             <label id="difficulty-label">Difficulty</label>

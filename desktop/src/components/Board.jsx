@@ -17,7 +17,14 @@ import {
 } from '@dnd-kit/sortable'
 import CompletionPopup from './CompletionPopup'
 import BoardRow from './BoardRow'
-import { generateId, getCurrentDate, getTaskCategory, calculateTaskScoreBreakdown } from '@performance-tracker/core'
+import {
+  generateId,
+  getCurrentDate,
+  getTaskCategory,
+  calculateTaskScoreBreakdown,
+  createThreadContinuation,
+  hasThreadSuffix
+} from '@performance-tracker/core'
 
 // Simple category chip with + button to add marker
 function CategoryChip({ category, onAddMarker, onNavigateToMarker }) {
@@ -127,6 +134,9 @@ function CategorySidebar({ categories, onCreateCategory, onAddMarker, onNavigate
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#60a5fa')
   const [isCollapsed, setIsCollapsed] = useState(false)
+  // v1.1.0 info bubble (user request: the hint text below the Categories
+  // header must disappear and come up from an info bubble instead)
+  const [showInfo, setShowInfo] = useState(false)
   
   const handleCreateCategory = () => {
     if (!newCategoryName.trim()) return
@@ -168,6 +178,15 @@ function CategorySidebar({ categories, onCreateCategory, onAddMarker, onNavigate
     <div className="category-grabber">
       <div className="category-grabber-header">
         <h4>Categories</h4>
+        <button
+          className="sidebar-info-btn"
+          onClick={() => setShowInfo(v => !v)}
+          aria-label={showInfo ? 'Hide categories info' : 'Show categories info'}
+          aria-expanded={showInfo}
+          title="How categories work"
+        >
+          i
+        </button>
         <button 
           className="collapse-btn"
           onClick={() => setIsCollapsed(true)}
@@ -176,9 +195,13 @@ function CategorySidebar({ categories, onCreateCategory, onAddMarker, onNavigate
           −
         </button>
       </div>
-      <p className="drag-hint">Click + on a category to add a marker to the board</p>
+      {showInfo && (
+        <p className="drag-hint category-info-popover" role="status">
+          Click + on a category to add a marker to the board
+        </p>
+      )}
       
-      <div className="categories-list">
+      <div className="categories-list categories-scroll">
         {[...categories].sort((a, b) => {
           const pa = a.priorityMultiplier ?? 1
           const pb = b.priorityMultiplier ?? 1
@@ -672,17 +695,24 @@ function Board({ data, onSave }) {
   }, [boardItems])
 
   const handleAddMarker = useCallback((category) => {
+    const now = new Date().toISOString()
     const newMarker = {
       id: generateId(),
       categoryId: category.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: now,
+      updatedAt: now
+    }
+    // v1.1.0: a new marker inherits the CATEGORY-level note so the note
+    // "applies to all markers of the same category" without re-typing it
+    // (user request 2026-11-17).
+    if (typeof category.note === 'string' && category.note.trim() !== '') {
+      newMarker.note = category.note
     }
     onSave({
       ...data,
       markers: [...markers, newMarker],
       board: [...boardItems, { type: 'marker', markerId: newMarker.id }],
-      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+      meta: { ...data.meta, updatedAt: now }
     })
   }, [data, markers, boardItems, onSave])
 
@@ -856,18 +886,31 @@ function Board({ data, onSave }) {
   }, [cleanupDragListeners])
 
   const handleMarkerDrop = useCallback((categoryId, isNewCategory = false, insertionId = null, categoryObj = null, appendToEnd = false) => {
+    // v1.1.0 helper: marker factory that inherits the CATEGORY-level note
+    // (user request: the category note applies to all markers of the same
+    // category — new markers must not ask for it again).
+    const buildMarker = (catId, catEntity) => {
+      const now = new Date().toISOString()
+      const marker = {
+        id: generateId(),
+        categoryId: catId,
+        createdAt: now,
+        updatedAt: now
+      }
+      const noteSource = catEntity || categories.find(c => c.id === catId)
+      if (noteSource && typeof noteSource.note === 'string' && noteSource.note.trim() !== '') {
+        marker.note = noteSource.note
+      }
+      return marker
+    }
+
     // If this is a new category being created, we need to add it to categories first
     if (isNewCategory && typeof categoryId === 'object') {
       // categoryId is actually the new category object
       const newCategory = categoryId
       const updatedCategories = [...categories, newCategory]
       
-      const newMarker = {
-        id: generateId(),
-        categoryId: newCategory.id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
+      const newMarker = buildMarker(newCategory.id, newCategory)
 
       const updatedMarkers = [...markers, newMarker]
       let updatedBoard
@@ -907,12 +950,7 @@ function Board({ data, onSave }) {
     // Normal case - existing category from sidebar
     if (categoryObj) {
       // We have the category object passed directly
-      const newMarker = {
-        id: generateId(),
-        categoryId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
+      const newMarker = buildMarker(categoryId, categoryObj)
 
       const updatedMarkers = [...markers, newMarker]
       let updatedBoard
@@ -951,12 +989,7 @@ function Board({ data, onSave }) {
     }
     
     // Fallback case - existing category without object
-    const newMarker = {
-      id: generateId(),
-      categoryId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
+    const newMarker = buildMarker(categoryId)
 
     const updatedMarkers = [...markers, newMarker]
     let updatedBoard
@@ -1008,23 +1041,99 @@ function Board({ data, onSave }) {
   }, [markers, boardItems, data, onSave])
 
   const handleUpdateMarkerNote = useCallback((markerId, note) => {
+    const now = new Date().toISOString()
+    const trimmed = note.trim()
+
+    // v1.1.0 — the note applies to ALL markers of the same category (user
+    // request 2026-11-17: "make the category note apply to all markers of the
+    // same category wihtout me having to add it everytime"). The edited
+    // marker's category is resolved, every marker of that category gets the
+    // SAME note, and the category entity stores it as the source of truth so
+    // FUTURE markers inherit it (see handleAddMarker / handleMarkerDrop).
+    const editedMarker = markers.find(m => m.id === markerId)
+    const targetCategoryId = editedMarker ? editedMarker.categoryId : null
+
     const updatedMarkers = markers.map(m => {
-      if (m.id === markerId) {
-        return { 
-          ...m, 
-          note: note.trim(),
-          updatedAt: new Date().toISOString() 
+      if (m.id === markerId || (targetCategoryId && m.categoryId === targetCategoryId)) {
+        return {
+          ...m,
+          note: trimmed,
+          updatedAt: now
         }
       }
       return m
     })
 
-    onSave({
+    const nextData = {
       ...data,
       markers: updatedMarkers,
-      meta: { ...data.meta, updatedAt: new Date().toISOString() }
+      meta: { ...data.meta, updatedAt: now }
+    }
+
+    // Store the note on the category too — future markers copy it.
+    if (targetCategoryId) {
+      nextData.categories = categories.map(c =>
+        c.id === targetCategoryId ? { ...c, note: trimmed } : c
+      )
+    }
+
+    onSave(nextData)
+  }, [markers, categories, data, onSave])
+
+  // v1.1.0 — "threads": create a continuation task for work that spans more
+  // than one day. Same base text plus a " #N" suffix (core
+  // createThreadContinuation; N continues the thread even across completed
+  // members), inserted DIRECTLY BELOW the source task, linked via
+  // task.threadOf (user request 2026-11-17).
+  const handleCreateThreadTask = useCallback((taskId) => {
+    const allTasks = data.tasks || []
+    const sourceTask = allTasks.find(t => t.id === taskId)
+    if (!sourceTask) return
+
+    const now = new Date().toISOString()
+    const newTask = createThreadContinuation({
+      sourceTask,
+      tasks: allTasks,
+      now,
+      generateId
     })
-  }, [markers, data, onSave])
+
+    const sourceIndex = boardItems.findIndex(
+      item => item.type === 'task' && item.taskId === taskId
+    )
+    const insertIndex = sourceIndex === -1 ? boardItems.length : sourceIndex + 1
+    const updatedBoard = [
+      ...boardItems.slice(0, insertIndex),
+      { type: 'task', taskId: newTask.id },
+      ...boardItems.slice(insertIndex)
+    ]
+
+    onSave({
+      ...data,
+      tasks: [...allTasks, newTask],
+      board: updatedBoard,
+      meta: { ...data.meta, updatedAt: now }
+    })
+  }, [data, boardItems, onSave])
+
+  // v1.1.0 — DEADLINES: set or clear a task's deadline ('YYYY-MM-DD'; empty
+  // string removes the field entirely). Presentation only — scoring is
+  // untouched (user request 2026-11-17).
+  const handleSetDeadline = useCallback((taskId, deadline) => {
+    const now = new Date().toISOString()
+    const updatedTasks = (data.tasks || []).map(t => {
+      if (t.id !== taskId) return t
+      const next = { ...t, updatedAt: now }
+      if (deadline) next.deadline = deadline
+      else delete next.deadline // clear = the key is gone entirely
+      return next
+    })
+    onSave({
+      ...data,
+      tasks: updatedTasks,
+      meta: { ...data.meta, updatedAt: now }
+    })
+  }, [data, onSave])
 
 
   // Filter boardItems to only include items that will actually be rendered
@@ -1080,6 +1189,11 @@ function Board({ data, onSave }) {
     boardItems.map(i => i.type === 'task' ? i.taskId : i.markerId)
   , [boardItems])
 
+  // Today's local calendar date — read fresh on every render pass so the
+  // deadline chips in board rows stay correct across midnight rollovers
+  // (no memo: getCurrentDate() is a trivial local-calendar format).
+  const today = getCurrentDate()
+
   // Render board rows with insertion points
   const renderBoardRows = useMemo(() => {
     const rows = []
@@ -1124,6 +1238,12 @@ function Board({ data, onSave }) {
             isWorkingOn={workingOnTasks.includes(item.taskId)}
             onToggleWorkingOn={handleToggleWorkingOn}
             selectionSize={selectedItems.length}
+            onCreateThread={() => handleCreateThreadTask(task.id)}
+            isThreadTask={Boolean(task.threadOf)}
+            isRecurringTask={Boolean(task.recurringOf)}
+            deadline={task.deadline}
+            onSetDeadline={(deadline) => handleSetDeadline(task.id, deadline)}
+            today={today}
           />
         )
         
@@ -1178,7 +1298,7 @@ function Board({ data, onSave }) {
     
     return rows
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleBoardItems, editingTask, selectedItems, workingOnTasks, dropIndicatorId, categoryLookup, taskMap, markerMap, handleSelectItem, handleCompleteClick, handleDeleteTask, handleUpdateTask, handleDeleteMarker, handleMoveItem, handleAddTaskBelowMarker, handleMarkerDrop, handleUpdateMarkerNote, handleToggleWorkingOn, settings])
+  }, [visibleBoardItems, editingTask, selectedItems, workingOnTasks, dropIndicatorId, categoryLookup, taskMap, markerMap, handleSelectItem, handleCompleteClick, handleDeleteTask, handleUpdateTask, handleDeleteMarker, handleMoveItem, handleAddTaskBelowMarker, handleMarkerDrop, handleUpdateMarkerNote, handleToggleWorkingOn, handleCreateThreadTask, handleSetDeadline, today, settings])
 
   return (
     <div className="board-container">

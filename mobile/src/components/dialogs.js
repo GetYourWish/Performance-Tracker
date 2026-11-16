@@ -231,3 +231,66 @@ const styles = {
     marginBottom: 8
   })
 }
+
+// v1.1.0 — Deadline editor (desktop BoardRow deadline editor parity, user
+// request 2026-11-17: "add DEADLINES to tasks"). Typed YYYY-MM-DD (validated
+// by the same DATE_RE as the completion-date editor — RN has no bundled
+// date picker and the app takes no extra native deps); empty input clears
+// the deadline.
+export function DeadlineDialog({ theme, task, onSave, onClose }) {
+  const [deadline, setDeadline] = useState('')
+
+  useEffect(() => {
+    if (task) setDeadline(task.deadline || '')
+  }, [task])
+
+  const trimmed = deadline.trim()
+  const valid = trimmed === '' || DATE_RE.test(trimmed)
+
+  function save() {
+    if (!valid) return
+    onSave(trimmed)
+  }
+
+  if (!task) return null
+
+  return (
+    <Dialog
+      theme={theme}
+      visible={!!task}
+      title="Deadline"
+      onClose={onClose}
+      actions={
+        <>
+          {task.deadline ? (
+            <TextButton theme={theme} label="Clear" onPress={() => onSave('')} />
+          ) : null}
+          <TextButton theme={theme} label="Cancel" onPress={onClose} />
+          <TextButton theme={theme} label="Save" onPress={save} disabled={!valid} />
+        </>
+      }
+    >
+      <Text style={{ color: theme.textPrimary, ...TYPE.body, marginBottom: SPACING.md }}>
+        {String(task?.text ?? '')}
+      </Text>
+      <TextInput
+        style={inputStyle(theme)}
+        value={deadline}
+        onChangeText={setDeadline}
+        placeholder="YYYY-MM-DD (empty = no deadline)"
+        placeholderTextColor={theme.textMuted}
+        maxLength={10}
+        inputMode="numeric"
+        autoFocus
+        onSubmitEditing={save}
+        returnKeyType="done"
+        blurOnSubmit
+      />
+      {!valid ? (
+        <Text style={{ color: theme.danger, marginTop: SPACING.sm, ...TYPE.caption }}>
+          Use the format YYYY-MM-DD, for example 2026-12-24.
+        </Text>
+      ) : null}
+    </Dialog>
+  )
+}

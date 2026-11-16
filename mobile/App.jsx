@@ -1,7 +1,7 @@
 // App root — theme resolution, screen switching, bottom navigation.
 // Mirrors desktop App.jsx: loading → schema gate → setup → (board | settings).
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { View, Text, ActivityIndicator, StyleSheet, StatusBar } from 'react-native'
 import { useColorScheme } from 'react-native'
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
@@ -17,6 +17,7 @@ import { SettingsScreen } from './src/screens/SettingsScreen.js'
 import { CrashReportScreen } from './src/screens/CrashReportScreen.js'
 import { ErrorScreen } from './src/screens/ErrorScreen.js'
 import ErrorBoundary from './src/components/ErrorBoundary.js'
+import { materializeRecurringTasks, getCurrentDate, generateId } from '@performance-tracker/core'
 import appJson from './app.json'
 
 // Shown on every loading/error screen so a screenshot identifies the exact
@@ -69,6 +70,34 @@ function AppShell() {
   }, [])
 
   const { store, state, folderUri, autoSync, booted, pickFolder, setAutoSync, refresh, forgetFolder } = useTracker()
+
+  // v1.1.0 — weekday-scheduled recurring tasks (user request 2026-11-17):
+  // materialize today's instances whenever fresh data lands (boot, external
+  // change, mutation). The core helper is idempotent per calendar day via
+  // the persisted lastRun stamp (so a synced desktop materialization makes
+  // this a no-op) and returns the SAME data reference when nothing is due,
+  // which makes the store's no-change-no-write skip the disk entirely.
+  const materializedDataRef = useRef(null)
+  useEffect(() => {
+    if (state.status !== 'ready' || !state.data) return
+    if (materializedDataRef.current === state.data) return
+    materializedDataRef.current = state.data
+    store
+      .mutate((d, now) => {
+        const { data: next, created } = materializeRecurringTasks({
+          data: d,
+          today: getCurrentDate(),
+          now,
+          generateId
+        })
+        return created.length > 0 ? next : d
+      })
+      .catch(() => {
+        // a failed materialization must never block the app — next data
+        // change retries it
+        materializedDataRef.current = null
+      })
+  }, [state.status, state.data, store])
 
   // theme preference follows data.settings.theme (desktop parity); the
   // optimistic override wins until the write settles

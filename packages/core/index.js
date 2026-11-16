@@ -29,6 +29,21 @@ const {
 const { getTaskCategory } = require('./src/categories')
 const { createDefaultData } = require('./src/defaults')
 const { checkSchemaVersion, validateAndHealData } = require('./src/schema')
+const {
+  stripThreadSuffix,
+  hasThreadSuffix,
+  threadRootOf,
+  threadTasks,
+  nextThreadNumber,
+  createThreadContinuation
+} = require('./src/threads')
+const { daysUntilDeadline, deadlineState } = require('./src/deadlines')
+const { sortWorkingOnByPriority } = require('./src/workingOn')
+const {
+  isDueOn,
+  findSectionTopIndex,
+  materializeRecurringTasks
+} = require('./src/recurring')
 
 module.exports = {
   // ids
@@ -54,5 +69,21 @@ module.exports = {
   createDefaultData,
   // schema
   checkSchemaVersion,
-  validateAndHealData
+  validateAndHealData,
+  // threads (task continuations, "#N" suffixes)
+  stripThreadSuffix,
+  hasThreadSuffix,
+  threadRootOf,
+  threadTasks,
+  nextThreadNumber,
+  createThreadContinuation,
+  // deadlines
+  daysUntilDeadline,
+  deadlineState,
+  // working-on display order (category priority)
+  sortWorkingOnByPriority,
+  // recurring (weekday-scheduled pre-loaded tasks)
+  isDueOn,
+  findSectionTopIndex,
+  materializeRecurringTasks
 }

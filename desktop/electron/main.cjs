@@ -27,6 +27,15 @@ let cachedIconThemes = null;
 // prevents pointless rewrites and Syncthing sync loops).
 let lastSerializedTracker = null;
 
+// Backup rotation rules (window size + EXACT file-name pattern) live in the
+// pure, unit-tested backup-utils.cjs — see that file for the user request
+// and the safety rationale ("must delete carefuly").
+const {
+  BACKUP_KEEP,
+  isBackupFileName,
+  selectBackupsToDelete
+} = require('./backup-utils.cjs');
+
 // Guard: refuse files written by a NEWER app version. Delegates to the shared
 // core package — the single authority on schema rules (zero drift principle).
 const { checkSchemaVersion } = require('@performance-tracker/core');
@@ -136,7 +145,12 @@ async function createBackup() {
       return null;
     }
     
-    const backupDir = path.join(path.dirname(dataFilePath), '.backups');
+    // The backup dir is ALWAYS derived from the CURRENT data file location —
+    // never cached, never guessed. A wrong folder here means deleting user
+    // files, so every step re-resolves and validates (user request:
+    // "the folder location thing is important here to not make mistakes").
+    const dataDir = path.dirname(path.resolve(dataFilePath));
+    const backupDir = path.join(dataDir, '.backups');
     await fs.mkdir(backupDir, { recursive: true });
     
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -145,23 +159,49 @@ async function createBackup() {
     
     await fs.copyFile(dataFilePath, backupPath);
     
-    // Clean up old backups (keep ~20 most recent)
-    const files = await fs.readdir(backupDir);
-    const jsonFiles = files.filter(f => f.startsWith('tracker-') && f.endsWith('.json'))
-                          .sort();
-    
-    if (jsonFiles.length > 20) {
-      const toDelete = jsonFiles.slice(0, jsonFiles.length - 20);
-      for (const file of toDelete) {
-        await fs.unlink(path.join(backupDir, file));
-      }
-    }
+    // Rotate: keep the newest BACKUP_KEEP backups. Deletion is deliberately
+    // paranoid — only entries that (a) match the EXACT backup file name
+    // pattern, (b) sit directly inside the resolved .backups directory and
+    // (c) are regular files (no symlink shenanigans) are ever unlinked.
+    await pruneOldBackups(backupDir);
     
     return backupPath;
   } catch (error) {
     console.error('Error creating backup:', error);
     throw error;
   }
+}
+
+// Delete the oldest backups beyond the rotation window. Every candidate is
+// re-validated against the resolved backupDir and stat-checked as a regular
+// file BEFORE unlinking — a name that looks right but is a directory, a
+// symlink or lives outside backupDir is never touched.
+async function pruneOldBackups(backupDir) {
+  const resolvedBackupDir = path.resolve(backupDir);
+  const files = await fs.readdir(resolvedBackupDir);
+  const toDelete = selectBackupsToDelete(files);
+
+  for (const name of toDelete) {
+    const target = path.join(resolvedBackupDir, name);
+    // Defense in depth: the name must STILL resolve inside backupDir (no
+    // path traversal via crafted file names) and be a regular file.
+    if (path.dirname(target) !== resolvedBackupDir) {
+      console.warn(`Backup rotation skipped suspicious path: ${name}`);
+      continue;
+    }
+    let stat;
+    try {
+      stat = await fs.lstat(target);
+    } catch (e) {
+      continue; // vanished between readdir and unlink — fine
+    }
+    if (!stat.isFile()) {
+      console.warn(`Backup rotation skipped non-file entry: ${name}`);
+      continue;
+    }
+    await fs.unlink(target);
+  }
+  return toDelete.length;
 }
 
 // Set up file watcher
@@ -197,6 +237,25 @@ async function setupWatcher() {
   });
 }
 
+// Navigation allow-list: ONLY the app's own origins may load. In dev that
+// is the local Vite server; packaged builds use file:// pages. Everything
+// else (http/https/data/blob/about) is blocked — the app has zero network
+// business (user request 2026-11-17) and must never be steered anywhere.
+function isAllowedNavigationUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'file:') return true;
+    if (process.env.NODE_ENV === 'development' &&
+        parsed.protocol === 'http:' &&
+        parsed.hostname === 'localhost') {
+      return true;
+    }
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Create main window
 function createWindow(iconTheme) {
   const iconPath = getAppIconPath(iconTheme);
@@ -210,6 +269,40 @@ function createWindow(iconTheme) {
       nodeIntegration: false,
       spellcheck: false
     }
+  });
+
+  // ---- Zero-network enforcement (user request 2026-11-17) --------------
+  // "make it so that this app dont use any network permss at all too, it
+  // doesnt even need to check if it is connected online". The app is
+  // local-first by design: tracker.json is synced by SEPARATE software
+  // (Syncthing), and no code path fetches anything. These three guards make
+  // that structural instead of incidental:
+  //   1. every permission request (media, geolocation, notifications, …)
+  //      is DENIED — nothing can even ask;
+  //   2. navigating away from the app's own pages is cancelled — the
+  //      renderer can never be steered to remote content;
+  //   3. window.open / target=_blank popups are refused outright.
+  mainWindow.webContents.session.setPermissionRequestHandler(
+    (_webContents, permission, callback) => {
+      console.warn(`Denied permission request: ${permission}`);
+      callback(false);
+    }
+  );
+  mainWindow.webContents.session.setPermissionCheckHandler(
+    (_webContents, permission) => {
+      console.warn(`Denied permission check: ${permission}`);
+      return false;
+    }
+  );
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isAllowedNavigationUrl(url)) {
+      console.warn(`Blocked navigation to: ${url}`);
+      event.preventDefault();
+    }
+  });
+  mainWindow.webContents.setWindowOpenHandler(() => {
+    // No popups, ever — the app has nothing to open externally.
+    return { action: 'deny' };
   });
 
   // Load the Vite dev server or built HTML
@@ -378,6 +471,16 @@ ipcMain.handle('open-data-folder', async () => {
 
 ipcMain.handle('backup-now', async () => {
   return await createBackup();
+});
+
+// Minimize the window from the in-app top bar (user request 2026-11-17:
+// "make the minimize button in the top on the desktop app"). The native
+// title bar keeps its own minimize control; this adds the in-app one.
+ipcMain.handle('minimize-window', async () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.minimize();
+  }
+  return true;
 });
 
 // Manual refresh: re-read the data file and push to renderer
@@ -570,6 +673,19 @@ app.whenReady().then(async () => {
   // Only start watcher if the user hasn't opted out
   if (watcherEnabled) {
     await setupWatcher();
+  }
+
+  // Automatic backup on EVERY app start (user request 2026-11-17: "make
+  // the app leave back up each time"). Runs after the data path is known;
+  // failure must never block startup. Rotation to the newest 30 happens
+  // inside createBackup.
+  try {
+    const backupPath = await createBackup();
+    if (backupPath) {
+      console.log('Startup backup created:', backupPath);
+    }
+  } catch (e) {
+    console.error('Startup backup failed (app continues):', e.message);
   }
 
   createWindow(savedIconTheme);

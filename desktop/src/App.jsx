@@ -4,7 +4,14 @@ import Reviews from './components/Reviews'
 import Settings from './components/Settings'
 import SetupScreen from './components/SetupScreen'
 import { WorkingOnMarker, WorkingOnPopup } from './components/WorkingOnMarker'
-import { validateAndHealData, generateId, calculateTaskScoreBreakdown, checkSchemaVersion } from '@performance-tracker/core'
+import {
+  validateAndHealData,
+  generateId,
+  calculateTaskScoreBreakdown,
+  checkSchemaVersion,
+  materializeRecurringTasks,
+  getCurrentDate
+} from '@performance-tracker/core'
 import './App.css'
 
 function App() {
@@ -27,6 +34,14 @@ function App() {
   // Serialized form of the last content known to be on disk. Saves identical
   // to this are skipped — no-change-no-write (prevents Syncthing churn).
   const lastPersistedRef = useRef(null)
+  // Latest data reference for the day-rollover recurring check below.
+  const dataRef = useRef(null)
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
+  // Calendar day the recurring tasks were last materialized for — an
+  // always-open app still gets its per-day instances at midnight.
+  const lastRecurringDayRef = useRef(null)
 
   // Load app state and data file path on mount
   useEffect(() => {
@@ -138,6 +153,11 @@ function App() {
       } else {
         setData(healedData);
       }
+
+      // Weekday-scheduled recurring tasks: materialize today's instances
+      // (every load — startup, external change, refresh; the core helper's
+      // lastRun stamp makes repeats no-ops, sync-safe across devices).
+      applyRecurringTasks(healedData);
     } catch (error) {
       const msg = String(error?.message || error);
       const tooNew = msg.match(/SCHEMA_VERSION_TOO_NEW:(\d+)/);
@@ -215,6 +235,43 @@ function App() {
     }
   }, [dataFile]);
 
+  // Materialize due recurring tasks (weekday-scheduled pre-loaded tasks,
+  // user request 2026-11-17). Pure core helper: creates one instance per due
+  // config, adds it to workingOn, stamps lastRun. No-op (same data
+  // reference) when nothing is due, so no-change-no-write protects the disk.
+  const applyRecurringTasks = useCallback((healedData) => {
+    if (!healedData) return
+    try {
+      const today = getCurrentDate()
+      const { data: nextData, created } = materializeRecurringTasks({
+        data: healedData,
+        today,
+        now: new Date().toISOString(),
+        generateId
+      })
+      lastRecurringDayRef.current = today
+      if (created.length > 0) {
+        setData(nextData)
+        saveData(nextData)
+      }
+    } catch (error) {
+      console.error('Failed to materialize recurring tasks:', error)
+    }
+  }, [saveData])
+
+  // Day-rollover watch: an app left open across midnight still gets the
+  // new day's recurring instances. Checks once a minute; the core helper's
+  // lastRun guard makes every extra check a no-op.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const today = getCurrentDate()
+      if (lastRecurringDayRef.current && today !== lastRecurringDayRef.current && dataRef.current) {
+        applyRecurringTasks(dataRef.current)
+      }
+    }, 60_000)
+    return () => clearInterval(interval)
+  }, [applyRecurringTasks])
+
   const handleBackupNow = useCallback(async () => {
     try {
       const backupPath = await window.api.backupNow()
@@ -240,6 +297,8 @@ function App() {
         const healedData = validateAndHealData(loadedData)
         lastPersistedRef.current = JSON.stringify(healedData)
         setData(healedData)
+        // Manual refresh may cross a day boundary too — materialize if due.
+        applyRecurringTasks(healedData)
       }
     } catch (error) {
       console.error('Refresh failed:', error)
@@ -247,7 +306,7 @@ function App() {
       // Keep the spin animation visible for at least 400ms so it feels intentional
       setTimeout(() => setRefreshing(false), 400)
     }
-  }, [refreshing, flushSave])
+  }, [refreshing, flushSave, applyRecurringTasks])
 
   const handleToggleAutoSync = useCallback(async (enabled) => {
     setAutoSync(enabled)
@@ -412,6 +471,22 @@ function App() {
           data={data} 
           onOpenPopup={() => setShowWorkingOnPopup(true)} 
         />
+        <button
+          className="nav-minimize-btn"
+          onClick={() => {
+            // Desktop-only window control (user request 2026-11-17); the
+            // optional-chain keeps browser/test environments harmless.
+            if (typeof window !== 'undefined' && window.api && typeof window.api.minimizeWindow === 'function') {
+              window.api.minimizeWindow()
+            }
+          }}
+          title="Minimize window"
+          aria-label="Minimize window"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <line x1="2" y1="7" x2="12" y2="7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
       </nav>
       
       <main className="main-content">
@@ -447,6 +522,16 @@ function App() {
           categories={data?.categories || []}
           difficulties={data?.difficulties || []}
           onClose={() => setShowWorkingOnPopup(false)}
+          onClearAll={() => {
+            // "Clear all" = deselect every task from working on (user
+            // request 2026-11-17). Mutating action → bumps meta.updatedAt.
+            if (!data) return
+            saveData({
+              ...data,
+              workingOn: [],
+              meta: { ...(data.meta || {}), updatedAt: new Date().toISOString() }
+            })
+          }}
           onCompleteTask={({ taskId, difficultyId, date, note }) => {
             // Find task index in boardItems to determine category based on markers ONLY
             const boardItems = data?.board || []

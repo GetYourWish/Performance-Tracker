@@ -1,4 +1,11 @@
 import { useState, useMemo } from 'react'
+import { generateId } from '@performance-tracker/core'
+
+// Weekday labels for the recurring-task toggles. Index = JS getDay()
+// convention used by the data model (0 = Sunday … 6 = Saturday) — the same
+// convention core materializeRecurringTasks() matches against.
+const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 // Dashboard card visibility groups — static config moved to module scope
 const DASHBOARD_VIS_GROUPS = [
@@ -219,6 +226,49 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
       categories: [...categories, newCategory],
       meta: { ...data.meta, updatedAt: new Date().toISOString() }
     })
+  }
+
+  // --- Recurring tasks (v1.1.0) -------------------------------------------
+  // Weekday-scheduled pre-loaded tasks per category (user request
+  // 2026-11-17). Every change goes through handleCategoryUpdate so saves
+  // behave exactly like the other category fields.
+  const handleUpdateRecurringList = (catIndex, updater) => {
+    const category = categories[catIndex]
+    if (!category) return
+    const list = Array.isArray(category.recurringTasks) ? [...category.recurringTasks] : []
+    handleCategoryUpdate(catIndex, 'recurringTasks', updater(list))
+  }
+
+  const handleAddRecurringTask = (catIndex) => {
+    handleUpdateRecurringList(catIndex, list => [
+      ...list,
+      { id: generateId(), text: '', days: [], active: true }
+    ])
+  }
+
+  const handleUpdateRecurringTask = (catIndex, rtId, patch) => {
+    handleUpdateRecurringList(catIndex, list =>
+      list.map(rt => (rt.id === rtId ? { ...rt, ...patch } : rt))
+    )
+  }
+
+  const handleDeleteRecurringTask = (catIndex, rtId) => {
+    handleUpdateRecurringList(catIndex, list => list.filter(rt => rt.id !== rtId))
+  }
+
+  const handleToggleRecurringDay = (catIndex, rtId, day) => {
+    handleUpdateRecurringList(catIndex, list =>
+      list.map(rt => {
+        if (rt.id !== rtId) return rt
+        const days = Array.isArray(rt.days) ? rt.days : []
+        return {
+          ...rt,
+          days: days.includes(day)
+            ? days.filter(d => d !== day)
+            : [...days, day].sort((a, b) => a - b)
+        }
+      })
+    )
   }
 
   const handleChangeFolderClick = async () => {
@@ -484,7 +534,8 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
             
             <div className="categories-list">
               {categories.map((category, index) => (
-                <div key={category.id} className="category-item">
+                <div key={category.id} className="category-block">
+                  <div className="category-item">
                   <input
                     type="text"
                     value={category.name}
@@ -531,6 +582,69 @@ function Settings({ data, onSave, dataFile, conflicts, onBackupNow, onOpenFolder
                     />
                     Active
                   </label>
+                  </div>
+
+                  <div className="category-recurring-panel">
+                    <div className="category-recurring-header">
+                      <span className="category-recurring-title">Recurring tasks</span>
+                      <button
+                        className="add-btn"
+                        onClick={() => handleAddRecurringTask(index)}
+                        title="Add a pre-loaded task for chosen weekdays"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                    <p className="setting-note">
+                      Pre-loaded tasks for this category. On their weekdays each task is added
+                      to the board automatically and set as Working On (once per day).
+                    </p>
+                    {(Array.isArray(category.recurringTasks) ? category.recurringTasks : []).length === 0 && (
+                      <p className="category-recurring-empty">No recurring tasks yet.</p>
+                    )}
+                    {(Array.isArray(category.recurringTasks) ? category.recurringTasks : []).map(rt => (
+                      <div key={rt.id} className="recurring-item">
+                        <input
+                          type="text"
+                          className="recurring-text-input"
+                          value={rt.text}
+                          onChange={(e) => handleUpdateRecurringTask(index, rt.id, { text: e.target.value })}
+                          placeholder="Task text (e.g. Morning review)"
+                        />
+                        <div
+                          className="weekday-toggles"
+                          role="group"
+                          aria-label={`Weekdays for ${rt.text || 'recurring task'}`}
+                        >
+                          {WEEKDAY_LABELS.map((label, day) => {
+                            const days = Array.isArray(rt.days) ? rt.days : []
+                            const on = days.includes(day)
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                className={`weekday-toggle ${on ? 'on' : ''}`}
+                                onClick={() => handleToggleRecurringDay(index, rt.id, day)}
+                                aria-pressed={on}
+                                title={WEEKDAY_NAMES[day]}
+                                aria-label={`${WEEKDAY_NAMES[day]} ${on ? 'selected' : 'not selected'}`}
+                              >
+                                {label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <button
+                          className="recurring-delete-btn"
+                          onClick={() => handleDeleteRecurringTask(index, rt.id)}
+                          aria-label={`Delete recurring task ${rt.text || '(untitled)'}`}
+                          title="Delete this recurring task"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
               

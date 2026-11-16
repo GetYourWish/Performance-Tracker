@@ -1,10 +1,15 @@
 import { useState, useMemo, useRef, useCallback } from 'react'
 import { toPng } from 'html-to-image'
+import {
+  sortWorkingOnByPriority,
+  deadlineState,
+  getCurrentDate
+} from '@performance-tracker/core'
 
-function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, onClose, onCompleteTask }) {
+function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, onClose, onClearAll, onCompleteTask }) {
   const [selectedTaskId, setSelectedTaskId] = useState(null)
   const [selectedDifficulty, setSelectedDifficulty] = useState(null)
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(getCurrentDate())
   const [note, setNote] = useState('')
 
   const activeDifficulties = useMemo(() => difficulties.filter(d => d.active !== false), [difficulties])
@@ -30,6 +35,14 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
   const [exporting, setExporting] = useState(false)
   const tasksListRef = useRef(null)
 
+  // Export the working-on list as a PNG (user-facing "Export Image" button).
+  //
+  // RESULT FIX (user request 2026-11-17): the tasks list scrolls inside a
+  // max-height container. html-to-image sizes its canvas from the node's
+  // clientWidth/clientHeight — the VISIBLE area only — so the old export was
+  // clipped to whatever was on screen. Passing explicit width/height
+  // (clientWidth × scrollHeight = the FULL content) plus un-clipping the
+  // clone (maxHeight none, overflow visible) captures every task.
   const handleExportImage = useCallback(async () => {
     const node = tasksListRef.current
     if (!node) return
@@ -39,14 +52,17 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
       const dataUrl = await toPng(node, {
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-primary').trim() || '#1a1a2e',
         pixelRatio: 2,
+        // Full content size — NOT the scrolled viewport (see comment above).
+        width: node.clientWidth,
+        height: node.scrollHeight,
         style: {
-          // Ensure the captured element isn't clipped
+          // Un-clip the clone so the whole list lays out inside the canvas.
           overflow: 'visible',
           maxHeight: 'none'
         }
       })
-      const date = new Date().toISOString().split('T')[0]
-      await window.api.saveImage(dataUrl, `working-on-${date}.png`)
+      const exportDate = new Date().toISOString().split('T')[0]
+      await window.api.saveImage(dataUrl, `working-on-${exportDate}.png`)
     } catch (err) {
       console.error('Export failed:', err)
     } finally {
@@ -83,6 +99,22 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
     return map
   }, [boardItems, markers, categories])
 
+  // Display order: category priority FIRST, not the time tasks were added
+  // (user request 2026-11-17). Core helper = canonical rule shared with the
+  // Android app; stable within the same priority.
+  const sortedTasks = useMemo(() => {
+    const byId = new Map(tasks.map(t => [t.id, t]))
+    const sortedIds = sortWorkingOnByPriority(
+      tasks.map(t => t.id),
+      boardItems,
+      markers,
+      categories
+    )
+    return sortedIds.map(id => byId.get(id)).filter(Boolean)
+  }, [tasks, boardItems, markers, categories])
+
+  const today = getCurrentDate()
+
   return (
     <div 
       className="popup-overlay working-on-popup-overlay"
@@ -94,30 +126,41 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
       <div className="working-on-popup">
         <div className="popup-header">
           <h3 id="working-on-popup-title">Working On ({tasks.length})</h3>
-          <button 
-            className="working-on-export-btn"
-            onClick={handleExportImage}
-            disabled={exporting || tasks.length === 0}
-            title="Export as image"
-          >
-            {exporting ? 'Saving...' : 'Export Image'}
-          </button>
-          <button 
-            className="close-btn"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ✕
-          </button>
+          <div className="working-on-header-actions">
+            <button 
+              className="working-on-clear-btn"
+              onClick={onClearAll}
+              disabled={tasks.length === 0}
+              title="Deselect every task from Working On"
+            >
+              Clear All
+            </button>
+            <button 
+              className="working-on-export-btn"
+              onClick={handleExportImage}
+              disabled={exporting || tasks.length === 0}
+              title="Export as image"
+            >
+              {exporting ? 'Saving...' : 'Export Image'}
+            </button>
+            <button 
+              className="close-btn"
+              onClick={onClose}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
         
         <div className="working-on-tasks-list" ref={tasksListRef}>
           {tasks.length === 0 ? (
             <p className="empty-state">No tasks currently being worked on.</p>
           ) : (
-            tasks.map(task => {
+            sortedTasks.map(task => {
               const category = taskCategoryMap.get(task.id) || null
               const backgroundColor = category ? `${category.color}22` : 'transparent'
+              const deadline = deadlineState(task.deadline, today)
               return (
                 <div 
                   key={task.id}
@@ -137,6 +180,14 @@ function WorkingOnPopup({ tasks, boardItems, markers, categories, difficulties, 
                       ></span>
                     )}
                     <span className="working-on-task-text">{String(task?.text ?? '')}</span>
+                    {deadline && (
+                      <span
+                        className={`working-on-deadline-chip ${deadline.overdue ? 'overdue' : ''} ${deadline.dueToday ? 'due-today' : ''}`}
+                        title={`Deadline: ${task.deadline}`}
+                      >
+                        ⏱ {deadline.label}
+                      </span>
+                    )}
                   </div>
                 </div>
               )

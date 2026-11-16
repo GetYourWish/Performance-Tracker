@@ -27,7 +27,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   calculateDayScore,
   getCurrentDate,
-  getTaskCategory
+  getTaskCategory,
+  sortWorkingOnByPriority
 } from '@performance-tracker/core'
 import { TopAppBar, GlassCard, IconBtn, Fab, Snackbar } from './ui.js'
 import { TaskRow, MarkerRow, withAlpha } from './rows.js'
@@ -35,7 +36,8 @@ import {
   TaskTextDialog,
   CompleteDialog,
   ConfirmDialog,
-  MarkerNoteDialog
+  MarkerNoteDialog,
+  DeadlineDialog
 } from './dialogs.js'
 import { CategorySheet } from './CategorySheet.js'
 import { WorkingOnSheet } from './WorkingOnSheet.js'
@@ -45,7 +47,10 @@ import {
   deleteTask,
   completeTask,
   toggleWorkingOn,
+  clearWorkingOn,
   addWorkingOn,
+  createThreadTask,
+  setDeadline,
   addMarker,
   deleteMarker,
   addTaskBelowMarker,
@@ -68,6 +73,7 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
   const [sheetOpen, setSheetOpen] = useState(false)
   const [rearranging, setRearranging] = useState(false)
   const [workingOnOpen, setWorkingOnOpen] = useState(false)
+  const [deadlineTask, setDeadlineTask] = useState(null) // task object (v1.1.0)
   const [flashKey, setFlashKey] = useState(null)
 
   // Teleport plumbing (v1.0.11 rewrite — the v1.0.10 approach never worked
@@ -200,10 +206,18 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
 
   // The tasks the desktop WorkingOnPopup lists — workingOn ids resolved to
   // task objects (missing ids filtered out, desktop .map/.filter parity).
-  const workingOnTasks = useMemo(
-    () => (data?.workingOn || []).map(id => tasksById.get(id)).filter(Boolean),
-    [data?.workingOn, tasksById]
-  )
+  // v1.1.0 display order: CATEGORY PRIORITY first, not insertion time (user
+  // request 2026-11-17) — core sortWorkingOnByPriority, desktop parity.
+  const workingOnTasks = useMemo(() => {
+    const ids = data?.workingOn || []
+    const sorted = sortWorkingOnByPriority(
+      ids,
+      data?.board || [],
+      data?.markers || [],
+      data?.categories || []
+    )
+    return sorted.map(id => tasksById.get(id)).filter(Boolean)
+  }, [data?.workingOn, data?.board, data?.markers, data?.categories, tasksById])
 
   // --- handlers (desktop-identical outcomes) ------------------------------
 
@@ -426,6 +440,10 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
               onComplete={() => setCompletingTask(item.task)}
               onDelete={() => setDeletingTask(item.task)}
               onToggleWorkingOn={() => run((d, now) => toggleWorkingOn(d, item.key, now))}
+              onCreateThread={() =>
+                run((d, now) => createThreadTask(d, item.key, now), 'Thread task created')
+              }
+              onSetDeadline={() => setDeadlineTask(item.task)}
               {...moveProps}
             />
           ) : (
@@ -728,6 +746,7 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
         tasks={workingOnTasks}
         getCategoryFor={id => categoryLookup.get(id) || null}
         onSelectTask={task => setCompletingTask(task)}
+        onClearAll={() => run((d, now) => clearWorkingOn(d, now), 'Cleared all working on tasks')}
         onClose={() => setWorkingOnOpen(false)}
       />
 
@@ -795,6 +814,18 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
           run((d, now) => addTaskBelowMarker(d, marker.id, text, now))
         }}
         onClose={() => setAddingBelowMarker(null)}
+      />
+      {/* v1.1.0 — deadline editor (desktop BoardRow deadline editor parity) */}
+      <DeadlineDialog
+        theme={theme}
+        task={deadlineTask}
+        onSave={deadline => {
+          const task = deadlineTask
+          setDeadlineTask(null)
+          if (!task) return
+          run((d, now) => setDeadline(d, task.id, deadline, now), deadline ? 'Deadline set' : 'Deadline cleared')
+        }}
+        onClose={() => setDeadlineTask(null)}
       />
       <CategorySheet
         theme={theme}

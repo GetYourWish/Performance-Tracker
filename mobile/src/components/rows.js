@@ -29,6 +29,7 @@ import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons'
 import { RADIUS, SPACING, TYPE } from '../theme.js'
+import { deadlineState, getCurrentDate } from '@performance-tracker/core'
 
 // The teleport/randomizer flash color — desktop components.css hardcodes
 // the same amber (`.random-flash` keyframe: rgba(251,191,36,0.5) bg + glow),
@@ -109,6 +110,8 @@ export function TaskRow({
   onComplete,
   onDelete,
   onToggleWorkingOn,
+  onCreateThread,
+  onSetDeadline,
   rearranging,
   onToggleRearrange,
   onMoveUp,
@@ -116,6 +119,16 @@ export function TaskRow({
   canMoveUp,
   canMoveDown
 }) {
+  // v1.1.0 — deadline classification (core rule, desktop parity)
+  const deadlineInfo = deadlineState(task?.deadline, getCurrentDate())
+  const deadlineColor = deadlineInfo
+    ? deadlineInfo.overdue
+      ? '#ef4444'
+      : deadlineInfo.dueToday
+        ? '#f59e0b'
+        : theme.textMuted
+    : null
+
   return (
     <View
       style={[
@@ -132,7 +145,9 @@ export function TaskRow({
           borderWidth: 2,
           borderColor: FLASH_COLOR,
           backgroundColor: withAlpha(FLASH_COLOR, '4D')
-        }
+        },
+        // v1.1.0 — overdue accent (desktop .board-row.deadline-overdue)
+        deadlineInfo && deadlineInfo.overdue && { borderLeftWidth: 3, borderLeftColor: '#ef4444' }
       ]}
     >
       {rearranging ? (
@@ -162,12 +177,27 @@ export function TaskRow({
         style={{ flex: 1, paddingVertical: 4 }}
         accessibilityLabel={`Task: ${String(task?.text ?? '')}`}
       >
-        <Text numberOfLines={4} style={{ color: theme.textPrimary, ...TYPE.body }}>
-          {String(task?.text ?? '')}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.xs }}>
+          {/* v1.1.0 badges — thread membership / recurring origin (desktop parity) */}
+          {task?.threadOf ? (
+            <Icon name="source-branch" size={13} color="#a78bfa" />
+          ) : null}
+          {task?.recurringOf ? (
+            <Icon name="autorenew" size={13} color="#34d399" />
+          ) : null}
+          <Text numberOfLines={4} style={{ flex: 1, color: theme.textPrimary, ...TYPE.body }}>
+            {String(task?.text ?? '')}
+          </Text>
+        </View>
         {category ? (
           <Text numberOfLines={1} style={{ color: theme.textMuted, marginTop: 1, ...TYPE.caption }}>
             {category.name}
+          </Text>
+        ) : null}
+        {/* v1.1.0 — deadline state line (desktop chip parity) */}
+        {deadlineInfo ? (
+          <Text numberOfLines={1} style={{ color: deadlineColor, marginTop: 1, ...TYPE.caption }}>
+            {'\u23F1 ' + deadlineInfo.label + ' (' + task.deadline + ')'}
           </Text>
         ) : null}
       </Pressable>
@@ -182,6 +212,27 @@ export function TaskRow({
             onPress={onToggleWorkingOn}
             accessibilityLabel={isWorkingOn ? 'Stop working on' : 'Mark as working on'}
           />
+          {/* v1.1.0 — thread continuation (user request 2026-11-17): creates
+              the same task with the next #number directly below this row */}
+          {onCreateThread ? (
+            <IconBtn
+              theme={theme}
+              name="source-branch"
+              color="#a78bfa"
+              onPress={onCreateThread}
+              accessibilityLabel="Continue this task in a thread"
+            />
+          ) : null}
+          {/* v1.1.0 — deadline set/clear */}
+          {onSetDeadline ? (
+            <IconBtn
+              theme={theme}
+              name={deadlineInfo ? 'calendar-clock' : 'calendar-blank-outline'}
+              color={deadlineColor || theme.textMuted}
+              onPress={onSetDeadline}
+              accessibilityLabel={deadlineInfo ? 'Edit deadline' : 'Set deadline'}
+            />
+          ) : null}
           <IconBtn
             theme={theme}
             name="check"

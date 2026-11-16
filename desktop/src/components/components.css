@@ -2980,3 +2980,360 @@
     animation: none;
   }
 }
+
+/* ==========================================================================
+   v1.1.0 additions (user requests 2026-11-17)
+   ========================================================================== */
+
+/* --- Sidebar: info bubble + scrollable categories ----------------------- */
+
+/* The (i) bubble next to the Categories header — the hint text below the
+   header is gone and comes back from this bubble instead. */
+.sidebar-info-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: bold;
+  font-style: italic;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.sidebar-info-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.category-info-popover {
+  margin-top: 8px;
+  margin-bottom: 0;
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+/* Many categories must scroll instead of pushing the board away. */
+.categories-scroll {
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* --- Board rows: thread / recurring badges + deadline chips -------------- */
+
+.task-thread-badge,
+.task-recurring-badge {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.task-thread-badge {
+  color: #a78bfa;
+}
+
+.task-recurring-badge {
+  color: #34d399;
+}
+
+.task-deadline-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+button.task-deadline-chip:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.task-deadline-chip.due-today {
+  border-color: #f59e0b;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.task-deadline-chip.overdue {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+/* Subtle overdue accent on the whole row (left edge). */
+.board-row.deadline-overdue {
+  border-left: 3px solid rgba(239, 68, 68, 0.55);
+}
+
+.thread-btn {
+  color: #a78bfa;
+}
+
+.thread-btn:hover {
+  color: #c4b5fd;
+}
+
+.deadline-btn {
+  color: var(--text-muted);
+}
+
+.deadline-btn:hover {
+  color: var(--text-primary);
+}
+
+.completion-deadline-row {
+  margin-bottom: 14px;
+}
+
+/* --- Deadline editor popup (portaled to body) ---------------------------- */
+
+.deadline-editor-popup-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.deadline-editor-popup {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  z-index: 1001;
+  min-width: 320px;
+  max-width: 460px;
+  pointer-events: auto;
+  position: relative;
+}
+
+.deadline-editor-popup h3 {
+  margin-bottom: 12px;
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+/* --- Category note edit popup: sync hint --------------------------------- */
+
+.category-note-sync-hint {
+  margin: -8px 0 12px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* --- Working On popup: header actions + clear + deadline chips ----------- */
+
+/* Header: title flexes, the three buttons group on the right (layout fix —
+   the old space-between spread the export button into the middle). */
+.working-on-popup .popup-header {
+  gap: 12px;
+}
+
+.working-on-popup .popup-header h3 {
+  flex: 1;
+  min-width: 0;
+}
+
+.working-on-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.working-on-popup {
+  width: min(80vw, 620px);
+}
+
+.working-on-clear-btn {
+  padding: 6px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.working-on-clear-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+.working-on-clear-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.working-on-deadline-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.15);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.working-on-deadline-chip.due-today {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.working-on-deadline-chip.overdue {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+/* --- Settings: recurring tasks editor ------------------------------------ */
+
+.category-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.category-block .category-item {
+  padding: 0;
+}
+
+.category-recurring-panel {
+  border-top: 1px dashed var(--border-color);
+  padding-top: 10px;
+}
+
+.category-recurring-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.category-recurring-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.category-recurring-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 6px;
+}
+
+.recurring-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.recurring-item:last-child {
+  border-bottom: none;
+}
+
+.recurring-text-input {
+  flex: 1;
+  min-width: 180px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.weekday-toggles {
+  display: flex;
+  gap: 4px;
+}
+
+.weekday-toggle {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.weekday-toggle:hover {
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+}
+
+.weekday-toggle.on {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #fff;
+}
+
+.recurring-delete-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.recurring-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}

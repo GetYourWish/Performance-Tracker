@@ -10,7 +10,8 @@
 import {
   generateId,
   getTaskCategory,
-  calculateTaskScoreBreakdown
+  calculateTaskScoreBreakdown,
+  createThreadContinuation as coreCreateThreadContinuation
 } from '@performance-tracker/core'
 
 function withMeta(data, now) {
@@ -93,18 +94,53 @@ export function deleteTask(data, taskId, now) {
 // time and/or completion date (the "worked past midnight" correction). Only
 // the provided keys are merged into the existing completion object; the
 // untouched keys (difficultyId, categoryId) stay exactly as scored.
+// v1.1.0: a categoryId patch now ALSO refreshes the matching logs entry
+// (desktop parity — the Logs tab must never contradict the reviews after a
+// category edit on a completed task).
 export function updateTaskCompletion(data, taskId, patch, now) {
-  return withMeta(
-    {
-      ...data,
-      tasks: (data.tasks || []).map(t =>
-        t.id === taskId
-          ? { ...t, updatedAt: now, completion: { ...t.completion, ...patch } }
-          : t
+  let next = {
+    ...data,
+    tasks: (data.tasks || []).map(t =>
+      t.id === taskId
+        ? { ...t, updatedAt: now, completion: { ...t.completion, ...patch } }
+        : t
+    )
+  }
+
+  if (patch && Object.prototype.hasOwnProperty.call(patch, 'categoryId')) {
+    const updatedTask = next.tasks.find(t => t.id === taskId)
+    if (updatedTask && updatedTask.completion) {
+      const settings = data.settings || {}
+      const breakdown = calculateTaskScoreBreakdown(
+        updatedTask,
+        next.tasks.filter(t => t.completion),
+        data.difficulties || [],
+        settings.fatigueIncrement || 0.10,
+        settings.fatigueCap || 3.0,
+        data.categories || []
       )
-    },
-    now
-  )
+      next = {
+        ...next,
+        logs: (data.logs || []).map(log =>
+          log.taskId === taskId
+            ? {
+                ...log,
+                difficultyLabel: breakdown.difficultyLabel,
+                difficultyColor: breakdown.difficultyColor,
+                categoryName: breakdown.categoryName,
+                categoryColor: breakdown.categoryColor,
+                priorityMultiplier: breakdown.priorityMultiplier,
+                fatigueMultiplier: breakdown.fatigueMultiplier,
+                basePoints: breakdown.basePoints,
+                finalScore: breakdown.finalScore
+              }
+            : log
+        )
+      }
+    }
+  }
+
+  return withMeta(next, now)
 }
 
 // desktop Board.handleToggleWorkingOn
@@ -114,6 +150,12 @@ export function toggleWorkingOn(data, taskId, now) {
     ? current.filter(id => id !== taskId)
     : [...current, taskId]
   return withMeta({ ...data, workingOn }, now)
+}
+
+// v1.1.0 — desktop WorkingOnPopup "Clear All" (user request 2026-11-17):
+// deselect EVERY task from working on (empty the array).
+export function clearWorkingOn(data, now) {
+  return withMeta({ ...data, workingOn: [] }, now)
 }
 
 // desktop Board.handleRandomizeTask write: the dice-picked task is APPENDED
@@ -215,13 +257,19 @@ export function completeTask(data, { taskId, difficultyId, date, note }, now) {
 
 // --- Markers & categories ------------------------------------------------
 
-// desktop Board.handleAddMarker — marker entity + board item APPENDED at end
+// desktop Board.handleAddMarker — marker entity + board item APPENDED at end.
+// v1.1.0: the marker inherits the CATEGORY-level note (user request: the
+// category note applies to all markers of the same category).
 export function addMarker(data, categoryId, now) {
   const newMarker = {
     id: generateId(),
     categoryId,
     createdAt: now,
     updatedAt: now
+  }
+  const category = (data.categories || []).find(c => c.id === categoryId)
+  if (category && typeof category.note === 'string' && category.note.trim() !== '') {
+    newMarker.note = category.note
   }
   return withMeta(
     {
@@ -247,14 +295,81 @@ export function deleteMarker(data, markerId, now) {
   )
 }
 
-// desktop Board.handleUpdateMarkerNote
+// desktop Board.handleUpdateMarkerNote — v1.1.0 category-wide sync (user
+// request 2026-11-17: "make the category note apply to all markers of the
+// same category wihtout me having to add it everytime"). The edited marker's
+// category is resolved; EVERY marker of that category receives the same
+// note and the category entity stores it as the source of truth so future
+// markers inherit it (see addMarker).
 export function updateMarkerNote(data, markerId, note, now) {
+  const trimmed = String(note || '').trim()
+  const markers = data.markers || []
+  const edited = markers.find(m => m.id === markerId)
+  const categoryId = edited ? edited.categoryId : null
+
+  const next = {
+    ...data,
+    markers: markers.map(m =>
+      m.id === markerId || (categoryId && m.categoryId === categoryId)
+        ? { ...m, note: trimmed, updatedAt: now }
+        : m
+    )
+  }
+  if (categoryId) {
+    next.categories = (data.categories || []).map(c =>
+      c.id === categoryId ? { ...c, note: trimmed } : c
+    )
+  }
+  return withMeta(next, now)
+}
+
+// v1.1.0 — desktop Board.handleCreateThreadTask (user request 2026-11-17):
+// "threads" for work spanning multiple days. Same base text + " #N" suffix,
+// inserted DIRECTLY BELOW the source task, linked via task.threadOf. All
+// numbering logic lives in core createThreadContinuation (both apps agree).
+export function createThreadTask(data, taskId, now) {
+  const allTasks = data.tasks || []
+  const sourceTask = allTasks.find(t => t.id === taskId)
+  if (!sourceTask) return withMeta(data, now)
+
+  const newTask = coreCreateThreadContinuation({
+    sourceTask,
+    tasks: allTasks,
+    now,
+    generateId
+  })
+
+  const board = data.board || []
+  const sourceIndex = board.findIndex(
+    item => item.type === 'task' && item.taskId === taskId
+  )
+  const insertIndex = sourceIndex === -1 ? board.length : sourceIndex + 1
+  const updatedBoard = [
+    ...board.slice(0, insertIndex),
+    { type: 'task', taskId: newTask.id },
+    ...board.slice(insertIndex)
+  ]
+
+  return withMeta(
+    { ...data, tasks: [...allTasks, newTask], board: updatedBoard },
+    now
+  )
+}
+
+// v1.1.0 — desktop Board.handleSetDeadline (user request 2026-11-17):
+// set ('YYYY-MM-DD') or clear ('' → field removed) a task's deadline.
+// Presentation only — scoring untouched.
+export function setDeadline(data, taskId, deadline, now) {
   return withMeta(
     {
       ...data,
-      markers: (data.markers || []).map(m =>
-        m.id === markerId ? { ...m, note: String(note || '').trim(), updatedAt: now } : m
-      )
+      tasks: (data.tasks || []).map(t => {
+        if (t.id !== taskId) return t
+        const next = { ...t, updatedAt: now }
+        if (deadline) next.deadline = deadline
+        else delete next.deadline // clear = the key is gone entirely
+        return next
+      })
     },
     now
   )

@@ -1,6 +1,18 @@
 import { memo, useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { deadlineState } from '@performance-tracker/core'
+
+// v1.1.0 — the category-note popup and the deadline editor render through a
+// REACT PORTAL to document.body. They used to be plain children of the board
+// row, but rows carry a persistent CSS transform (`row-enter-scale` /
+// `row-enter-slide` keep `animation-fill-mode: both`, so `transform` stays
+// computed on the element forever). A transformed ancestor becomes the
+// containing block for `position: fixed` descendants — the fullscreen popup
+// was therefore sized to the ~30px marker row and squashed INTO it (the
+// "category notes embed" bug, user report 2026-11-17). Portaling escapes
+// every ancestor transform/clip permanently.
 
 const BoardRow = memo(function BoardRow({ 
   id, 
@@ -23,13 +35,21 @@ const BoardRow = memo(function BoardRow({
   selectionSize = 1,
   onAddTaskBelow,
   onUpdateMarkerNote,
-  isConsecutiveMarker = false
+  isConsecutiveMarker = false,
+  onCreateThread,
+  isThreadTask = false,
+  isRecurringTask = false,
+  deadline,
+  onSetDeadline,
+  today
 }) {
   const [editText, setEditText] = useState(task?.text || '')
   const [showCategoryNotePopup, setShowCategoryNotePopup] = useState(false)
   const [categoryNoteEdit, setCategoryNoteEdit] = useState('')
   const [isEditingNote, setIsEditingNote] = useState(false)
-  
+  const [showDeadlineEditor, setShowDeadlineEditor] = useState(false)
+  const [deadlineDraft, setDeadlineDraft] = useState('')
+
   const {
     attributes,
     listeners,
@@ -71,6 +91,24 @@ const BoardRow = memo(function BoardRow({
       setCategoryNoteEdit(marker.note || '')
     }
   }, [marker?.note, marker?.id])
+
+  // ----- deadline editor helpers -------------------------------------------
+  const openDeadlineEditor = () => {
+    setDeadlineDraft(deadline || '')
+    setShowDeadlineEditor(true)
+  }
+
+  const confirmDeadline = () => {
+    if (onSetDeadline) onSetDeadline(deadlineDraft || '')
+    setShowDeadlineEditor(false)
+  }
+
+  const clearDeadline = () => {
+    if (onSetDeadline) onSetDeadline('')
+    setShowDeadlineEditor(false)
+  }
+
+  const deadlineInfo = deadlineState(deadline, today)
 
   if (marker) {
     return (
@@ -134,8 +172,12 @@ const BoardRow = memo(function BoardRow({
           </button>
         </div>
         
-        {/* Category note edit popup - rendered at root level to avoid stretching */}
-        {showCategoryNotePopup && (
+        {/* Category note edit popup — PORTALED to document.body (v1.1.0):
+            rendered inside the row it inherited the row's persistent
+            animation transform as its containing block, which squashed the
+            "fullscreen" popup into the marker row (the category-notes embed
+            bug). The portal escapes all ancestor transforms and clips. */}
+        {showCategoryNotePopup && createPortal(
           <div className="category-note-popup-wrapper">
             <div className="category-note-edit-popup-overlay" onClick={(e) => {
               e.stopPropagation()
@@ -185,6 +227,9 @@ const BoardRow = memo(function BoardRow({
                 <div className="category-note-edit-content">
                   <h3 id="category-note-popup-title">Edit Category Note</h3>
                   <div className="category-name-display">{String(category.name)}</div>
+                  <p className="category-note-sync-hint">
+                    Applies to every {String(category.name)} marker
+                  </p>
                   <textarea
                     value={categoryNoteEdit}
                     onChange={(e) => setCategoryNoteEdit(e.target.value)}
@@ -193,7 +238,7 @@ const BoardRow = memo(function BoardRow({
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault()
-                        // Save note to marker
+                        // Save note to marker (Board syncs it to the whole category)
                         onUpdateMarkerNote && onUpdateMarkerNote(marker.id, categoryNoteEdit)
                         setShowCategoryNotePopup(false)
                         setCategoryNoteEdit('')
@@ -210,7 +255,7 @@ const BoardRow = memo(function BoardRow({
                       className="save-note-btn btn-cancel"
                       onClick={(e) => {
                         e.stopPropagation()
-                        // Save note to marker
+                        // Save note to marker (Board syncs it to the whole category)
                         onUpdateMarkerNote && onUpdateMarkerNote(marker.id, categoryNoteEdit)
                         setShowCategoryNotePopup(false)
                         setCategoryNoteEdit('')
@@ -234,7 +279,8 @@ const BoardRow = memo(function BoardRow({
                 </div>
               )}
             </div>
-          </div>
+          </div>,
+          document.body
         )}
         <div className="move-buttons">
           <button 
@@ -292,7 +338,7 @@ const BoardRow = memo(function BoardRow({
   return (
     <div 
       ref={setNodeRef}
-      className={`board-row task-row row-enter-slide ${isEditing ? 'editing' : ''} ${isSelected ? 'selected' : ''} ${isWorkingOn ? 'working-on' : ''}`}
+      className={`board-row task-row row-enter-slide ${isEditing ? 'editing' : ''} ${isSelected ? 'selected' : ''} ${isWorkingOn ? 'working-on' : ''} ${deadlineInfo?.overdue ? 'deadline-overdue' : ''}`}
       role="listitem"
       aria-label={`Task: ${String(task?.text ?? '')}`}
       data-board-item-id={id}
@@ -376,6 +422,25 @@ const BoardRow = memo(function BoardRow({
         />
       )}
 
+      {isThreadTask && (
+        <span
+          className="task-thread-badge"
+          title="This task continues a thread (created with the thread button)"
+          aria-label="Thread task"
+        >
+          ⧉
+        </span>
+      )}
+      {isRecurringTask && (
+        <span
+          className="task-recurring-badge"
+          title="Created automatically by a recurring task"
+          aria-label="Recurring task"
+        >
+          ↻
+        </span>
+      )}
+
       {isEditing ? (
         <input
           type="text"
@@ -404,6 +469,24 @@ const BoardRow = memo(function BoardRow({
         </div>
       )}
 
+      {/* v1.1.0 DEADLINES: chip shows the state (overdue / due today / in Nd)
+          and opens the editor. No deadline yet → the small ⏱ button lives in
+          task-actions. */}
+      {deadlineInfo && !isEditing && (
+        <button
+          type="button"
+          className={`task-deadline-chip ${deadlineInfo.overdue ? 'overdue' : ''} ${deadlineInfo.dueToday ? 'due-today' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            openDeadlineEditor()
+          }}
+          title={`Deadline ${task.deadline} — click to edit`}
+          aria-label={`Deadline ${deadlineInfo.label}, click to edit`}
+        >
+          ⏱ {deadlineInfo.label}
+        </button>
+      )}
+
       <div className="task-actions">
         <button 
           className={`action-btn working-on-toggle ${isWorkingOn ? 'active' : ''}`}
@@ -415,6 +498,18 @@ const BoardRow = memo(function BoardRow({
           title={isWorkingOn ? 'Stop working on' : 'Mark as working on'}
         >
           {isWorkingOn ? '★' : '☆'}
+        </button>
+        <button 
+          className="action-btn thread-btn"
+          onClick={(e) => {
+            e.stopPropagation()
+            onCreateThread && onCreateThread()
+          }}
+          disabled={!onCreateThread}
+          aria-label={`Continue this task in a thread: creates the same task with the next #number below it`}
+          title="Thread: continue this task on another day (creates '#2', '#3', … below it)"
+        >
+          ⧉
         </button>
         <button 
           className="action-btn complete-btn"
@@ -442,6 +537,19 @@ const BoardRow = memo(function BoardRow({
             ↓
           </button>
         </div>
+        {!deadlineInfo && (
+          <button
+            className="action-btn deadline-btn"
+            onClick={(e) => {
+              e.stopPropagation()
+              openDeadlineEditor()
+            }}
+            aria-label="Set deadline"
+            title="Set deadline"
+          >
+            ⏱
+          </button>
+        )}
         <button 
           className="action-btn delete-btn"
           onClick={() => onConfirmDelete(task)}
@@ -451,6 +559,57 @@ const BoardRow = memo(function BoardRow({
           🗑
         </button>
       </div>
+
+      {/* Deadline editor — PORTALED to document.body (same transform-escape
+          reason as the category note popup above). */}
+      {showDeadlineEditor && createPortal(
+        <div className="deadline-editor-popup-wrapper">
+          <div className="category-note-edit-popup-overlay" onClick={(e) => {
+            e.stopPropagation()
+            setShowDeadlineEditor(false)
+          }} />
+          <div className="deadline-editor-popup" onClick={(e) => e.stopPropagation()}>
+            <h3>Deadline</h3>
+            <div className="task-text" style={{ marginBottom: '12px' }}>{String(task?.text ?? '')}</div>
+            <input
+              type="date"
+              className="date-input"
+              value={deadlineDraft}
+              onChange={(e) => setDeadlineDraft(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') confirmDeadline()
+                if (e.key === 'Escape') setShowDeadlineEditor(false)
+              }}
+              aria-label="Deadline date"
+            />
+            <div className="note-edit-actions" style={{ marginTop: '12px' }}>
+              {deadline && (
+                <button
+                  className="cancel-note-btn btn-cancel"
+                  onClick={clearDeadline}
+                  title="Remove the deadline"
+                >
+                  Clear
+                </button>
+              )}
+              <button
+                className="cancel-note-btn btn-cancel"
+                onClick={() => setShowDeadlineEditor(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="save-note-btn btn-cancel"
+                onClick={confirmDeadline}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 })

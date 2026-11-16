@@ -98,8 +98,24 @@ The board is your active list, not your permanent archive.
 
 Use **Working On** for active tasks you want to keep visible as in-progress.
 The board indicator opens a list of those tasks, where you can jump to or
-complete one. This is a convenience list only: it does not affect scoring or
-turn a task into a separate status workflow.
+complete one. The list is ordered by category priority (highest multiplier
+first), and **Clear All** deselects every task from Working On at once. This
+is a convenience list only: it does not affect scoring or turn a task into a
+separate status workflow.
+
+### Deadlines, threads, and recurring tasks
+
+- **Deadlines:** give any task a deadline date. Rows, the Working On list,
+  and the completion dialogs show the state—overdue, due today, or due in a
+  few days—so nothing slips by unnoticed. Deadlines never affect scoring.
+- **Threads:** when work on a task spans more than one day, use the thread
+  action to create a continuation directly below it—the same text plus
+  `#2`, `#3`, and so on—so every day of effort gets registered. Continuations
+  carry a thread badge and are linked structurally, not just by name.
+- **Recurring tasks:** in **Settings ▸ Categories** you can add pre-loaded
+  tasks to a category and pick their weekdays. On each of those days the app
+  adds the task to the board inside that category's section and marks it as
+  Working On automatically—once per day, sync-safe across devices.
 
 ### Complete a task
 
@@ -132,6 +148,10 @@ saved history.
 On Android, use the Categories sheet to add a marker or jump to an existing
 marker. Tapping a category navigates to its first marker; the add control places
 a new marker at the end of the board.
+
+A category can carry a **note** (the (i) bubble on its markers). Editing the
+note applies it to every marker of that category at once, and new markers
+inherit it—no re-typing the same note each time.
 
 Categories are not required. Tasks outside a matching marker pair remain
 uncategorized and still score normally.
@@ -229,10 +249,12 @@ or later in Settings.
 
 - Desktop saves use an atomic write: a temporary file is written, then renamed
   into place.
-- Before risky operations, the desktop app keeps a rolling set of up to 20
-  backups beside the data file in `.backups/`.
+- The desktop app writes a backup on every start (plus manual **Backup Now**
+  and pre-move copies) and keeps a rolling set of the newest **30** backups
+  beside the data file in `.backups/`—the oldest is deleted automatically
+  once 30 are reached.
 - Android also writes a verified temporary document and keeps its rolling
-  backups in app-private storage.
+  backups (same 30-file window, same naming scheme) in app-private storage.
 - The apps validate and repair recoverable missing or malformed structure. A
   file from a newer, unsupported schema version is refused rather than silently
   overwritten.

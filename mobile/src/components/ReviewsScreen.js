@@ -95,11 +95,15 @@ export function TaskDetailDialog({ theme, task, difficulties, categories, onSave
   const [noteValue, setNoteValue] = useState('')
   const [editingTime, setEditingTime] = useState(false)
   const [timeValue, setTimeValue] = useState('')
+  // v1.1.0 — edit a completed task's CATEGORY (user request 2026-11-17:
+  // "add a way to edit category after a task has being marked as complete")
+  const [editingCategory, setEditingCategory] = useState(false)
 
   React.useEffect(() => {
     if (task) {
       setEditingNote(false)
       setEditingTime(false)
+      setEditingCategory(false)
     }
   }, [task])
 
@@ -204,22 +208,95 @@ export function TaskDetailDialog({ theme, task, difficulties, categories, onSave
       ) : null}
 
       <Text style={labelStyle(theme)}>CATEGORY</Text>
-      {category ? (
-        <View
-          style={{
-            backgroundColor: category.color,
-            borderRadius: 12,
-            paddingHorizontal: SPACING.lg,
-            paddingVertical: 8,
-            alignSelf: 'flex-start',
-            marginBottom: SPACING.md
-          }}
-        >
-          <Text style={{ color: '#ffffff', fontWeight: '600', fontSize: 14 }}>{category.name}</Text>
+      {editingCategory ? (
+        <View style={{ marginBottom: SPACING.md }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs }}>
+            {/* "No category" chip */}
+            <Pressable
+              onPress={() => {
+                setEditingCategory(false)
+                if (completion.categoryId) onSave({ categoryId: null })
+              }}
+              accessibilityLabel="Set no category"
+              accessibilityRole="button"
+              style={{
+                borderWidth: 1,
+                borderColor: completion.categoryId ? theme.border : theme.flowState,
+                borderRadius: 999,
+                paddingHorizontal: SPACING.md,
+                paddingVertical: 7,
+                backgroundColor: completion.categoryId ? 'transparent' : theme.flowState
+              }}
+            >
+              <Text
+                style={{
+                  color: completion.categoryId ? theme.textSecondary : '#ffffff',
+                  fontWeight: '600',
+                  fontSize: 13
+                }}
+              >
+                None
+              </Text>
+            </Pressable>
+            {categories.map(c => {
+              const selected = completion.categoryId === c.id
+              return (
+                <Pressable
+                  key={c.id}
+                  onPress={() => {
+                    setEditingCategory(false)
+                    if (!selected) onSave({ categoryId: c.id })
+                  }}
+                  accessibilityLabel={`Set category ${c.name}`}
+                  accessibilityRole="button"
+                  style={{
+                    backgroundColor: c.color,
+                    opacity: selected ? 1 : 0.55,
+                    borderWidth: selected ? 2 : 0,
+                    borderColor: '#ffffff',
+                    borderRadius: 999,
+                    paddingHorizontal: SPACING.md,
+                    paddingVertical: 7
+                  }}
+                >
+                  <Text style={{ color: '#ffffff', fontWeight: '600', fontSize: 13 }}>{c.name}</Text>
+                </Pressable>
+              )
+            })}
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+            <TextButton theme={theme} label="Cancel" onPress={() => setEditingCategory(false)} />
+          </View>
         </View>
       ) : (
-        <Text style={{ color: theme.textMuted, marginBottom: SPACING.md, ...TYPE.body }}>No category</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md }}>
+          {category ? (
+            <View
+              style={{
+                backgroundColor: category.color,
+                borderRadius: 12,
+                paddingHorizontal: SPACING.lg,
+                paddingVertical: 8,
+                alignSelf: 'flex-start'
+              }}
+            >
+              <Text style={{ color: '#ffffff', fontWeight: '600', fontSize: 14 }}>{category.name}</Text>
+            </View>
+          ) : (
+            <Text style={{ color: theme.textMuted, ...TYPE.body }}>No category</Text>
+          )}
+          <TextButton theme={theme} label="Edit Category" onPress={() => setEditingCategory(true)} />
+        </View>
       )}
+      {/* v1.1.0 — deadline of the completed task (kept for the record) */}
+      {task.deadline ? (
+        <>
+          <Text style={labelStyle(theme)}>DEADLINE</Text>
+          <Text style={{ color: theme.textPrimary, marginBottom: SPACING.md, ...TYPE.body }}>
+            {task.deadline}
+          </Text>
+        </>
+      ) : null}
 
       <Text style={labelStyle(theme)}>NOTE</Text>
       {editingNote ? (

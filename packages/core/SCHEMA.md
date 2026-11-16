@@ -23,7 +23,7 @@ healing output from the same file (see the dual-runtime fixture tests).
 | Serialization | `JSON.stringify(data, null, 2)` (2-space indent) |
 | Writes | Atomic: write `<file>.tmp`, then rename over the target |
 | Rewrite guard | Persist only when the serialized output **differs** from the last known content — an unchanged load must never rewrite the file (anti-churn for Syncthing) |
-| Backups | `.backups/tracker-<timestamp>.json` next to the data file; last 20 kept |
+| Backups | `.backups/tracker-<timestamp>.json` next to the data file; last 30 kept. The desktop app writes one automatically on every app start (plus manual "Backup Now" / pre-move copies); Android rotates the same naming scheme in its app-private `.backups/` window before every write |
 | Dates (calendar) | `YYYY-MM-DD` in the **completing device's local calendar** |
 | Dates (instants) | Full ISO 8601 timestamps, e.g. `2026-01-06T10:00:00.000Z` |
 
@@ -114,6 +114,8 @@ Defaults: Easy 1, Medium 2, Hard 3, Very Hard 5.
 | `order` | number | Sort position |
 | `active` | boolean | Soft-delete flag |
 | `priorityMultiplier` | number | **Undocumented until now.** Multiplies the task's score at completion time; only a numeric value is applied (anything else means `1.0`). Desktop UI creates categories with `1`. Applies in BOTH `calculateTaskScoreBreakdown` and `calculateDayScore`. |
+| `note` | string, optional | **v1.1.0.** Category-level note. Editing a marker's note from the board writes the SAME note to the category and to every marker of that category (user request 2026-11-17: "category note applies to all markers of the same category"); newly created markers inherit it. Legacy per-marker `markers[].note` values keep displaying; the first edit syncs them. |
+| `recurringTasks` | array, optional | **v1.1.0.** Weekday-scheduled pre-loaded tasks: `[{ id, text, days: [0..6] (JS `getDay`, 0=Sunday), lastRun?: 'YYYY-MM-DD', active?: boolean }]`. On every app start each due-and-not-yet-run config materializes ONE task instance inside the category's board section, added to `workingOn` automatically, with `lastRun` stamped (core `materializeRecurringTasks` — idempotent per calendar day, sync-safe because the stamp lives in this same file). |
 
 ### `markers` — array (marker entities)
 
@@ -150,6 +152,9 @@ pointing at missing/completed tasks or missing markers.
 | `createdAt` | ISO timestamp | When the task was typed |
 | `updatedAt` | ISO timestamp, optional | Written by desktop on create; not otherwise maintained |
 | `completion` | object \| `null` | `null`/absent = active task; present = completed |
+| `deadline` | `YYYY-MM-DD`, optional | **v1.1.0.** Optional calendar deadline (user request: "add DEADLINES to tasks"). Presentation only — never affects scoring or healing. Core `deadlineState(deadline, today)` classifies overdue / due today / future so every client colors chips identically. |
+| `threadOf` | string, optional | **v1.1.0.** Id of the task this one continues (the "thread" feature). Continuations carry the same base text plus a ` #N` suffix (`#2`, `#3`, …); core `createThreadContinuation` builds them. Present ⇒ the task belongs to a thread; absent ⇒ standalone. |
+| `recurringOf` | string, optional | **v1.1.0.** Id of the `categories[].recurringTasks` entry that materialized this task instance. Presentation badge only. |
 
 #### `completion` object
 
@@ -167,13 +172,29 @@ above AND a marker item directly below on the board, and the two referenced
 marker entities must carry the **same** `categoryId`. Everything else ⇒
 `null`. The completing client resolves board marker items through
 `markers[].markerId → markers[].categoryId`. Once written, `completion
-.categoryId` is frozen; later board rearrangement does not rewrite history.
+.categoryId` is **frozen against board rearrangement** — but since v1.1.0
+the user may explicitly EDIT it after completion (Reviews ▸ task details on
+desktop); the edit rewrites `completion.categoryId` and refreshes the
+matching `logs` entry. Day scores recompute live from the completion data,
+so the change is reflected everywhere immediately.
+
+**Thread rule (v1.1.0):** `threadOf` chains are walked by core
+`threadRootOf`/`threadTasks`; the next continuation number is
+`threadTasks(...).length + 1` so completed members still count (their effort
+is already registered and must not be double-created). The ` #N` suffix is
+presentation — membership and numbering come from the structural links,
+never from parsing task text.
 
 ### `workingOn` — array of task ids
 
 Task ids currently "in progress" (the Working-On feature). Healing drops ids
 whose task no longer exists or is already completed. Order is meaningful
-(stack order, newest last).
+(stack order, newest last). Since v1.1.0 the **display** order in the
+Working-On popup/sheet is category priority first (core
+`sortWorkingOnByPriority`: `priorityMultiplier` DESC, stable insertion order
+within a priority, uncategorized last) — the persisted array keeps its stack
+semantics so healing and sync stay untouched. The desktop popup also offers
+"Clear all" (empties the array — deselects every task from working on).
 
 ### `logs` — array, capped at 500
 

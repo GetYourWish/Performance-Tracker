@@ -30,6 +30,7 @@ import {
 } from '../components/ui.js'
 import { inputStyle } from '../components/dialogs.js'
 import { updateSettings, addDifficulty, updateDifficulty, moveDifficulty, addCategory, updateCategory, moveCategory, clearLogs } from '../actions.js'
+import { generateId } from '@performance-tracker/core'
 import { SPACING, TYPE, ACCENTS } from '../theme.js'
 // Bundled app.json — the version of the JS bundle actually running (the
 // native versionName can be stale when the apk was rebuilt via gradlew on an
@@ -222,6 +223,11 @@ function DifficultyRow({ theme, difficulty, index, count, onPatch, onMove, onPic
 
 // --- category row (desktop categories-list item) -------------------------------
 
+// Weekday toggle labels for the recurring editor (0 = Sunday, JS getDay
+// convention — same as core materializeRecurringTasks).
+const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+const WEEKDAY_FULL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
 function CategoryRow({ theme, category, index, count, onPatch, onMove, onPickColor }) {
   const [name, setName] = useState(category.name)
   const [mult, setMult] = useState(String(category.priorityMultiplier ?? 1))
@@ -229,6 +235,8 @@ function CategoryRow({ theme, category, index, count, onPatch, onMove, onPickCol
     setName(category.name)
     setMult(String(category.priorityMultiplier ?? 1))
   }, [category.name, category.priorityMultiplier])
+
+
 
   const commitName = () => {
     const t = name.trim()
@@ -302,6 +310,118 @@ function CategoryRow({ theme, category, index, count, onPatch, onMove, onPickCol
   )
 }
 
+// v1.1.0 — recurring (weekday-scheduled) pre-loaded tasks editor for one
+// category (user request 2026-11-17). Collapsed by default; expands below
+// the category row. Every change writes the WHOLE recurringTasks array
+// through updateCategory — the same verified write cycle as every other
+// settings edit.
+export function CategoryRecurringEditor({ theme, category, onPatch }) {
+  const recurring = Array.isArray(category.recurringTasks) ? category.recurringTasks : []
+
+  const updateList = next => onPatch({ recurringTasks: next })
+  const updateOne = (rtId, patch) =>
+    updateList(recurring.map(rt => (rt.id === rtId ? { ...rt, ...patch } : rt)))
+  const toggleDay = (rtId, day) =>
+    updateOne(rtId, {
+      days: (recurring.find(rt => rt.id === rtId)?.days || []).includes(day)
+        ? (recurring.find(rt => rt.id === rtId)?.days || []).filter(d => d !== day)
+        : [...(recurring.find(rt => rt.id === rtId)?.days || []), day].sort((a, b) => a - b)
+    })
+
+  return (
+    <View style={{ marginTop: SPACING.xs, marginBottom: SPACING.sm }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: SPACING.xs }}>
+        <Icon name="autorenew" size={15} color={theme.flowState} />
+        <Text style={{ flex: 1, color: theme.textSecondary, fontWeight: '600', fontSize: 12, letterSpacing: 0.5 }}>
+          RECURRING TASKS
+        </Text>
+        <TextButton
+          theme={theme}
+          label="+ Add"
+          onPress={() =>
+            updateList([...recurring, { id: generateId(), text: '', days: [], active: true }])
+          }
+        />
+      </View>
+      <Text style={{ color: theme.textMuted, marginBottom: SPACING.sm, ...TYPE.caption }}>
+        Added automatically on their weekdays and set as Working On (once per day).
+      </Text>
+      {recurring.length === 0 ? (
+        <Text style={{ color: theme.textMuted, ...TYPE.caption, fontStyle: 'italic' }}>
+          No recurring tasks yet.
+        </Text>
+      ) : (
+        recurring.map(rt => {
+          const days = Array.isArray(rt.days) ? rt.days : []
+          return (
+            <View
+              key={rt.id}
+              style={{
+                borderWidth: 1,
+                borderColor: theme.border,
+                borderRadius: 12,
+                padding: SPACING.sm,
+                marginBottom: SPACING.sm
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.xs }}>
+                <TextInput
+                  style={[inputStyle(theme), { flex: 1, paddingVertical: 6 }]}
+                  value={rt.text}
+                  onChangeText={t => updateOne(rt.id, { text: t })}
+                  placeholder="Task text"
+                  placeholderTextColor={theme.textMuted}
+                  returnKeyType="done"
+                />
+                <IconBtn
+                  name="close"
+                  size={18}
+                  color={theme.danger}
+                  onPress={() => updateList(recurring.filter(x => x.id !== rt.id))}
+                  accessibilityLabel={`Delete recurring task ${rt.text || '(untitled)'}`}
+                />
+              </View>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: SPACING.xs }}>
+                {WEEKDAY_LABELS.map((label, day) => {
+                  const on = days.includes(day)
+                  return (
+                    <Pressable
+                      key={day}
+                      onPress={() => toggleDay(rt.id, day)}
+                      accessibilityLabel={`${WEEKDAY_FULL[day]} ${on ? 'selected' : 'not selected'}`}
+                      accessibilityRole="button"
+                      style={{
+                        width: 34,
+                        height: 30,
+                        borderRadius: 8,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 1,
+                        borderColor: on ? theme.flowState : theme.border,
+                        backgroundColor: on ? theme.flowState : 'transparent'
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: on ? '#ffffff' : theme.textSecondary,
+                          fontWeight: '700',
+                          fontSize: 12
+                        }}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+            </View>
+          )
+        })
+      )}
+    </View>
+  )
+}
+
 // --- the screen -------------------------------------------------------------------
 
 export function SettingsScreen({
@@ -325,6 +445,8 @@ export function SettingsScreen({
   const [snack, setSnack] = useState(null)
   const [logFilter, setLogFilter] = useState('all')
   const [pickingColor, setPickingColor] = useState(null) // { kind:'difficulty'|'category'|'flowState', item }
+  // v1.1.0 — which category's recurring editor is expanded (category id)
+  const [recurringOpenKey, setRecurringOpenKey] = useState(null)
   const [confirmingClearLogs, setConfirmingClearLogs] = useState(false)
 
   const [fatigueIncrement, setFatigueIncrement] = useState('')
@@ -516,16 +638,29 @@ export function SettingsScreen({
             Priority multiplier: tasks in a category with a 2x multiplier earn double points. Default 1.0.
           </Text>
           {categories.map((c, i) => (
-            <CategoryRow
-              key={c.id}
-              theme={theme}
-              category={c}
-              index={i}
-              count={categories.length}
-              onPatch={patch => run((data2, now) => updateCategory(data2, c.id, patch, now))}
-              onMove={dir => run((data2, now) => moveCategory(data2, c.id, dir, now))}
-              onPickColor={item => setPickingColor({ kind: 'category', item })}
-            />
+            <View key={c.id} style={{ marginBottom: SPACING.md }}>
+              <CategoryRow
+                theme={theme}
+                category={c}
+                index={i}
+                count={categories.length}
+                onPatch={patch => run((data2, now) => updateCategory(data2, c.id, patch, now))}
+                onMove={dir => run((data2, now) => moveCategory(data2, c.id, dir, now))}
+                onPickColor={item => setPickingColor({ kind: 'category', item })}
+              />
+              <TextButton
+                theme={theme}
+                label={`Recurring (${(Array.isArray(c.recurringTasks) ? c.recurringTasks : []).length})`}
+                onPress={() => setRecurringOpenKey(recurringOpenKey === c.id ? null : c.id)}
+              />
+              {recurringOpenKey === c.id ? (
+                <CategoryRecurringEditor
+                  theme={theme}
+                  category={c}
+                  onPatch={patch => run((data2, now) => updateCategory(data2, c.id, patch, now))}
+                />
+              ) : null}
+            </View>
           ))}
           <TextButton
             theme={theme}

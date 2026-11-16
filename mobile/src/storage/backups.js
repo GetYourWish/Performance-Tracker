@@ -1,18 +1,22 @@
 // Rolling backup window — desktop parity with electron/main.cjs createBackup().
 //
-// Desktop keeps `.backups/tracker-<timestamp>.json` NEXT TO the data file
-// (last 20). On Android the data file lives in a Syncthing-fed SAF folder:
+// Desktop keeps `.backups/tracker-<timestamp>.json` NEXT TO the data file.
+// On Android the data file lives in a Syncthing-fed SAF folder:
 // a `.backups` folder there would (a) need directory creation the SAF API
 // does not expose and (b) sync backup churn to every peer. So the Android
 // app keeps the SAME naming scheme and rotation window in its app-private
 // documents directory instead — restore copies stay on the device that
 // created them, and the synced folder stays clean.
 //
+// v1.1.0: the window widened from 20 to 30 on BOTH clients (user request
+// 2026-11-17: "whenever we reach 30 backups it deletes the oldest one
+// automatically").
+//
 // The pure helpers below are unit-tested in Node (__tests__/store.test.js).
 
 export const BACKUP_PREFIX = 'tracker-'
 export const BACKUP_EXT = '.json'
-export const BACKUP_KEEP = 20
+export const BACKUP_KEEP = 30
 
 // Damaged-file evidence copies. When tracker.json fails to parse, the exact
 // damaged bytes are preserved byte-for-byte in the app-private .corrupt/

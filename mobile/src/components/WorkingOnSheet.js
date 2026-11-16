@@ -27,10 +27,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { withAlpha } from './rows.js'
 import { TextButton } from './ui.js'
 import { SPACING, RADIUS, TYPE } from '../theme.js'
+import { deadlineState, getCurrentDate } from '@performance-tracker/core'
 
-export function WorkingOnSheet({ theme, visible, tasks, getCategoryFor, onSelectTask, onClose }) {
+export function WorkingOnSheet({ theme, visible, tasks, getCategoryFor, onSelectTask, onClearAll, onClose }) {
   const insets = useSafeAreaInsets()
   const count = (tasks || []).length
+  const today = getCurrentDate()
 
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -56,12 +58,18 @@ export function WorkingOnSheet({ theme, visible, tasks, getCategoryFor, onSelect
               flexDirection: 'row',
               alignItems: 'center',
               paddingHorizontal: SPACING.xl,
-              paddingTop: SPACING.md
+              paddingTop: SPACING.md,
+              gap: SPACING.sm
             }}
           >
             <Text style={{ flex: 1, color: theme.textPrimary, fontSize: 18, fontWeight: '700', letterSpacing: 0.1 }}>
               Working On ({count})
             </Text>
+            {/* v1.1.0 — desktop WorkingOnPopup "Clear All" parity (user
+                request 2026-11-17): deselect every working-on task at once. */}
+            {count > 0 ? (
+              <TextButton theme={theme} label="Clear All" onPress={onClearAll} />
+            ) : null}
             <TextButton theme={theme} label="Close" onPress={onClose} />
           </View>
           <Text
@@ -124,6 +132,20 @@ export function WorkingOnSheet({ theme, visible, tasks, getCategoryFor, onSelect
                       <Text numberOfLines={3} style={{ flex: 1, color: theme.textPrimary, ...TYPE.body }}>
                         {String(task?.text ?? '')}
                       </Text>
+                      {/* v1.1.0 — deadline chip (desktop popup parity) */}
+                      {(() => {
+                        const info = deadlineState(task.deadline, today)
+                        if (!info) return null
+                        const color = info.overdue ? '#ef4444' : info.dueToday ? '#f59e0b' : theme.textMuted
+                        return (
+                          <Text
+                            style={{ color, fontSize: 12, fontWeight: '700' }}
+                            accessibilityLabel={`Deadline ${info.label}`}
+                          >
+                            ⏱ {info.label}
+                          </Text>
+                        )
+                      })()}
                       <Icon name="check-circle-outline" size={22} color={theme.textSecondary} />
                     </Pressable>
                   )

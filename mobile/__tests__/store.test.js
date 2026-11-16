@@ -7,6 +7,7 @@ const {
   createTrackerStore
 } = require('../src/storage/store.js')
 const {
+  BACKUP_KEEP,
   backupFileName,
   selectOldBackups,
   isBackupName
@@ -155,16 +156,20 @@ describe('backups rotation', () => {
     expect(backupFileName('2026-08-28T10:20:30.123Z')).toBe('tracker-2026-08-28T10-20-30-123Z.json')
   })
 
-  test('selectOldBackups keeps the newest 20', () => {
+  // v1.1.0 (user request 2026-11-17): the rotation window widened from 20
+  // to 30 backups on BOTH clients — "whenever we reach 30 backups it deletes
+  // the oldest one automatically".
+  test('selectOldBackups keeps the newest 30', () => {
     const names = []
-    for (let i = 1; i <= 25; i++) {
+    for (let i = 1; i <= 35; i++) {
       const ts = String(i).padStart(3, '0')
       names.push(`tracker-2026-01-${ts}T00-00-00-000Z.json`)
     }
     const old = selectOldBackups(names)
     expect(old).toHaveLength(5)
     expect(old[0]).toContain('-001')
-    expect(selectOldBackups(names.slice(0, 20))).toHaveLength(0)
+    expect(selectOldBackups(names.slice(0, 30))).toHaveLength(0)
+    expect(BACKUP_KEEP).toBe(30)
   })
 
   test('isBackupName ignores other files', () => {

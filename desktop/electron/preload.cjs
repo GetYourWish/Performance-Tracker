@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('api', {
   refreshData: () => ipcRenderer.invoke('refresh-data'),
   setWatcherEnabled: (enabled) => ipcRenderer.invoke('set-watcher-enabled', enabled),
   getWatcherEnabled: () => ipcRenderer.invoke('get-watcher-enabled'),
+  minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
   onExternalChange: (callback) => {
     const listener = (event, payload) => callback({ payload });
     ipcRenderer.on('external-change', listener);

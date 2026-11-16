@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, getYear, startOfYear, endOfYear } from 'date-fns'
-import { calculateDayScore, parseDate, formatDate, groupTasksByDate } from '@performance-tracker/core'
+import { calculateDayScore, parseDate, formatDate, groupTasksByDate, calculateTaskScoreBreakdown, deadlineState, getCurrentDate } from '@performance-tracker/core'
 import ChronoStream from './ChronoStream'
 import StackedChart from './StackedChart'
 import HeatmapGrid from './HeatmapSkyline'
@@ -8,12 +8,16 @@ import Dashboard from './Dashboard'
 import { toPng } from 'html-to-image'
 
 // Task Detail Popup Component
-function TaskDetailPopup({ task, difficulty, category, onClose, onEditDate, onSave }) {
+function TaskDetailPopup({ task, difficulty, category, categories = [], onClose, onEditDate, onSave }) {
   const completion = task.completion
   const [editingNote, setEditingNote] = useState(false)
   const [noteValue, setNoteValue] = useState(completion.note || '')
   const [editingTime, setEditingTime] = useState(false)
   const [timeValue, setTimeValue] = useState(completion.completedAt ? completion.completedAt.slice(11, 16) : '12:00')
+  // v1.1.0 — editing a completed task's CATEGORY (user request 2026-11-17:
+  // "add a way to edit category after a task has being marked as complete")
+  const [editingCategory, setEditingCategory] = useState(false)
+  const [categoryValue, setCategoryValue] = useState(completion.categoryId || '')
 
   if (!completion) return null
 
@@ -37,6 +41,17 @@ function TaskDetailPopup({ task, difficulty, category, onClose, onEditDate, onSa
       completion: { ...completion, completedAt: oldDate.toISOString() }
     })
     setEditingTime(false)
+  }
+
+  // v1.1.0 — save the edited category ('' = no category). Day scores and
+  // charts recompute live from completion data; the Reviews onSave handler
+  // also refreshes the matching log entry.
+  const handleSaveCategory = () => {
+    onSave({
+      ...task,
+      completion: { ...completion, categoryId: categoryValue || null }
+    })
+    setEditingCategory(false)
   }
 
   return (
@@ -140,26 +155,100 @@ function TaskDetailPopup({ task, difficulty, category, onClose, onEditDate, onSa
           
           <div className="form-group">
             <label>Category</label>
-            {category ? (
-              <div 
-                className="category-badge"
-                style={{ 
-                  backgroundColor: category.color, 
-                  display: 'inline-block',
-                  padding: '8px 16px',
-                  borderRadius: '12px',
-                  color: '#fff',
-                  fontWeight: 500
-                }}
-              >
-                {category.name}
+            {editingCategory ? (
+              <div>
+                <select
+                  value={categoryValue}
+                  onChange={(e) => setCategoryValue(e.target.value)}
+                  className="date-input"
+                  style={{ width: '100%' }}
+                  autoFocus
+                  aria-label="Task category"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveCategory()
+                    if (e.key === 'Escape') {
+                      setCategoryValue(completion.categoryId || '')
+                      setEditingCategory(false)
+                    }
+                  }}
+                >
+                  <option value="">No category</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
+                  <button className="btn-confirm" onClick={handleSaveCategory} style={{ padding: '8px 16px', fontSize: '13px' }}>Save</button>
+                  <button
+                    className="btn-cancel"
+                    onClick={() => {
+                      setCategoryValue(completion.categoryId || '')
+                      setEditingCategory(false)
+                    }}
+                    style={{ padding: '8px 16px', fontSize: '13px' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             ) : (
-              <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)' }}>
-                No category
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {category ? (
+                  <div 
+                    className="category-badge"
+                    style={{ 
+                      backgroundColor: category.color, 
+                      display: 'inline-block',
+                      padding: '8px 16px',
+                      borderRadius: '12px',
+                      color: '#fff',
+                      fontWeight: 500
+                    }}
+                  >
+                    {category.name}
+                  </div>
+                ) : (
+                  <div style={{ padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)' }}>
+                    No category
+                  </div>
+                )}
+                <button
+                  className="action-btn"
+                  onClick={() => {
+                    setCategoryValue(completion.categoryId || '')
+                    setEditingCategory(true)
+                  }}
+                  title="Edit category"
+                  aria-label="Edit category"
+                  style={{ padding: '8px 12px', fontSize: '13px', flexShrink: 0 }}
+                >
+                  Edit
+                </button>
               </div>
             )}
           </div>
+          
+          {task.deadline && (
+            <div className="form-group">
+              <label>Deadline</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ flex: 1, padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}>
+                  {task.deadline}
+                </div>
+                {(() => {
+                  const info = deadlineState(task.deadline, getCurrentDate())
+                  return info ? (
+                    <span
+                      className={`task-deadline-chip ${info.overdue ? 'overdue' : ''} ${info.dueToday ? 'due-today' : ''}`}
+                      title="Deadline state relative to today"
+                    >
+                      {info.overdue ? `was ${info.label} at completion` : info.label}
+                    </span>
+                  ) : null
+                })()}
+              </div>
+            </div>
+          )}
           
           <div className="form-group">
             <label>Note</label>
@@ -797,6 +886,7 @@ function Reviews({ data, onDayClick, onSave }) {
           task={selectedTask}
           difficulty={difficulties.find(d => d.id === selectedTask.completion.difficultyId)}
           category={categories.find(c => c.id === selectedTask.completion.categoryId)}
+          categories={categories}
           onClose={() => setSelectedTask(null)}
           onEditDate={(task) => {
             setSelectedTask(null)
@@ -804,7 +894,35 @@ function Reviews({ data, onDayClick, onSave }) {
           }}
           onSave={(updatedTask) => {
             const updatedTasks = tasks.map(t => t.id === updatedTask.id ? updatedTask : t)
-            onSave({ ...data, tasks: updatedTasks, meta: { ...data.meta, updatedAt: new Date().toISOString() } })
+            // v1.1.0 — keep the completion LOG in sync when a completed
+            // task is edited after the fact (category / note / time): the
+            // matching log entry is recomputed with the canonical breakdown
+            // so the Logs tab never contradicts the reviews.
+            const allCompleted = updatedTasks.filter(t => t.completion)
+            const breakdown = calculateTaskScoreBreakdown(
+              updatedTask,
+              allCompleted,
+              difficulties,
+              settings.fatigueIncrement || 0.10,
+              settings.fatigueCap || 3.0,
+              categories
+            )
+            const updatedLogs = (data.logs || []).map(log =>
+              log.taskId === updatedTask.id
+                ? {
+                    ...log,
+                    difficultyLabel: breakdown.difficultyLabel,
+                    difficultyColor: breakdown.difficultyColor,
+                    categoryName: breakdown.categoryName,
+                    categoryColor: breakdown.categoryColor,
+                    priorityMultiplier: breakdown.priorityMultiplier,
+                    fatigueMultiplier: breakdown.fatigueMultiplier,
+                    basePoints: breakdown.basePoints,
+                    finalScore: breakdown.finalScore
+                  }
+                : log
+            )
+            onSave({ ...data, tasks: updatedTasks, logs: updatedLogs, meta: { ...data.meta, updatedAt: new Date().toISOString() } })
             setSelectedTask(updatedTask)
           }}
         />
