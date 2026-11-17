@@ -1303,12 +1303,26 @@
 
 .board-sidebar {
   width: 100%;
+  /* v1.4.0: the sidebar area fills the panel height so the category list
+     gets every pixel the panel offers (the 46vh window-fraction clamp is
+     gone — it capped the list below the space actually available and the
+     content looked compressed) */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .category-grabber {
   background: var(--bg-secondary);
   padding: 16px;
   border-radius: var(--radius-lg);
+  /* v1.4.0: flex chain panel → sidebar → card → list; the list is the
+     ONLY scroll container and takes all remaining card height */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* v1.3.0 (user follow-up 2026-11-18): categories stack VERTICALLY — one
@@ -1385,6 +1399,13 @@
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+/* v1.4.0: "+ Add Category" area sits BELOW the scroll list — the button is
+   pinned at the bottom of the card, always reachable without scrolling */
+.categories-add {
+  margin-top: 12px;
+  flex-shrink: 0;
 }
 
 .add-category-btn {
@@ -3026,7 +3047,13 @@
    horizontal scrollbar (the v1.2.0 wrap layout produced one) — and the
    scrollbar is slimmed so it fits the narrow panel. */
 .categories-scroll {
-  max-height: 46vh;
+  /* v1.4.0: flex: 1 + min-height: 0 instead of max-height: 46vh — the
+     visible list height is exactly the space the right panel offers.
+     46vh was a fraction of the WINDOW: on a tall window the list was
+     clamped shorter than the available panel space (compressed content
+     scrolling inside an under-filled panel) */
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 4px;
@@ -3624,16 +3651,33 @@ button.task-deadline-chip:hover {
 }
 
 .calendar-task-pill {
+  display: block;
+  width: 100%;
+  font-family: inherit;
   font-size: 12px;
   line-height: 1.25;
   padding: 3px 6px;
   border-radius: 6px;
   background: var(--bg-tertiary);
+  border: 0;
   border-left: 3px solid var(--accent-color, #60a5fa);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), filter var(--transition-fast);
+}
+
+/* v1.4.0: pills are buttons (click → task details) — visible affordance */
+.calendar-task-pill:hover {
+  filter: brightness(1.2);
+}
+
+.calendar-task-pill:focus-visible {
+  outline: 2px solid var(--accent-color, #60a5fa);
+  outline-offset: 1px;
 }
 
 /* Pills on days that already passed (viewing the current month) belong to
@@ -3643,10 +3687,168 @@ button.task-deadline-chip:hover {
   background: rgba(239, 68, 68, 0.12);
 }
 
+/* v1.4.0: due TODAY — amber, the same accent the deadline chips use */
+.calendar-task-pill.due-today {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+/* v1.4.0: "+N more" opens the day's full task list */
 .calendar-task-more {
+  display: block;
+  width: 100%;
+  font-family: inherit;
   font-size: 11px;
   color: var(--text-muted);
-  padding-left: 6px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-task-more:hover {
+  color: var(--text-primary);
+}
+
+/* --- v1.4.0 calendar task details + day list + Go to Board ---------------- */
+
+/* Generic popup header (title left, ✕ right). Only the WorkingOn popup had
+   a scoped flex rule — every other dialog using .popup-header (task
+   details, day list, delete confirmation) rendered the ✕ BELOW the title,
+   which looked like a stray glyph. */
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.calendar-day-list-popup {
+  max-width: 480px;
+  width: calc(100vw - 48px);
+}
+
+.calendar-day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.calendar-day-list-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 12px 0;
+}
+
+.calendar-day-list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: filter var(--transition-fast);
+}
+
+.calendar-day-list-row:hover {
+  filter: brightness(1.2);
+}
+
+.calendar-day-list-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.calendar-day-list-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-detail-popup {
+  max-width: 480px;
+  width: calc(100vw - 48px);
+}
+
+.cal-detail-text {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.cal-detail-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.cal-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border-color);
+  min-width: 0;
+}
+
+.cal-detail-label {
+  flex: 0 0 88px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cal-detail-muted {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.cal-detail-badge {
+  font-size: 12px;
+}
+
+.cal-detail-deadline {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.cal-detail-deadline.overdue { color: #ef4444; }
+.cal-detail-deadline.due-today { color: #f59e0b; }
+
+/* v1.4.0 "Go to Board" — accent fill, the journey's primary action */
+.cal-goto-board-btn {
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: #8b5cf6;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.cal-goto-board-btn:hover {
+  background: #7c3aed;
 }
 
 /* --- v1.3.0 deadline toasts (in-app, bottom-right, no OS notification) ----- */

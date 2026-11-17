@@ -33,6 +33,11 @@ function App() {
   // v1.3.0: in-app bottom-right toasts for tasks that just auto-joined
   // Working On because their deadline was reached (no Windows notification)
   const [deadlineToasts, setDeadlineToasts] = useState([])
+  // v1.4.0 calendar → board handoff: set by the Calendar page's "Go to
+  // Board" button. Board scrolls the task's row into view and flashes it,
+  // then reports back here so the request is consumed exactly once.
+  // `nonce` makes repeat clicks on the same task fire again.
+  const [boardFocus, setBoardFocus] = useState(null)
 
   // Debounce save to avoid constant disk writes
   const saveTimeoutRef = useRef(null)
@@ -201,19 +206,23 @@ function App() {
     
     // Schedule save after 100ms debounce for responsive feel
     saveTimeoutRef.current = setTimeout(async () => {
-      if (pendingSaveRef.current && dataFileRef.current) {
+      // Capture BEFORE any await — a flushSave() running while this timer
+      // waits can null the ref; reading it again after the await would
+      // setData(null) and crash every view that reads data unguarded.
+      const pending = pendingSaveRef.current;
+      if (pending && dataFileRef.current) {
         try {
-          const incoming = JSON.stringify(pendingSaveRef.current);
+          const incoming = JSON.stringify(pending);
           // No-change-no-write: identical content must never hit the disk
           if (lastPersistedRef.current === null || incoming !== lastPersistedRef.current) {
-            window.api.saveData(pendingSaveRef.current).catch(err => {
+            window.api.saveData(pending).catch(err => {
               console.error('Failed to save data:', err);
             });
             lastPersistedRef.current = incoming;
           }
           
           // Update UI state immediately for responsive feel
-          setData(pendingSaveRef.current);
+          setData(pending);
           pendingSaveRef.current = null;
         } catch (error) {
           console.error('Failed to save data:', error);
@@ -237,11 +246,17 @@ function App() {
       saveTimeoutRef.current = null;
     }
     
-    if (pendingSaveRef.current && dataFile) {
+    // Capture BEFORE the await — two flushes can interleave (e.g. Calendar
+    // nav click + "Go to Board" moments later): the first await resolves
+    // after the second already consumed the ref, and re-reading it here
+    // yielded null → setData(null) crashed the whole app (v1.4.0 fix; the
+    // calendar integration test is the regression test).
+    const pending = pendingSaveRef.current;
+    if (pending && dataFile) {
       try {
-        await window.api.saveData(pendingSaveRef.current);
+        await window.api.saveData(pending);
         
-        setData(pendingSaveRef.current);
+        setData(pending);
         pendingSaveRef.current = null;
       } catch (error) {
         console.error('Failed to flush save:', error);
@@ -448,6 +463,21 @@ function App() {
     }
   };
 
+  // v1.4.0 — Calendar "Go to Board": switch to the board and hand the task
+  // to Board (scroll + flash, the randomizer treatment). handleBoardFocusHandled
+  // must stay referentially stable (useCallback, no deps) — Board's focus
+  // effect depends on it.
+  const handleBoardFocusHandled = useCallback(() => {
+    setBoardFocus(null)
+  }, [])
+
+  const handleGoToBoard = useCallback((task) => {
+    if (!task || typeof task.id !== 'string') return
+    flushSave()
+    setBoardFocus({ taskId: task.id, nonce: Date.now() })
+    setCurrentView('board')
+  }, [flushSave])
+
   if (loading) {
     return (
       <div className="loading-screen">
@@ -531,10 +561,15 @@ function App() {
       
       <main className="main-content">
         {currentView === 'board' && (
-          <Board data={data} onSave={saveData} />
+          <Board
+            data={data}
+            onSave={saveData}
+            focusRequest={boardFocus}
+            onFocusHandled={handleBoardFocusHandled}
+          />
         )}
         {currentView === 'calendar' && (
-          <CalendarPage data={data} />
+          <CalendarPage data={data} onGoToBoard={handleGoToBoard} />
         )}
         {currentView === 'reviews' && (
           <Reviews 

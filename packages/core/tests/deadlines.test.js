@@ -20,6 +20,12 @@ describe('deadlineState', () => {
     expect(deadlineState(undefined, '2026-11-17')).toBeNull()
     expect(deadlineState('', '2026-11-17')).toBeNull()
   })
+  it('returns null for malformed deadline strings instead of NaN labels', () => {
+    // a full ISO datetime from a rogue writer must render as "no deadline",
+    // never "in NaNd" (v1.4.0 guard)
+    expect(deadlineState('2026-11-18T13:05:00.000Z', '2026-11-18')).toBeNull()
+    expect(deadlineState('not-a-date', '2026-11-18')).toBeNull()
+  })
   it('classifies overdue / today / tomorrow / future', () => {
     expect(deadlineState('2026-11-15', '2026-11-17')).toEqual({
       daysLeft: -2, overdue: true, dueToday: false, label: '2d overdue'

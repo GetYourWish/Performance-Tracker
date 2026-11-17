@@ -68,6 +68,22 @@ describe('applyDueDeadlines', () => {
     expect(next.workingOn).toEqual([])
   })
 
+  it('skips malformed deadline strings instead of auto-adding them (NaN guard)', () => {
+    // a full ISO datetime from a rogue writer parses to NaN days — NaN > 0
+    // is false, so without the guard such a task was treated as DUE and
+    // spuriously joined Working On (v1.4.0).
+    const data = baseData({
+      tasks: [
+        task('iso-datetime', { deadline: '2026-11-18T13:05:00.000Z' }),
+        task('garbage', { deadline: 'not-a-date' })
+      ]
+    })
+    const { data: next, added } = applyDueDeadlines({ data, today: TODAY, now: NOW })
+    expect(added).toEqual([])
+    expect(next).toBe(data) // same reference — nothing changed at all
+    expect(next.workingOn).toEqual([])
+  })
+
   it('stamps tasks already in workingOn without duplicating them', () => {
     const data = baseData({
       tasks: [task('t1', { deadline: TODAY })],

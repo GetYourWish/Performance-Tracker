@@ -60,7 +60,7 @@ import {
 } from '../actions.js'
 import { SPACING, TYPE } from '../theme.js'
 
-export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShowConflictInfo }) {
+export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShowConflictInfo, focusRequest, onFocusHandled }) {
   const insets = useSafeAreaInsets()
   const [snack, setSnack] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -403,6 +403,27 @@ export function BoardScreen({ theme, state, store, refreshing, onRefresh, onShow
     },
     [visibleItems, scrollToItem, flashItem]
   )
+
+  // v1.4.0 — calendar "Go to Board" handoff: teleport to the requested
+  // task's row and flash it (the dice treatment), then consume the request
+  // exactly once. Runs on MOUNT too — BoardScreen mounts when App switches
+  // to the board tab, so the request survives the tab switch. A task with
+  // no row (off the board, data changed) is consumed silently.
+  useEffect(() => {
+    if (!focusRequest || !focusRequest.taskId) return
+    const target = visibleItems.find(
+      i => i.kind === 'task' && i.key === focusRequest.taskId
+    )
+    if (target) {
+      const timer = setTimeout(() => {
+        scrollToItem(target.key)
+        flashItem(target.key)
+      }, 100)
+      if (typeof onFocusHandled === 'function') onFocusHandled()
+      return () => clearTimeout(timer)
+    }
+    if (typeof onFocusHandled === 'function') onFocusHandled()
+  }, [focusRequest, onFocusHandled, visibleItems, scrollToItem, flashItem])
 
   const renderItem = useCallback(
     ({ item, index }) => {

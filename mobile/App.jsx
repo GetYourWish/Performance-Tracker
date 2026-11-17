@@ -11,6 +11,7 @@ import { useTracker } from './src/hooks/useTracker.js'
 import { readLastCrash, clearLastCrash } from './src/diagnostics.js'
 import { AppBackground, BottomNav } from './src/components/ui.js'
 import { BoardScreen } from './src/components/BoardScreen.js'
+import { CalendarScreen } from './src/components/CalendarScreen.js'
 import { ReviewsScreen } from './src/components/ReviewsScreen.js'
 import { SetupScreen, SchemaErrorScreen } from './src/screens/SetupScreen.js'
 import { SettingsScreen } from './src/screens/SettingsScreen.js'
@@ -59,6 +60,25 @@ function AppShell() {
   // this override clears. Cleared on failure too, so a failed save never
   // leaves a lie on screen.
   const [pendingTheme, setPendingTheme] = useState(null)
+  // v1.4.0 calendar → board handoff: set by the Calendar tab's "Go to
+  // Board" button. BoardScreen teleports to the task's row and flashes it,
+  // then reports back here so the request is consumed exactly once.
+  // `nonce` makes repeat taps on the same task fire again.
+  const [boardFocus, setBoardFocus] = useState(null)
+
+  // v1.4.0 — Calendar "Go to Board": switch to the board tab and hand the
+  // task id to BoardScreen (teleport + flash — the dice treatment).
+  // handleBoardFocusHandled must stay referentially stable (useCallback,
+  // no deps) — BoardScreen's focus effect depends on it.
+  const handleBoardFocusHandled = useCallback(() => {
+    setBoardFocus(null)
+  }, [])
+
+  const handleGoToBoard = useCallback(taskId => {
+    if (typeof taskId !== 'string') return
+    setBoardFocus({ taskId, nonce: Date.now() })
+    setTab('board')
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -306,7 +326,11 @@ function AppShell() {
               refreshing={refreshing}
               onRefresh={handleRefresh}
               onShowConflictInfo={() => setTab('settings')}
+              focusRequest={boardFocus}
+              onFocusHandled={handleBoardFocusHandled}
             />
+          ) : tab === 'calendar' ? (
+            <CalendarScreen theme={theme} state={state} onGoToBoard={handleGoToBoard} />
           ) : tab === 'reviews' ? (
             <ReviewsScreen theme={theme} state={state} store={store} />
           ) : (
@@ -329,6 +353,7 @@ function AppShell() {
           onChange={setTab}
           tabs={[
             { key: 'board', label: 'Board', icon: 'view-dashboard-outline', iconActive: 'view-dashboard' },
+            { key: 'calendar', label: 'Calendar', icon: 'calendar-month-outline', iconActive: 'calendar-month' },
             { key: 'reviews', label: 'Reviews', icon: 'chart-bar', iconActive: 'chart-bar' },
             { key: 'settings', label: 'Settings', icon: 'cog-outline', iconActive: 'cog' }
           ]}

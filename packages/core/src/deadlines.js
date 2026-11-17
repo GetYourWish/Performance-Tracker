@@ -32,6 +32,10 @@ function daysUntilDeadline(deadline, today) {
 function deadlineState(deadline, today) {
   if (!deadline || typeof deadline !== 'string') return null
   const daysLeft = daysUntilDeadline(deadline, today)
+  // Malformed date strings (e.g. a full ISO datetime sneaking in from a
+  // third-party writer) parse to NaN — rendering "in NaNd" on chips. Treat
+  // anything unparseable as "no deadline" instead of lying to the user.
+  if (!Number.isFinite(daysLeft)) return null
   let label
   if (daysLeft < 0) {
     label = `${-daysLeft}d overdue`
@@ -83,7 +87,11 @@ function applyDueDeadlines({ data, today, now }) {
     const deadline = task.deadline
     if (!deadline || typeof deadline !== 'string') return task
     if (task.deadlineAutoAdded === deadline) return task // already handled for this deadline
-    if (daysUntilDeadline(deadline, today) > 0) return task // not reached yet
+    const daysLeft = daysUntilDeadline(deadline, today)
+    // Malformed deadlines (NaN) count as "not reached" — a rogue full-ISO
+    // datetime must not auto-add the task to Working On (v1.4.0 guard,
+    // same class as the deadlineState NaN guard).
+    if (!Number.isFinite(daysLeft) || daysLeft > 0) return task
 
     // Due (or overdue) and not yet handled for this deadline. Stamp it so a
     // later manual removal is respected; only push into workingOn when the

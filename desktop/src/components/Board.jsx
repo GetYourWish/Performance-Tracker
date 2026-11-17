@@ -199,7 +199,12 @@ function CategorySidebar({ categories, onCreateCategory, onAddMarker, onNavigate
             onNavigateToMarker={() => onNavigateToCategory(category)}
           />
         ))}
+      </div>
 
+      {/* v1.4.0: "+ Add Category" (and its inline form) live BELOW the
+          scroll area — always reachable without scrolling to the bottom of
+          a long category list */}
+      <div className="categories-add">
         {isCreating ? (
           <div className="new-category-form">
             <input
@@ -230,7 +235,7 @@ function CategorySidebar({ categories, onCreateCategory, onAddMarker, onNavigate
   )
 }
 
-function Board({ data, onSave }) {
+function Board({ data, onSave, focusRequest, onFocusHandled }) {
   // Derive state directly from props - no duplication
   const tasks = useMemo(() => data?.tasks?.filter(t => !t.completion) || [], [data?.tasks])
   const boardItems = useMemo(() => data?.board || [], [data?.board])
@@ -729,6 +734,23 @@ function Board({ data, onSave }) {
       }
     }, 100)
   }, [boardItems, tasks, data, onSave])
+
+  // v1.4.0 — calendar "Go to Board" handoff: scroll the requested task's
+  // row into view and flash it (the randomizer treatment), then consume the
+  // request so it fires exactly once. Runs on mount too — Board MOUNTS when
+  // App switches back to the board view, and the effect fires after the
+  // rows have rendered, so no extra timeout is needed. A task whose row is
+  // missing (data changed since the popup opened) is consumed silently.
+  useEffect(() => {
+    if (!focusRequest || !focusRequest.taskId) return
+    const rowElement = document.querySelector(`[data-board-item-id="${focusRequest.taskId}"]`)
+    if (rowElement) {
+      rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      rowElement.classList.add('random-flash')
+      setTimeout(() => rowElement.classList.remove('random-flash'), 1000)
+    }
+    if (typeof onFocusHandled === 'function') onFocusHandled()
+  }, [focusRequest, onFocusHandled])
 
   const handleAddTaskBelowMarker = useCallback((markerId) => {
     const newTask = {
