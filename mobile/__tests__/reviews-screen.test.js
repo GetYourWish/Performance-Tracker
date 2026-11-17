@@ -28,6 +28,29 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 24, bottom: 24, left: 0, right: 0 })
 }))
 
+// Every mounted tree must be unmounted before the suite ends: components
+// like Snackbar schedule real timers (setSnack auto-hide, ui.js) whose
+// clearTimeout cleanup only runs on unmount. A dangling timer firing after
+// teardown makes jest exit 1 ("Jest did not exit one second after the test
+// run has completed" + "import after the Jest environment has been torn
+// down") even though every test passed.
+const mountedTrees = []
+
+function mountTree(element) {
+  const tree = TestRenderer.create(element)
+  mountedTrees.push(tree)
+  return tree
+}
+
+afterEach(async () => {
+  while (mountedTrees.length) {
+    const t = mountedTrees.pop()
+    await act(async () => {
+      t.unmount()
+    })
+  }
+})
+
 const theme = buildTheme('dark', 'dark')
 
 function makeTask(id, date, at, difficultyId = 'd1', categoryId = null, note = '') {
@@ -85,7 +108,7 @@ function makeStore() {
 async function mountScreen(data = makeData(), store = makeStore()) {
   let tree = null
   await act(async () => {
-    tree = TestRenderer.create(
+    tree = mountTree(
       <ReviewsScreen theme={theme} state={{ status: 'ready', data, conflicts: [] }} store={store} />
     )
     await Promise.resolve()
@@ -350,7 +373,7 @@ describe('ReviewsDashboard numbers (desktop parity)', () => {
   test('streaks: 2-day current streak with yesterday+today completions', async () => {
     let tree = null
     await act(async () => {
-      tree = TestRenderer.create(<ReviewsDashboard theme={theme} data={data} />)
+      tree = mountTree(<ReviewsDashboard theme={theme} data={data} />)
       await Promise.resolve()
     })
     const texts = textOf(tree.toJSON()).join('|')
@@ -366,7 +389,7 @@ describe('ReviewsDashboard numbers (desktop parity)', () => {
     const expected = 7.4
     let tree = null
     TestRenderer.act(() => {
-      tree = TestRenderer.create(<ReviewsDashboard theme={theme} data={data} />)
+      tree = mountTree(<ReviewsDashboard theme={theme} data={data} />)
     })
     const texts = textOf(tree.toJSON())
     expect(texts).toContain(String(expected))
@@ -376,7 +399,7 @@ describe('ReviewsDashboard numbers (desktop parity)', () => {
     const hidden = { ...data, settings: { ...data.settings, dashboard: { streaks: false, difficultyMix: false } } }
     let tree = null
     TestRenderer.act(() => {
-      tree = TestRenderer.create(<ReviewsDashboard theme={theme} data={hidden} />)
+      tree = mountTree(<ReviewsDashboard theme={theme} data={hidden} />)
     })
     const texts = textOf(tree.toJSON()).join('|')
     expect(texts).not.toContain('STREAKS')
