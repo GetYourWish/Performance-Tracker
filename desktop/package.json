@@ -2,6 +2,7 @@
   "name": "performance-tracker",
   "version": "1.0.0",
   "description": "A personal local-first performance tracker",
+  "author": "GetYourWish",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
