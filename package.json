@@ -18,7 +18,8 @@
     "test:core": "npm run test --workspace @performance-tracker/core",
     "test:core:rn": "npm run test --workspace @performance-tracker/mobile",
     "test:desktop": "npm run test --workspace desktop",
-    "check:core-pin": "node scripts/check-core-pin.cjs"
+    "check:core-pin": "node scripts/check-core-pin.cjs",
+    "check:desktop-build": "node scripts/check-desktop-build.cjs"
   },
   "license": "MIT",
   "dependencies": {
@@ -36,5 +37,9 @@
     "xcode": {
       "uuid": "^11.1.1"
     }
+  },
+  "allowScripts": {
+    "electron": true,
+    "electron-winstaller": true
   }
 }

@@ -11,8 +11,8 @@
     "preview": "vite preview",
     "start": "electron .",
     "build:icon": "node scripts/gen-icons.cjs && cp build/icons/gradient.svg build/icon.svg && cp build/icons/gradient.png build/icon.png && cp build/icons/gradient.ico build/icon.ico",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win portable nsis",
+    "dist": "node ../scripts/check-desktop-build.cjs && npm run build && electron-builder",
+    "dist:win": "node ../scripts/check-desktop-build.cjs && npm run build && electron-builder --win portable nsis",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint ."
   },

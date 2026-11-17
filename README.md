@@ -310,6 +310,41 @@ npm run build
 npm run dist:win
 ```
 
+### Package the Windows desktop app
+
+After a clean `npm install`, package the portable executable and NSIS installer
+from the repository root:
+
+```bash
+npm run dist:win
+```
+
+Output lands in `desktop/release/`. The command first runs
+`scripts/check-desktop-build.cjs`, a preflight that verifies `electron` is
+pinned to an exact version and `electron-builder` is v26+ before packaging
+starts, and prints exact recovery steps if it finds drift.
+
+Two npm behaviors are known to break `dist:win`:
+
+- **Never run `npm audit fix --force` in this repository.** It rewrites the
+  exact `electron` pin in `desktop/package.json` to a `^` range and downgrades
+  `electron-builder` to the 25.x line, which cannot resolve electron in an
+  npm-workspaces monorepo. The build then fails with
+  `Cannot compute electron version from installed node modules`. If you
+  already ran it, recover with:
+
+  ```bash
+  git checkout -- desktop/package.json package.json package-lock.json
+  # then delete node_modules/ (root and desktop/) and run: npm install
+  ```
+
+- **npm 11.9+ asks to approve dependency install scripts.** This repository
+  already ships an `allowScripts` allowlist in `package.json` (electron and
+  electron-winstaller), so no manual `npm install-scripts approve ...`
+  commands are needed. If you previously added approvals locally, discard
+  them (`git checkout -- package.json`) before pulling, or Git may refuse the
+  pull because of local changes.
+
 ### Run the Android app
 
 From the repository root, after `npm install`:
@@ -338,6 +373,7 @@ npm test                 # core and desktop tests
 npm run test:core:rn     # Android/Jest compatibility tests
 npm run lint
 npm run check:core-pin
+npm run check:desktop-build
 ```
 
 ---
