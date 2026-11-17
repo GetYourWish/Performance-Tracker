@@ -280,21 +280,25 @@ function WorkingOnMarker({ data, onOpenPopup }) {
 
   const count = workingOnTasks.length
 
-  if (count === 0) return null
-
+  // v1.2.0 (user request 2026-11-18): the button ALWAYS renders — when no
+  // task is being worked on it stays in place, greyed out and inert, instead
+  // of disappearing (the old `if (count === 0) return null`).
   return (
-    <>
-      <button 
-        className="working-on-marker"
-        onClick={onOpenPopup}
-        title={`View ${count} task${count !== 1 ? 's' : ''} you're working on`}
-        aria-label={`Working on ${count} task${count !== 1 ? 's' : ''}`}
-      >
-        <span className="working-on-marker-dot"></span>
-        <span className="working-on-marker-text">Working On</span>
-        <span className="working-on-marker-count">{count}</span>
-      </button>
-    </>
+    <button
+      className={`working-on-marker${count === 0 ? ' empty' : ''}`}
+      onClick={onOpenPopup}
+      disabled={count === 0}
+      title={count === 0
+        ? 'No tasks currently being worked on'
+        : `View ${count} task${count !== 1 ? 's' : ''} you're working on`}
+      aria-label={count === 0
+        ? 'Working on: none'
+        : `Working on ${count} task${count !== 1 ? 's' : ''}`}
+    >
+      <span className="working-on-marker-dot"></span>
+      <span className="working-on-marker-text">Working On</span>
+      <span className="working-on-marker-count">{count}</span>
+    </button>
   )
 }
 

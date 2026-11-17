@@ -153,6 +153,7 @@ pointing at missing/completed tasks or missing markers.
 | `updatedAt` | ISO timestamp, optional | Written by desktop on create; not otherwise maintained |
 | `completion` | object \| `null` | `null`/absent = active task; present = completed |
 | `deadline` | `YYYY-MM-DD`, optional | **v1.1.0.** Optional calendar deadline (user request: "add DEADLINES to tasks"). Presentation only — never affects scoring or healing. Core `deadlineState(deadline, today)` classifies overdue / due today / future so every client colors chips identically. |
+| `deadlineAutoAdded` | `YYYY-MM-DD`, optional | **v1.2.0.** Stamp written by core `applyDueDeadlines` when a task's deadline day is reached and it joins `workingOn` automatically. Equal to the task's CURRENT deadline ⇒ never auto-added again for that deadline (a manual removal sticks); setting a new deadline re-arms the behavior. |
 | `threadOf` | string, optional | **v1.1.0.** Id of the task this one continues (the "thread" feature). Continuations carry the same base text plus a ` #N` suffix (`#2`, `#3`, …); core `createThreadContinuation` builds them. Present ⇒ the task belongs to a thread; absent ⇒ standalone. |
 | `recurringOf` | string, optional | **v1.1.0.** Id of the `categories[].recurringTasks` entry that materialized this task instance. Presentation badge only. |
 

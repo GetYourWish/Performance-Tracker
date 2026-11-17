@@ -37,7 +37,7 @@ const {
   nextThreadNumber,
   createThreadContinuation
 } = require('./src/threads')
-const { daysUntilDeadline, deadlineState } = require('./src/deadlines')
+const { daysUntilDeadline, deadlineState, applyDueDeadlines } = require('./src/deadlines')
 const { sortWorkingOnByPriority } = require('./src/workingOn')
 const {
   isDueOn,
@@ -80,6 +80,7 @@ module.exports = {
   // deadlines
   daysUntilDeadline,
   deadlineState,
+  applyDueDeadlines,
   // working-on display order (category priority)
   sortWorkingOnByPriority,
   // recurring (weekday-scheduled pre-loaded tasks)

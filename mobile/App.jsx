@@ -2,7 +2,7 @@
 // Mirrors desktop App.jsx: loading → schema gate → setup → (board | settings).
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { View, Text, ActivityIndicator, StyleSheet, StatusBar } from 'react-native'
+import { View, Text, ActivityIndicator, StyleSheet, StatusBar, AppState } from 'react-native'
 import { useColorScheme } from 'react-native'
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
 import { buildTheme, SPACING } from './src/theme.js'
@@ -17,7 +17,7 @@ import { SettingsScreen } from './src/screens/SettingsScreen.js'
 import { CrashReportScreen } from './src/screens/CrashReportScreen.js'
 import { ErrorScreen } from './src/screens/ErrorScreen.js'
 import ErrorBoundary from './src/components/ErrorBoundary.js'
-import { materializeRecurringTasks, getCurrentDate, generateId } from '@performance-tracker/core'
+import { materializeRecurringTasks, applyDueDeadlines, getCurrentDate, generateId } from '@performance-tracker/core'
 import appJson from './app.json'
 
 // Shown on every loading/error screen so a screenshot identifies the exact
@@ -73,31 +73,65 @@ function AppShell() {
 
   // v1.1.0 — weekday-scheduled recurring tasks (user request 2026-11-17):
   // materialize today's instances whenever fresh data lands (boot, external
-  // change, mutation). The core helper is idempotent per calendar day via
-  // the persisted lastRun stamp (so a synced desktop materialization makes
-  // this a no-op) and returns the SAME data reference when nothing is due,
-  // which makes the store's no-change-no-write skip the disk entirely.
+  // change, mutation). v1.2.0 adds the second daily rule (user request
+  // 2026-11-18): a task whose DEADLINE DAY is reached joins workingOn
+  // automatically — same core helper as desktop, idempotent via
+  // tasks[].deadlineAutoAdded so a later manual removal sticks. Both helpers
+  // return the SAME data reference when nothing is due, which makes the
+  // store's no-change-no-write skip the disk entirely.
+  const runDailyAutomation = useCallback((d, now) => {
+    const today = getCurrentDate()
+    const { data: withRecurring, created } = materializeRecurringTasks({
+      data: d,
+      today,
+      now,
+      generateId
+    })
+    const { data: next } = applyDueDeadlines({
+      data: withRecurring,
+      today,
+      now
+    })
+    return created.length > 0 || next !== d ? next : d
+  }, [])
+
   const materializedDataRef = useRef(null)
+  const lastAutomationDayRef = useRef(null)
   useEffect(() => {
     if (state.status !== 'ready' || !state.data) return
     if (materializedDataRef.current === state.data) return
     materializedDataRef.current = state.data
+    lastAutomationDayRef.current = getCurrentDate()
     store
-      .mutate((d, now) => {
-        const { data: next, created } = materializeRecurringTasks({
-          data: d,
-          today: getCurrentDate(),
-          now,
-          generateId
-        })
-        return created.length > 0 ? next : d
-      })
+      .mutate(runDailyAutomation)
       .catch(() => {
-        // a failed materialization must never block the app — next data
+        // a failed automation must never block the app — next data
         // change retries it
         materializedDataRef.current = null
       })
-  }, [state.status, state.data, store])
+  }, [state.status, state.data, store, runDailyAutomation])
+
+  // Foreground day-rollover: Android suspends timers while backgrounded, so
+  // a deadline (or a weekday recurring task) that becomes due while the app
+  // was in the background is applied the moment the user returns — not only
+  // on the next data change. (Desktop covers this with its minute interval.)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState !== 'active') return
+      const today = getCurrentDate()
+      if (
+        lastAutomationDayRef.current &&
+        today !== lastAutomationDayRef.current &&
+        materializedDataRef.current
+      ) {
+        lastAutomationDayRef.current = today
+        // allow the data effect to pick the result up as fresh state
+        materializedDataRef.current = null
+        store.mutate(runDailyAutomation).catch(() => {})
+      }
+    })
+    return () => subscription?.remove?.()
+  }, [store, runDailyAutomation])
 
   // theme preference follows data.settings.theme (desktop parity); the
   // optimistic override wins until the write settles

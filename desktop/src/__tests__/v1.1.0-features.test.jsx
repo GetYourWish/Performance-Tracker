@@ -233,9 +233,18 @@ describe('Board (R7 threads, R5 deadlines, R10/R11 sidebar)', () => {
     const row = screen.getByRole('listitem', { name: 'Task: Uncategorized task' })
     fireEvent.click(within(row).getByRole('button', { name: 'Set deadline' }))
 
-    const input = screen.getByLabelText('Deadline date')
-    expect(input).toBeTruthy()
-    fireEvent.change(input, { target: { value: '2026-12-24' } })
+    // v1.2.0: the editor shows a month-grid calendar (no native date input).
+    // It opens on today's month — navigate to December 2026 in whichever
+    // direction the real current month requires, then pick day 24.
+    const target = new Date(2026, 11, 1)
+    const now = new Date()
+    const forward = target > new Date(now.getFullYear(), now.getMonth(), 1)
+    const navBtn = forward ? 'Next month' : 'Previous month'
+    for (let i = 0; i < 24 && !screen.queryByText('December 2026'); i++) {
+      fireEvent.click(screen.getByRole('button', { name: navBtn }))
+    }
+    expect(screen.getByText('December 2026')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '2026-12-24' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(onSave).toHaveBeenCalledTimes(1)

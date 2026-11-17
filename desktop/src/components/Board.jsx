@@ -128,12 +128,15 @@ function InsertionPoint({ id, forceActive, onDrop, className = '' }) {
   )
 }
 
-// Sidebar component for categories - simple list with + button on chips
+// Sidebar component for categories - simple list with + button on chips.
+// v1.2.0 (user request 2026-11-18): the sidebar collapses VERTICALLY (the
+// card slides away under the nav row) instead of the old horizontal panel
+// slide; the nav row with the Randomizer and the collapse toggle lives at
+// the TOP of this area, like a navigation bar.
 function CategorySidebar({ categories, onCreateCategory, onAddMarker, onNavigateToCategory }) {
   const [isCreating, setIsCreating] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#60a5fa')
-  const [isCollapsed, setIsCollapsed] = useState(false)
   // v1.1.0 info bubble (user request: the hint text below the Categories
   // header must disappear and come up from an info bubble instead)
   const [showInfo, setShowInfo] = useState(false)
@@ -161,19 +164,6 @@ function CategorySidebar({ categories, onCreateCategory, onAddMarker, onNavigate
     setIsCreating(false)
   }
   
-  if (isCollapsed) {
-    return (
-      <div className="category-grabber collapsed">
-        <button 
-          className="categories-toggle"
-          onClick={() => setIsCollapsed(false)}
-        >
-          Show Categories ({categories.length})
-        </button>
-      </div>
-    );
-  }
-  
   return (
     <div className="category-grabber">
       <div className="category-grabber-header">
@@ -186,13 +176,6 @@ function CategorySidebar({ categories, onCreateCategory, onAddMarker, onNavigate
           title="How categories work"
         >
           i
-        </button>
-        <button 
-          className="collapse-btn"
-          onClick={() => setIsCollapsed(true)}
-          aria-label="Collapse categories"
-        >
-          −
         </button>
       </div>
       {showInfo && (
@@ -258,50 +241,19 @@ function Board({ data, onSave }) {
   const [editingTask, setEditingTask] = useState(null)
   const [newTaskText, setNewTaskText] = useState('')
   const [completionTask, setCompletionTask] = useState(null)
-  const [showCategoryGrabber, setShowCategoryGrabber] = useState(false)
   const [draggingItem, setDraggingItem] = useState(null)
   const [deleteTask, setDeleteTask] = useState(null)
   const [selectedItems, setSelectedItems] = useState([])
   const [activeInsertionPoint, setActiveInsertionPoint] = useState(null)
   const [workingOnId, setWorkingOnId] = useState(null)
   const [dropIndicatorId, setDropIndicatorId] = useState(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [quickCatForm, setQuickCatForm] = useState(null)
-  const [popoverPos, setPopoverPos] = useState(null)
+  // v1.2.0: the categories card collapses VERTICALLY under the sidebar nav
+  // row (replaces the old horizontal panel slide)
+  const [categoriesCollapsed, setCategoriesCollapsed] = useState(false)
   const dropIndicatorRef = useRef(null)
   const pointerYRef = useRef(0)
   const dragMoveListenerRef = useRef(null)
   const dragMoveRafRef = useRef(null)
-  const quickCatRef = useRef(null)
-  const addCatBtnRef = useRef(null)
-
-  // Close quick cat popover on outside click
-  useEffect(() => {
-    if (!quickCatForm) {
-      setPopoverPos(null)
-      return
-    }
-    const handler = (e) => {
-      if (quickCatRef.current && !quickCatRef.current.contains(e.target) &&
-          addCatBtnRef.current && !addCatBtnRef.current.contains(e.target)) {
-        setQuickCatForm(null)
-        setPopoverPos(null)
-      }
-    }
-    const timer = setTimeout(() => document.addEventListener('pointerdown', handler), 0)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('pointerdown', handler)
-    }
-  }, [quickCatForm])
-
-  const openQuickCatForm = useCallback(() => {
-    if (addCatBtnRef.current) {
-      const rect = addCatBtnRef.current.getBoundingClientRect()
-      setPopoverPos({ top: rect.bottom + 6, left: rect.right - 220 })
-    }
-    setQuickCatForm({ name: '', color: '#60a5fa' })
-  }, [])
 
   const setDropIndicator = (id) => {
     dropIndicatorRef.current = id
@@ -743,25 +695,6 @@ function Board({ data, onSave }) {
       }
     }
   }, [boardItems, markers])
-
-  const handleQuickCreateCategory = useCallback((name, color) => {
-    const newCategory = {
-      id: generateId(),
-      name: name.trim(),
-      color,
-      order: categories.length,
-      active: true,
-      priorityMultiplier: 1
-    }
-    const updatedCategories = [...categories, newCategory]
-    onSave({
-      ...data,
-      categories: updatedCategories,
-      meta: { ...data.meta, updatedAt: new Date().toISOString() }
-    })
-    setQuickCatForm(null)
-    setPopoverPos(null)
-  }, [categories, data, onSave])
 
   const handleRandomizeTask = useCallback(() => {
     const availableTaskIds = boardItems
@@ -1244,6 +1177,7 @@ function Board({ data, onSave }) {
             deadline={task.deadline}
             onSetDeadline={(deadline) => handleSetDeadline(task.id, deadline)}
             today={today}
+            weekStartsOn={settings.weekStartsOn ?? 1}
           />
         )
         
@@ -1371,132 +1305,60 @@ function Board({ data, onSave }) {
           </DndContext>
         </div>
         
-        <div className={`board-right-panel${sidebarCollapsed ? ' collapsed' : ''}`}>
-          {sidebarCollapsed ? (
-            <>
-              <button
-                type="button"
-                className="sidebar-icon-btn"
-                onClick={handleRandomizeTask}
-                title="Pick a random task to work on"
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="3" />
-                  <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
-                  <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
-                  <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
-                  <circle cx="8.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
-                  <circle cx="15.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
+        {/* v1.2.0 right panel (user request 2026-11-18): a navigation-bar
+            row at the TOP of the categories area holds the Randomizer and
+            the collapse toggle; the categories card slides away VERTICALLY
+            beneath it (the old horizontal panel slide is gone). */}
+        <div className="board-right-panel">
+          <div className="sidebar-nav">
+            <button
+              type="button"
+              className="randomizer-btn"
+              onClick={handleRandomizeTask}
+              title="Pick a random task to work on"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', verticalAlign: '-2px' }}>
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+                <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+                <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+                <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+                <circle cx="8.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
+                <circle cx="15.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
+              </svg>
+              Randomizer
+            </button>
+            <button
+              type="button"
+              className="sidebar-toggle-btn"
+              onClick={() => setCategoriesCollapsed(v => !v)}
+              aria-label={categoriesCollapsed ? 'Expand categories' : 'Collapse categories'}
+              aria-expanded={!categoriesCollapsed}
+              title={categoriesCollapsed ? 'Expand categories' : 'Collapse categories'}
+            >
+              {categoriesCollapsed ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9" />
                 </svg>
-              </button>
-              <button
-                type="button"
-                className="sidebar-icon-btn"
-                ref={addCatBtnRef}
-                onClick={openQuickCatForm}
-                title="Add new category"
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="7" height="7" rx="2" />
-                  <rect x="14" y="3" width="7" height="7" rx="2" />
-                  <rect x="3" y="14" width="7" height="7" rx="2" />
-                  <rect x="14" y="14" width="7" height="7" rx="2" />
-                  <line x1="12" y1="12" x2="12" y2="12.01" stroke="none" />
-                  <line x1="17.5" y1="17.5" x2="17.5" y2="17.5" stroke="none" />
-                  <circle cx="17.5" cy="17.5" r="3" fill="currentColor" stroke="none" />
-                  <line x1="17.5" y1="15" x2="17.5" y2="20" stroke="white" strokeWidth="2" />
-                  <line x1="15" y1="17.5" x2="20" y2="17.5" stroke="white" strokeWidth="2" />
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 15 12 9 18 15" />
                 </svg>
-              </button>
-
-              {quickCatForm && popoverPos && (
-                <div
-                  className="quick-cat-popover"
-                  ref={quickCatRef}
-                  style={{ top: `${popoverPos.top}px`, left: `${popoverPos.left}px` }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <input
-                    type="text"
-                    placeholder="Category name"
-                    value={quickCatForm.name}
-                    onChange={(e) => setQuickCatForm({ ...quickCatForm, name: e.target.value })}
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && quickCatForm.name.trim()) {
-                        handleQuickCreateCategory(quickCatForm.name, quickCatForm.color)
-                      } else if (e.key === 'Escape') {
-                        setQuickCatForm(null)
-                        setPopoverPos(null)
-                      }
-                    }}
-                  />
-                  <input
-                    type="color"
-                    value={quickCatForm.color}
-                    onChange={(e) => setQuickCatForm({ ...quickCatForm, color: e.target.value })}
-                  />
-                  <button
-                    className="quick-cat-confirm"
-                    onClick={() => {
-                      if (quickCatForm.name.trim()) handleQuickCreateCategory(quickCatForm.name, quickCatForm.color)
-                    }}
-                  >
-                    Add
-                  </button>
-                </div>
               )}
-
-              <button
-                type="button"
-                className="sidebar-toggle-btn"
-                onClick={() => setSidebarCollapsed(false)}
-                title="Expand sidebar"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="15 6 9 12 15 18" />
-                </svg>
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="randomizer-btn"
-                onClick={handleRandomizeTask}
-                title="Pick a random task to work on"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', verticalAlign: '-2px' }}>
-                  <rect x="3" y="3" width="18" height="18" rx="3" />
-                  <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
-                  <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
-                  <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
-                  <circle cx="8.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
-                  <circle cx="15.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
-                </svg>
-                Randomizer
-              </button>
-              <div className="board-sidebar">
-                <CategorySidebar
-                  categories={categories}
-                  onCreateCategory={handleCreateCategory}
-                  onAddMarker={handleAddMarker}
-                  onNavigateToCategory={handleNavigateToCategory}
-                />
-              </div>
-
-              <button
-                type="button"
-                className="sidebar-toggle-btn"
-                onClick={() => setSidebarCollapsed(true)}
-                title="Minimize sidebar"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="9 6 15 12 9 18" />
-                </svg>
-              </button>
-            </>
-          )}
+            </button>
+          </div>
+          <div
+            className={`board-sidebar${categoriesCollapsed ? ' collapsed' : ''}`}
+            aria-hidden={categoriesCollapsed}
+          >
+            <div className="sidebar-collapse-inner">
+              <CategorySidebar
+                categories={categories}
+                onCreateCategory={handleCreateCategory}
+                onAddMarker={handleAddMarker}
+                onNavigateToCategory={handleNavigateToCategory}
+              />
+            </div>
+          </div>
         </div>
       </div>
 

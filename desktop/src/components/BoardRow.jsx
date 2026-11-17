@@ -4,6 +4,107 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { deadlineState } from '@performance-tracker/core'
 
+// v1.2.0 (user request 2026-11-18): "Deadlines button should show us a
+// calendar we can pick from." The old editor relied on <input type="date">,
+// whose dropdown never opens inside Electron — so this is a real month-grid
+// calendar. Pure DOM (no native controls), keyboard reachable, and the week
+// start follows settings.weekStartsOn (1 = Monday default, like Reviews).
+
+const CALENDAR_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+]
+// Indexed by Date#getDay() (0 = Sunday)
+const CALENDAR_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function calendarIso (year, monthIndex, day) {
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function DeadlineCalendar ({ value, onChange, today, weekStartsOn = 1 }) {
+  // The view opens on the draft deadline's month (so editing an existing
+  // deadline starts at the right place), falling back to today's month.
+  // The component mounts fresh with every editor open, so view state never
+  // needs re-anchoring afterwards.
+  const initial = /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? value : today
+  const [viewYear, setViewYear] = useState(Number(initial.slice(0, 4)))
+  const [viewMonth, setViewMonth] = useState(Number(initial.slice(5, 7)) - 1)
+
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+  const firstWeekday = new Date(viewYear, viewMonth, 1).getDay()
+  const leadingBlanks = (firstWeekday - weekStartsOn + 7) % 7
+  const weekdayLabels = Array.from({ length: 7 }, (_, i) => CALENDAR_WEEKDAYS[(weekStartsOn + i) % 7])
+
+  const shiftMonth = (delta) => {
+    setViewMonth(m => {
+      const next = m + delta
+      if (next < 0) {
+        setViewYear(y => y - 1)
+        return 11
+      }
+      if (next > 11) {
+        setViewYear(y => y + 1)
+        return 0
+      }
+      return next
+    })
+  }
+
+  const cells = []
+  for (let i = 0; i < leadingBlanks; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+
+  return (
+    <div className="deadline-calendar" role="grid" aria-label="Deadline calendar">
+      <div className="deadline-calendar-header">
+        <button
+          type="button"
+          className="deadline-calendar-nav"
+          onClick={() => shiftMonth(-1)}
+          aria-label="Previous month"
+        >
+          ‹
+        </button>
+        <span className="deadline-calendar-title">{CALENDAR_MONTHS[viewMonth]} {viewYear}</span>
+        <button
+          type="button"
+          className="deadline-calendar-nav"
+          onClick={() => shiftMonth(1)}
+          aria-label="Next month"
+        >
+          ›
+        </button>
+      </div>
+      <div className="deadline-calendar-grid">
+        {weekdayLabels.map(label => (
+          <span key={label} className="deadline-calendar-weekday" aria-hidden="true">{label}</span>
+        ))}
+        {cells.map((day, i) => {
+          if (day === null) {
+            return <span key={`blank-${i}`} className="deadline-calendar-day off-month" aria-hidden="true" />
+          }
+          const iso = calendarIso(viewYear, viewMonth, day)
+          const classes = ['deadline-calendar-day']
+          if (iso === value) classes.push('selected')
+          if (iso === today) classes.push('today')
+          return (
+            <button
+              key={iso}
+              type="button"
+              className={classes.join(' ')}
+              onClick={() => onChange(iso)}
+              aria-label={iso}
+              aria-pressed={iso === value}
+            >
+              {day}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // v1.1.0 — the category-note popup and the deadline editor render through a
 // REACT PORTAL to document.body. They used to be plain children of the board
 // row, but rows carry a persistent CSS transform (`row-enter-scale` /
@@ -41,7 +142,8 @@ const BoardRow = memo(function BoardRow({
   isRecurringTask = false,
   deadline,
   onSetDeadline,
-  today
+  today,
+  weekStartsOn = 1
 }) {
   const [editText, setEditText] = useState(task?.text || '')
   const [showCategoryNotePopup, setShowCategoryNotePopup] = useState(false)
@@ -568,21 +670,26 @@ const BoardRow = memo(function BoardRow({
             e.stopPropagation()
             setShowDeadlineEditor(false)
           }} />
-          <div className="deadline-editor-popup" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="deadline-editor-popup"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setShowDeadlineEditor(false)
+            }}
+          >
             <h3>Deadline</h3>
             <div className="task-text" style={{ marginBottom: '12px' }}>{String(task?.text ?? '')}</div>
-            <input
-              type="date"
-              className="date-input"
+            <DeadlineCalendar
               value={deadlineDraft}
-              onChange={(e) => setDeadlineDraft(e.target.value)}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') confirmDeadline()
-                if (e.key === 'Escape') setShowDeadlineEditor(false)
-              }}
-              aria-label="Deadline date"
+              onChange={setDeadlineDraft}
+              today={today}
+              weekStartsOn={weekStartsOn}
             />
+            <p className="deadline-calendar-selected">
+              {deadlineDraft
+                ? <>Selected: <strong>{deadlineDraft}</strong></>
+                : 'Pick a day above, then Save.'}
+            </p>
             <div className="note-edit-actions" style={{ marginTop: '12px' }}>
               {deadline && (
                 <button

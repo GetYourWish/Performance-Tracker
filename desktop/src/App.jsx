@@ -10,6 +10,7 @@ import {
   calculateTaskScoreBreakdown,
   checkSchemaVersion,
   materializeRecurringTasks,
+  applyDueDeadlines,
   getCurrentDate
 } from '@performance-tracker/core'
 import './App.css'
@@ -31,6 +32,15 @@ function App() {
   // Debounce save to avoid constant disk writes
   const saveTimeoutRef = useRef(null)
   const pendingSaveRef = useRef(null)
+  // Latest data file path, reachable from ANY closure. Load-time saves
+  // (recurring materialization, deadline auto-add) run through closures
+  // created on render 1, BEFORE setDataFile landed — a plain [dataFile]
+  // dependency captured null there and silently swallowed the first disk
+  // write (state updated, disk did not). The ref is always current.
+  const dataFileRef = useRef(null)
+  useEffect(() => {
+    dataFileRef.current = dataFile
+  }, [dataFile])
   // Serialized form of the last content known to be on disk. Saves identical
   // to this are skipped — no-change-no-write (prevents Syncthing churn).
   const lastPersistedRef = useRef(null)
@@ -157,7 +167,7 @@ function App() {
       // Weekday-scheduled recurring tasks: materialize today's instances
       // (every load — startup, external change, refresh; the core helper's
       // lastRun stamp makes repeats no-ops, sync-safe across devices).
-      applyRecurringTasks(healedData);
+      applyDailyAutomation(healedData);
     } catch (error) {
       const msg = String(error?.message || error);
       const tooNew = msg.match(/SCHEMA_VERSION_TOO_NEW:(\d+)/);
@@ -186,7 +196,7 @@ function App() {
     
     // Schedule save after 100ms debounce for responsive feel
     saveTimeoutRef.current = setTimeout(async () => {
-      if (pendingSaveRef.current && dataFile) {
+      if (pendingSaveRef.current && dataFileRef.current) {
         try {
           const incoming = JSON.stringify(pendingSaveRef.current);
           // No-change-no-write: identical content must never hit the disk
@@ -206,12 +216,12 @@ function App() {
         }
       }
     }, 100);
-  }, [dataFile]);
+  }, []);
 
   const saveData = useCallback(async (newData) => {
-    if (!dataFile) return;
-    
-    // Use debounced save instead of immediate save
+    // Use debounced save instead of immediate save. The final data-file
+    // guard lives INSIDE the debounce timer (dataFileRef) so saves scheduled
+    // before the data file landed still persist once it has.
     debouncedSave(newData);
   }, [debouncedSave]);
   
@@ -235,42 +245,52 @@ function App() {
     }
   }, [dataFile]);
 
-  // Materialize due recurring tasks (weekday-scheduled pre-loaded tasks,
-  // user request 2026-11-17). Pure core helper: creates one instance per due
-  // config, adds it to workingOn, stamps lastRun. No-op (same data
-  // reference) when nothing is due, so no-change-no-write protects the disk.
-  const applyRecurringTasks = useCallback((healedData) => {
+  // Daily automation (both rules are pure core helpers, v1.1.0 + v1.2.0):
+  //  - weekday-scheduled recurring tasks: materialize today's instances
+  //    (idempotent per day via the persisted lastRun stamp — sync-safe)
+  //  - deadline day reached: the task joins workingOn automatically (user
+  //    request 2026-11-18; idempotent via tasks[].deadlineAutoAdded, and a
+  //    manual removal afterwards sticks)
+  // Both helpers return the SAME data reference when nothing is due, so
+  // no-change-no-write protects the disk.
+  const applyDailyAutomation = useCallback((healedData) => {
     if (!healedData) return
     try {
       const today = getCurrentDate()
-      const { data: nextData, created } = materializeRecurringTasks({
+      const now = new Date().toISOString()
+      const { data: withRecurring, created } = materializeRecurringTasks({
         data: healedData,
         today,
-        now: new Date().toISOString(),
+        now,
         generateId
       })
+      const { data: nextData } = applyDueDeadlines({
+        data: withRecurring,
+        today,
+        now
+      })
       lastRecurringDayRef.current = today
-      if (created.length > 0) {
+      if (created.length > 0 || nextData !== healedData) {
         setData(nextData)
         saveData(nextData)
       }
     } catch (error) {
-      console.error('Failed to materialize recurring tasks:', error)
+      console.error('Failed to apply daily automation:', error)
     }
   }, [saveData])
 
   // Day-rollover watch: an app left open across midnight still gets the
-  // new day's recurring instances. Checks once a minute; the core helper's
-  // lastRun guard makes every extra check a no-op.
+  // new day's recurring instances and deadline auto-adds. Checks once a
+  // minute; the helpers' stamps make every extra check a no-op.
   useEffect(() => {
     const interval = setInterval(() => {
       const today = getCurrentDate()
       if (lastRecurringDayRef.current && today !== lastRecurringDayRef.current && dataRef.current) {
-        applyRecurringTasks(dataRef.current)
+        applyDailyAutomation(dataRef.current)
       }
     }, 60_000)
     return () => clearInterval(interval)
-  }, [applyRecurringTasks])
+  }, [applyDailyAutomation])
 
   const handleBackupNow = useCallback(async () => {
     try {
@@ -298,7 +318,7 @@ function App() {
         lastPersistedRef.current = JSON.stringify(healedData)
         setData(healedData)
         // Manual refresh may cross a day boundary too — materialize if due.
-        applyRecurringTasks(healedData)
+        applyDailyAutomation(healedData)
       }
     } catch (error) {
       console.error('Refresh failed:', error)
@@ -306,7 +326,7 @@ function App() {
       // Keep the spin animation visible for at least 400ms so it feels intentional
       setTimeout(() => setRefreshing(false), 400)
     }
-  }, [refreshing, flushSave, applyRecurringTasks])
+  }, [refreshing, flushSave, applyDailyAutomation])
 
   const handleToggleAutoSync = useCallback(async (enabled) => {
     setAutoSync(enabled)

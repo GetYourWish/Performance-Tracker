@@ -50,4 +50,60 @@ function deadlineState(deadline, today) {
   }
 }
 
-module.exports = { daysUntilDeadline, deadlineState }
+// Auto-add due deadline tasks to Working On (user request 2026-11-18).
+//
+// "When the day is reached it should be added automatically into the working
+// on tasks." — when a task's deadline arrives (deadline <= today, including
+// overdue), the task joins `workingOn` automatically, on BOTH desktop and
+// Android (the helper is the single shared rule, exactly like
+// materializeRecurringTasks).
+//
+// Idempotence / manual-removal respect: adding stamps
+// `tasks[].deadlineAutoAdded = deadline`. The stamp is compared against the
+// task's CURRENT deadline — a task is auto-added at most ONCE per deadline.
+// If the user then manually removes it from Working On, it is never re-added
+// for that same deadline; setting a NEW deadline re-arms the behavior.
+//
+// Pure: `today` / `now` enter as arguments, the input data object is never
+// mutated, and when nothing is due the input `data` is returned unchanged
+// (===) so callers' no-change-no-write skips the disk.
+// Returns { data, added }: `added` lists the task ids newly pushed into
+// `workingOn`; `data` is the exact input reference when NOTHING changed (no
+// additions and no stamps) so callers' no-change-no-write kicks in.
+function applyDueDeadlines({ data, today, now }) {
+  if (!data || typeof data !== 'object') return { data, added: [] }
+
+  const tasks = Array.isArray(data.tasks) ? data.tasks : []
+  const workingOn = Array.isArray(data.workingOn) ? data.workingOn : []
+
+  const addedIds = []
+  let changed = false
+  const nextTasks = tasks.map(task => {
+    if (!task || task.completion) return task
+    const deadline = task.deadline
+    if (!deadline || typeof deadline !== 'string') return task
+    if (task.deadlineAutoAdded === deadline) return task // already handled for this deadline
+    if (daysUntilDeadline(deadline, today) > 0) return task // not reached yet
+
+    // Due (or overdue) and not yet handled for this deadline. Stamp it so a
+    // later manual removal is respected; only push into workingOn when the
+    // user has not already added it themselves.
+    changed = true
+    if (!workingOn.includes(task.id)) addedIds.push(task.id)
+    return { ...task, deadlineAutoAdded: deadline }
+  })
+
+  if (!changed) return { data, added: [] }
+
+  return {
+    data: {
+      ...data,
+      tasks: nextTasks,
+      workingOn: addedIds.length > 0 ? [...workingOn, ...addedIds] : workingOn,
+      meta: { ...(data.meta || {}), updatedAt: now }
+    },
+    added: addedIds
+  }
+}
+
+module.exports = { daysUntilDeadline, deadlineState, applyDueDeadlines }

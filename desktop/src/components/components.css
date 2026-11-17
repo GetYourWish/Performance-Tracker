@@ -1302,17 +1302,13 @@
 }
 
 .board-sidebar {
-  width: 280px;
-  flex-shrink: 0;
-  overflow-y: auto;
+  width: 100%;
 }
 
 .category-grabber {
   background: var(--bg-secondary);
   padding: 16px;
   border-radius: var(--radius-lg);
-  position: sticky;
-  top: 0;
 }
 
 .categories-list {
@@ -1450,29 +1446,29 @@
   text-decoration: line-through;
 }
 
-/* Right panel wrapper for Randomizer + Categories */
+/* Right panel: nav-bar row on top + the categories card, which collapses
+   VERTICALLY (user request 2026-11-18 — the old horizontal width-slide is
+   gone; the panel keeps its width so the board never shifts sideways). */
 .board-right-panel {
   width: 280px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   position: relative;
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-              gap 0.25s ease;
 }
 
-/* Collapsed sidebar — narrow icon strip */
-.board-right-panel.collapsed {
-  width: 48px;
+/* Navigation-bar row: Randomizer (left, grows) + collapse toggle (right) */
+.sidebar-nav {
+  display: flex;
+  align-items: stretch;
   gap: 8px;
-  align-items: center;
+  flex-shrink: 0;
 }
 
-/* Icon buttons in collapsed sidebar */
-.sidebar-icon-btn {
-  width: 40px;
-  height: 40px;
+.sidebar-toggle-btn {
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1483,28 +1479,6 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   flex-shrink: 0;
-}
-.sidebar-icon-btn:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  border-color: var(--glass-border);
-}
-
-/* Toggle button — lives at the bottom of sidebar in both states */
-.sidebar-toggle-btn {
-  width: 100%;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-  margin-top: auto;
 }
 .sidebar-toggle-btn:hover {
   background: var(--bg-tertiary);
@@ -1512,88 +1486,43 @@
   border-color: var(--glass-border);
 }
 
-/* Quick category creation popover (from collapsed sidebar) */
-.quick-cat-popover {
-  position: fixed;
-  z-index: 200;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  background: var(--bg-primary);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  padding: 8px 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-  animation: popover-in 0.15s ease-out;
-}
-
-@keyframes popover-in {
-  from { opacity: 0; transform: translateX(8px) scale(0.95); }
-  to { opacity: 1; transform: translateX(0) scale(1); }
-}
-
-.quick-cat-popover input[type="text"] {
-  width: 120px;
-  padding: 5px 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 13px;
-  outline: none;
-}
-.quick-cat-popover input[type="text"]:focus {
-  border-color: var(--glass-border);
-}
-.quick-cat-popover input[type="color"] {
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  padding: 0;
-}
-.quick-cat-confirm {
-  padding: 5px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-.quick-cat-confirm:hover {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-/* Randomizer Button - visually aligned with .board-header */
+/* Randomizer — a compact nav-bar button now (was a full-width standalone
+   button floating above the categories card) */
 .randomizer-btn {
-  width: 100%;
-  padding: 12px 16px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
   text-align: center;
-  margin-top: 8px; /* Matches .board-header padding to align perfectly */
+  white-space: nowrap;
 }
 .randomizer-btn:hover {
   background: var(--bg-tertiary);
 }
 
-/* Override old fixed width since the panel handles it now */
-.board-right-panel .board-sidebar {
-  width: 100%;
-}
+/* Vertical collapse of the categories card: grid-template-rows animates
+   from 1fr to 0fr, so the card slides away under the nav row. The grid item
+   MUST be a bare wrapper (no padding/margin of its own) — an item's own
+   padding/margin forms the track's floor and keeps a sliver visible. */
 .board-sidebar {
-  flex-shrink: 0;
-  overflow-y: auto;
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 0;
+}
+.board-sidebar.collapsed {
+  grid-template-rows: 0fr;
+}
+.sidebar-collapse-inner {
+  overflow: hidden;
+  min-height: 0;
 }
 
 /* Flash animation when a task is randomized */
@@ -1830,9 +1759,30 @@
   animation: working-on-flicker 2s ease-in-out infinite;
 }
 
-.working-on-marker:hover {
+.working-on-marker:not(.empty):hover {
   background: rgba(34, 197, 94, 0.25);
   box-shadow: 0 0 16px rgba(34, 197, 94, 0.4);
+}
+
+/* v1.2.0 — the button stays visible with zero tasks, greyed out and inert */
+.working-on-marker.empty {
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-muted);
+  animation: none;
+  cursor: default;
+  opacity: 0.65;
+}
+.working-on-marker.empty .working-on-marker-dot {
+  background: var(--text-muted);
+  animation: none;
+}
+.working-on-marker.empty .working-on-marker-count {
+  background: var(--text-muted);
+  color: var(--bg-primary);
+}
+.working-on-marker.empty:hover {
+  box-shadow: none;
 }
 
 @keyframes working-on-flicker {
@@ -3145,6 +3095,106 @@ button.task-deadline-chip:hover {
   margin-bottom: 12px;
   color: var(--text-primary);
   font-size: 18px;
+}
+
+/* --- Deadline calendar picker (v1.2.0 user request: "Deadlines button
+   should show us a calendar we can pick from" — the native <input type="date">
+   dropdown never opens inside Electron, so the editor ships its own month
+   grid) ------------------------------------------------------------------ */
+
+.deadline-calendar {
+  width: 288px;
+  margin: 4px 0 12px 0;
+}
+
+.deadline-calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.deadline-calendar-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+  min-width: 130px;
+  text-align: center;
+}
+
+.deadline-calendar-nav {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.deadline-calendar-nav:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.deadline-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.deadline-calendar-weekday {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.deadline-calendar-day {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.deadline-calendar-day:hover {
+  background: var(--bg-tertiary);
+}
+.deadline-calendar-day.selected {
+  background: var(--accent-color, #60a5fa);
+  color: #fff;
+  font-weight: 700;
+}
+.deadline-calendar-day.today:not(.selected) {
+  border-color: var(--accent-color, #60a5fa);
+  color: var(--accent-color, #60a5fa);
+  font-weight: 600;
+}
+.deadline-calendar-day.off-month {
+  visibility: hidden;
+}
+
+.deadline-calendar-selected {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.deadline-calendar-selected strong {
+  color: var(--text-primary);
 }
 
 /* --- Category note edit popup: sync hint --------------------------------- */
