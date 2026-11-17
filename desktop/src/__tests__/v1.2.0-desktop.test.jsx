@@ -1,7 +1,7 @@
 // v1.2.0 desktop batch (user request 2026-11-18):
 //   - the sidebar gets a navigation-bar row (Randomizer + collapse toggle) at
-//     the TOP of the categories area; the categories card collapses
-//     VERTICALLY under it (the old horizontal panel slide is gone)
+//     the TOP of the categories area (v1.3.0 follow-up: the toggle now
+//     collapses the WHOLE panel to the side — see the revised tests below)
 //   - the Working On button always renders, greyed out when nothing is being
 //     worked on
 //   - the deadline editor shows a real month-grid calendar
@@ -92,9 +92,13 @@ describe('WorkingOnMarker always visible (v1.2.0)', () => {
   })
 })
 
-// ---- Sidebar: nav-bar row + vertical collapse -------------------------------
+// ---- Sidebar: nav-bar row + collapse ---------------------------------------
+// v1.3.0 follow-up (2026-11-18): the toggle now collapses the WHOLE panel
+// to the SIDE (48px strip with expand toggle + Randomizer icon) — the
+// pre-v1.2.0 minimize-tray behavior the user asked to bring back. The
+// v1.2.0 vertical card-slide is gone.
 
-describe('Board sidebar nav row + vertical collapse (v1.2.0)', () => {
+describe('Board sidebar nav row + collapse (v1.2.0, revised in v1.3.0)', () => {
   it('renders the nav row (Randomizer + toggle) ABOVE the categories card', () => {
     render(<Board data={makeData()} onSave={() => {}} />)
     const panel = document.querySelector('.board-right-panel')
@@ -107,34 +111,27 @@ describe('Board sidebar nav row + vertical collapse (v1.2.0)', () => {
     expect(within(nav).getByRole('button', { name: 'Collapse categories' })).toBeTruthy()
   })
 
-  it('collapses the categories card VERTICALLY — the card hides, the nav row stays', () => {
+  it('collapses the whole panel to the side — categories hide, strip remains', () => {
     render(<Board data={makeData()} onSave={() => {}} />)
-    const card = document.querySelector('.board-sidebar')
-    expect(card.className).not.toContain('collapsed')
+    const panel = document.querySelector('.board-right-panel')
+    expect(panel.className).not.toContain('collapsed')
     expect(screen.getByRole('heading', { name: 'Categories' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse categories' }))
-    expect(card.className).toContain('collapsed')
-    // nav row stays usable in both states
-    expect(screen.getByRole('button', { name: 'Randomizer' })).toBeTruthy()
+    // the PANEL itself collapses to the slim strip — the board reclaims the width
+    expect(panel.className).toContain('collapsed')
+    expect(document.querySelector('.board-right-panel.collapsed')).toBeTruthy()
+    expect(document.querySelector('.sidebar-collapsed-strip')).toBeTruthy()
+    // the strip keeps the expand toggle and a Randomizer icon button
     expect(screen.getByRole('button', { name: 'Expand categories' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Randomizer' })).toBeTruthy()
     // collapsed content is hidden from the accessibility tree
     expect(screen.queryByRole('heading', { name: 'Categories' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand categories' }))
-    expect(card.className).not.toContain('collapsed')
+    expect(panel.className).not.toContain('collapsed')
     expect(screen.getByRole('heading', { name: 'Categories' })).toBeTruthy()
-  })
-
-  it('keeps the panel a fixed column — no horizontal-slide collapsed strip', () => {
-    render(<Board data={makeData()} onSave={() => {}} />)
-    const panel = document.querySelector('.board-right-panel')
-    expect(panel.className).not.toContain('collapsed')
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse categories' }))
-    // the PANEL itself never collapses; only the card inside does
-    expect(panel.className).not.toContain('collapsed')
-    expect(document.querySelector('.board-right-panel.collapsed')).toBeNull()
-    expect(document.querySelector('.sidebar-icon-btn')).toBeNull()
+    expect(document.querySelector('.sidebar-collapsed-strip')).toBeNull()
   })
 })
 
@@ -197,7 +194,6 @@ describe('App deadline auto-add (v1.2.0)', () => {
       loadData: vi.fn().mockResolvedValue(dueData),
       getWatcherEnabled: vi.fn().mockResolvedValue(true),
       checkConflicts: vi.fn().mockResolvedValue([]),
-      minimizeWindow: vi.fn().mockResolvedValue(true),
       onExternalChange: vi.fn(() => () => {}),
       saveData: vi.fn().mockResolvedValue({})
     }

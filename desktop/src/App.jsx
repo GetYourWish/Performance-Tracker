@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Board from './components/Board'
 import Reviews from './components/Reviews'
+import CalendarPage from './components/CalendarPage'
 import Settings from './components/Settings'
 import SetupScreen from './components/SetupScreen'
 import { WorkingOnMarker, WorkingOnPopup } from './components/WorkingOnMarker'
+import { DeadlineToastStack } from './components/DeadlineToast'
 import {
   validateAndHealData,
   generateId,
@@ -28,6 +30,9 @@ function App() {
   const [autoSync, setAutoSync] = useState(true)
   // Set when the data file was written by a newer app version (schemaVersion > 1)
   const [schemaError, setSchemaError] = useState(null)
+  // v1.3.0: in-app bottom-right toasts for tasks that just auto-joined
+  // Working On because their deadline was reached (no Windows notification)
+  const [deadlineToasts, setDeadlineToasts] = useState([])
 
   // Debounce save to avoid constant disk writes
   const saveTimeoutRef = useRef(null)
@@ -264,12 +269,30 @@ function App() {
         now,
         generateId
       })
-      const { data: nextData } = applyDueDeadlines({
+      const { data: nextData, added } = applyDueDeadlines({
         data: withRecurring,
         today,
         now
       })
       lastRecurringDayRef.current = today
+      // v1.3.0: surface newly auto-added deadline tasks as in-app toasts
+      // (bottom-right, close button, auto-dismiss — see DeadlineToast)
+      if (added.length > 0) {
+        const taskById = new Map((withRecurring.tasks || []).map(t => [t.id, t]))
+        const addedTasks = added
+          .map(id => taskById.get(id))
+          .filter(Boolean)
+        if (addedTasks.length > 0) {
+          setDeadlineToasts(prev => [
+            ...prev,
+            ...addedTasks.map(t => ({
+              id: `toast-${t.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              taskId: t.id,
+              text: t.text
+            }))
+          ].slice(-4)) // keep the stack small: at most 4 toasts
+        }
+      }
       if (created.length > 0 || nextData !== healedData) {
         setData(nextData)
         saveData(nextData)
@@ -346,6 +369,10 @@ function App() {
       console.error('Failed to open folder:', error)
       alert('Failed to open folder: ' + error.message)
     }
+  }, [])
+
+  const dismissDeadlineToast = useCallback((id) => {
+    setDeadlineToasts(prev => prev.filter(t => t.id !== id))
   }, [])
 
   const handleChangeDataFolder = useCallback(async (folderPath) => {
@@ -459,6 +486,15 @@ function App() {
           Board
         </button>
         <button 
+          className={`nav-item ${currentView === 'calendar' ? 'active' : ''}`}
+          onClick={() => {
+            flushSave()
+            setCurrentView('calendar')
+          }}
+        >
+          Calendar
+        </button>
+        <button 
           className={`nav-item ${currentView === 'reviews' ? 'active' : ''}`}
           onClick={() => {
             flushSave()
@@ -491,27 +527,14 @@ function App() {
           data={data} 
           onOpenPopup={() => setShowWorkingOnPopup(true)} 
         />
-        <button
-          className="nav-minimize-btn"
-          onClick={() => {
-            // Desktop-only window control (user request 2026-11-17); the
-            // optional-chain keeps browser/test environments harmless.
-            if (typeof window !== 'undefined' && window.api && typeof window.api.minimizeWindow === 'function') {
-              window.api.minimizeWindow()
-            }
-          }}
-          title="Minimize window"
-          aria-label="Minimize window"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <line x1="2" y1="7" x2="12" y2="7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-        </button>
       </nav>
       
       <main className="main-content">
         {currentView === 'board' && (
           <Board data={data} onSave={saveData} />
+        )}
+        {currentView === 'calendar' && (
+          <CalendarPage data={data} />
         )}
         {currentView === 'reviews' && (
           <Reviews 
@@ -533,6 +556,13 @@ function App() {
           />
         )}
       </main>
+
+      {/* v1.3.0: in-app deadline toasts (bottom-right) */}
+      <DeadlineToastStack
+        toasts={deadlineToasts}
+        onDismiss={dismissDeadlineToast}
+        onOpenWorkingOn={() => setShowWorkingOnPopup(true)}
+      />
 
       {showWorkingOnPopup && (
         <WorkingOnPopup

@@ -129,10 +129,11 @@ function InsertionPoint({ id, forceActive, onDrop, className = '' }) {
 }
 
 // Sidebar component for categories - simple list with + button on chips.
-// v1.2.0 (user request 2026-11-18): the sidebar collapses VERTICALLY (the
-// card slides away under the nav row) instead of the old horizontal panel
-// slide; the nav row with the Randomizer and the collapse toggle lives at
-// the TOP of this area, like a navigation bar.
+// v1.3.0 (user follow-up 2026-11-18): categories stack VERTICALLY, one
+// chip per row, inside a scrollable card (.categories-scroll) — with many
+// categories the list scrolls instead of needing a taller window. The
+// collapse toggle lives in the nav row at the TOP of this area and slides
+// the WHOLE panel to the side (see board-right-panel below).
 function CategorySidebar({ categories, onCreateCategory, onAddMarker, onNavigateToCategory }) {
   const [isCreating, setIsCreating] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
@@ -184,7 +185,7 @@ function CategorySidebar({ categories, onCreateCategory, onAddMarker, onNavigate
         </p>
       )}
       
-      <div className="categories-list categories-scroll">
+      <div className="categories-list categories-scroll vertical">
         {[...categories].sort((a, b) => {
           const pa = a.priorityMultiplier ?? 1
           const pb = b.priorityMultiplier ?? 1
@@ -247,8 +248,10 @@ function Board({ data, onSave }) {
   const [activeInsertionPoint, setActiveInsertionPoint] = useState(null)
   const [workingOnId, setWorkingOnId] = useState(null)
   const [dropIndicatorId, setDropIndicatorId] = useState(null)
-  // v1.2.0: the categories card collapses VERTICALLY under the sidebar nav
-  // row (replaces the old horizontal panel slide)
+  // v1.3.0 (user follow-up 2026-11-18): the toggle collapses the WHOLE right
+  // panel to the side (a 48px strip stays for expanding + Randomizer), so
+  // the board reclaims the panel width — the pre-v1.2.0 minimize-tray
+  // behavior the user asked to bring back
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false)
   const dropIndicatorRef = useRef(null)
   const pointerYRef = useRef(0)
@@ -1305,60 +1308,87 @@ function Board({ data, onSave }) {
           </DndContext>
         </div>
         
-        {/* v1.2.0 right panel (user request 2026-11-18): a navigation-bar
-            row at the TOP of the categories area holds the Randomizer and
-            the collapse toggle; the categories card slides away VERTICALLY
-            beneath it (the old horizontal panel slide is gone). */}
-        <div className="board-right-panel">
-          <div className="sidebar-nav">
-            <button
-              type="button"
-              className="randomizer-btn"
-              onClick={handleRandomizeTask}
-              title="Pick a random task to work on"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', verticalAlign: '-2px' }}>
-                <rect x="3" y="3" width="18" height="18" rx="3" />
-                <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
-                <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
-                <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
-                <circle cx="8.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
-                <circle cx="15.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
-              </svg>
-              Randomizer
-            </button>
-            <button
-              type="button"
-              className="sidebar-toggle-btn"
-              onClick={() => setCategoriesCollapsed(v => !v)}
-              aria-label={categoriesCollapsed ? 'Expand categories' : 'Collapse categories'}
-              aria-expanded={!categoriesCollapsed}
-              title={categoriesCollapsed ? 'Expand categories' : 'Collapse categories'}
-            >
-              {categoriesCollapsed ? (
+        {/* v1.3.0 right panel (user follow-up 2026-11-18): the nav-bar row
+            (Randomizer + collapse toggle) stays at the TOP of the categories
+            area. Collapsing now slides the WHOLE panel to the SIDE — the
+            board reclaims the 280px — leaving a slim strip with the expand
+            toggle (‹) and a Randomizer icon. Chevron direction signals the
+            action: › (right) while expanded = collapse to the right side,
+            ‹ (left) while collapsed = expand back out. */}
+        <div className={`board-right-panel${categoriesCollapsed ? ' collapsed' : ''}`}>
+          {categoriesCollapsed ? (
+            <div className="sidebar-collapsed-strip">
+              <button
+                type="button"
+                className="sidebar-toggle-btn"
+                onClick={() => setCategoriesCollapsed(false)}
+                aria-label="Expand categories"
+                aria-expanded={false}
+                title="Expand categories"
+              >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 9 12 15 18 9" />
+                  <polyline points="15 6 9 12 15 18" />
                 </svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 15 12 9 18 15" />
+              </button>
+              <button
+                type="button"
+                className="sidebar-icon-btn"
+                onClick={handleRandomizeTask}
+                title="Pick a random task to work on"
+                aria-label="Randomizer"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="3" />
+                  <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="8.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="15.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
                 </svg>
-              )}
-            </button>
-          </div>
-          <div
-            className={`board-sidebar${categoriesCollapsed ? ' collapsed' : ''}`}
-            aria-hidden={categoriesCollapsed}
-          >
-            <div className="sidebar-collapse-inner">
-              <CategorySidebar
-                categories={categories}
-                onCreateCategory={handleCreateCategory}
-                onAddMarker={handleAddMarker}
-                onNavigateToCategory={handleNavigateToCategory}
-              />
+              </button>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="sidebar-nav">
+                <button
+                  type="button"
+                  className="randomizer-btn"
+                  onClick={handleRandomizeTask}
+                  title="Pick a random task to work on"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', verticalAlign: '-2px' }}>
+                    <rect x="3" y="3" width="18" height="18" rx="3" />
+                    <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+                    <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+                    <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+                    <circle cx="8.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
+                    <circle cx="15.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
+                  </svg>
+                  Randomizer
+                </button>
+                <button
+                  type="button"
+                  className="sidebar-toggle-btn"
+                  onClick={() => setCategoriesCollapsed(true)}
+                  aria-label="Collapse categories"
+                  aria-expanded
+                  title="Collapse categories"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 6 15 12 9 18" />
+                  </svg>
+                </button>
+              </div>
+              <div className="board-sidebar">
+                <CategorySidebar
+                  categories={categories}
+                  onCreateCategory={handleCreateCategory}
+                  onAddMarker={handleAddMarker}
+                  onNavigateToCategory={handleNavigateToCategory}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
 

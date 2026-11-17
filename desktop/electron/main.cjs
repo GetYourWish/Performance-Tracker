@@ -473,16 +473,6 @@ ipcMain.handle('backup-now', async () => {
   return await createBackup();
 });
 
-// Minimize the window from the in-app top bar (user request 2026-11-17:
-// "make the minimize button in the top on the desktop app"). The native
-// title bar keeps its own minimize control; this adds the in-app one.
-ipcMain.handle('minimize-window', async () => {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.minimize();
-  }
-  return true;
-});
-
 // Manual refresh: re-read the data file and push to renderer
 ipcMain.handle('refresh-data', async () => {
   if (!dataFilePath) {

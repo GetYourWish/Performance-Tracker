@@ -1311,9 +1311,14 @@
   border-radius: var(--radius-lg);
 }
 
+/* v1.3.0 (user follow-up 2026-11-18): categories stack VERTICALLY — one
+   chip per row, full width — the way they were before v1.2.0 made them
+   flow sideways. The list scrolls (see .categories-scroll) so many
+   categories never need a taller window. */
 .categories-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  flex-wrap: nowrap;
   gap: 8px;
   margin-top: 12px;
 }
@@ -1326,6 +1331,23 @@
   cursor: grab;
   user-select: none;
   transition: transform var(--transition-fast);
+}
+
+/* Vertical stack: every chip fills its row; long names truncate with an
+   ellipsis instead of forcing the panel (or a horizontal scrollbar) wider */
+.categories-list .category-chip {
+  width: 100%;
+  min-width: 0;
+  justify-content: space-between;
+}
+
+.categories-list .category-chip-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 
 .category-chip:hover {
@@ -1446,9 +1468,11 @@
   text-decoration: line-through;
 }
 
-/* Right panel: nav-bar row on top + the categories card, which collapses
-   VERTICALLY (user request 2026-11-18 — the old horizontal width-slide is
-   gone; the panel keeps its width so the board never shifts sideways). */
+/* Right panel: nav-bar row on top + the categories card. v1.3.0 (user
+   follow-up 2026-11-18): collapsing slides the WHOLE panel to the SIDE —
+   the board reclaims the 280px — instead of leaving blank space. A slim
+   48px strip stays with the expand toggle and a Randomizer icon, like the
+   pre-v1.2.0 minimize tray. */
 .board-right-panel {
   width: 280px;
   flex-shrink: 0;
@@ -1456,8 +1480,45 @@
   flex-direction: column;
   gap: 12px;
   position: relative;
+  overflow: hidden; /* clips the card while the width animates */
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.board-right-panel.collapsed {
+  width: 48px;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Collapsed strip: expand toggle on top (‹ — flipped from the expanded ›),
+   Randomizer as an icon button beneath it */
+.sidebar-collapsed-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.sidebar-icon-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+.sidebar-icon-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--glass-border);
+}
 /* Navigation-bar row: Randomizer (left, grows) + collapse toggle (right) */
 .sidebar-nav {
   display: flex;
@@ -1486,6 +1547,12 @@
   border-color: var(--glass-border);
 }
 
+/* In the collapsed strip the toggle matches the 40px icon buttons */
+.sidebar-collapsed-strip .sidebar-toggle-btn {
+  width: 40px;
+  height: 40px;
+}
+
 /* Randomizer — a compact nav-bar button now (was a full-width standalone
    button floating above the categories card) */
 .randomizer-btn {
@@ -1505,24 +1572,6 @@
 }
 .randomizer-btn:hover {
   background: var(--bg-tertiary);
-}
-
-/* Vertical collapse of the categories card: grid-template-rows animates
-   from 1fr to 0fr, so the card slides away under the nav row. The grid item
-   MUST be a bare wrapper (no padding/margin of its own) — an item's own
-   padding/margin forms the track's floor and keeps a sliver visible. */
-.board-sidebar {
-  display: grid;
-  grid-template-rows: 1fr;
-  transition: grid-template-rows 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  min-height: 0;
-}
-.board-sidebar.collapsed {
-  grid-template-rows: 0fr;
-}
-.sidebar-collapse-inner {
-  overflow: hidden;
-  min-height: 0;
 }
 
 /* Flash animation when a task is randomized */
@@ -2972,11 +3021,30 @@
   border-radius: var(--radius-md);
 }
 
-/* Many categories must scroll instead of pushing the board away. */
+/* Many categories must scroll instead of pushing the board away.
+   v1.3.0: overflow-x is hidden — the vertical stack never needs a
+   horizontal scrollbar (the v1.2.0 wrap layout produced one) — and the
+   scrollbar is slimmed so it fits the narrow panel. */
 .categories-scroll {
   max-height: 46vh;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-tertiary) transparent;
+}
+.categories-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.categories-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.categories-scroll::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+.categories-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 /* --- Board rows: thread / recurring badges + deadline chips -------------- */
@@ -3386,4 +3454,287 @@ button.task-deadline-chip:hover {
 .recurring-delete-btn:hover {
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
+}
+
+/* --- v1.3.0 Calendar page (dedicated view, not a popup) ------------------- */
+
+.calendar-page {
+  height: 100%;
+  overflow-y: auto;
+  padding: 20px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.calendar-nav-group {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
+.calendar-nav-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.calendar-nav-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.calendar-title-block {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.calendar-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.2px;
+}
+
+.calendar-subtitle-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.calendar-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.calendar-subtitle-overdue {
+  color: #ef4444;
+}
+
+.calendar-today-btn {
+  padding: 3px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.calendar-today-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.calendar-empty-hint {
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  align-content: start;
+  flex: 1;
+}
+
+.calendar-weekday {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.calendar-day-cell {
+  min-height: 96px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.calendar-day-cell.off-month {
+  background: transparent;
+  border-color: transparent;
+  min-height: 0;
+}
+
+.calendar-day-cell.today {
+  border-color: var(--accent-color, #60a5fa);
+  box-shadow: inset 0 0 0 1px var(--accent-color, #60a5fa);
+}
+
+.calendar-day-number {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.calendar-day-cell.today .calendar-day-number {
+  color: var(--accent-color, #60a5fa);
+}
+
+.calendar-day-tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.calendar-task-pill {
+  font-size: 12px;
+  line-height: 1.25;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  border-left: 3px solid var(--accent-color, #60a5fa);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Pills on days that already passed (viewing the current month) belong to
+   missed deadlines — same red the overdue deadline chips use */
+.calendar-task-pill.overdue {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.calendar-task-more {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding-left: 6px;
+}
+
+/* --- v1.3.0 deadline toasts (in-app, bottom-right, no OS notification) ----- */
+
+.deadline-toast-stack {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 1200; /* above modals — an ephemeral heads-up must stay visible */
+  max-width: 340px;
+}
+
+.deadline-toast {
+  position: relative;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid #f59e0b;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: deadline-toast-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes deadline-toast-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.deadline-toast-title {
+  margin: 0 24px 4px 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #f59e0b;
+}
+
+.deadline-toast-body {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.deadline-toast-text {
+  display: block;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.deadline-toast-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.deadline-toast-body:hover .deadline-toast-hint {
+  color: var(--text-secondary);
+}
+
+.deadline-toast-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.deadline-toast-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }

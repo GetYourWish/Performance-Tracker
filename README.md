@@ -25,10 +25,11 @@ the board as a lightweight prompt for yourself, then record the effort when you
 finish them. The result is a history you can inspect by day, week, category, or
 year.
 
-It is **not** a project-management system, team workspace, calendar, or
-cloud-synced to-do list. There are no required accounts, deadlines, assignees,
-or online services. You can use as much or as little organization as you like:
-typing a task and completing it is enough to get started.
+It is **not** a project-management system, team workspace, or cloud-synced
+to-do list. There are no required accounts, assignees, or online services.
+Optional structure—deadlines with a calendar overview, recurring tasks,
+categories—stays out of the way: typing a task and completing it is enough
+to get started.
 
 ## ✨ At a glance
 
@@ -108,6 +109,10 @@ separate status workflow.
 - **Deadlines:** give any task a deadline date. Rows, the Working On list,
   and the completion dialogs show the state—overdue, due today, or due in a
   few days—so nothing slips by unnoticed. Deadlines never affect scoring.
+  When a deadline day arrives, the task joins Working On automatically on
+  every device. The desktop **Calendar** page lays out every month so you
+  can see all dated work in one place, and Android sends a local
+  notification when a due task joins Working On.
 - **Threads:** when work on a task spans more than one day, use the thread
   action to create a continuation directly below it—the same text plus
   `#2`, `#3`, and so on—so every day of effort gets registered. Continuations

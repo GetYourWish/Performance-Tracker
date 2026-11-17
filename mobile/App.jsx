@@ -18,6 +18,12 @@ import { CrashReportScreen } from './src/screens/CrashReportScreen.js'
 import { ErrorScreen } from './src/screens/ErrorScreen.js'
 import ErrorBoundary from './src/components/ErrorBoundary.js'
 import { materializeRecurringTasks, applyDueDeadlines, getCurrentDate, generateId } from '@performance-tracker/core'
+import {
+  configureNotifications,
+  ensureNotificationPermission,
+  notifyWorkingOnAdds,
+  syncDeadlineReminders
+} from './src/notifications.js'
 import appJson from './app.json'
 
 // Shown on every loading/error screen so a screenshot identifies the exact
@@ -79,6 +85,8 @@ function AppShell() {
   // tasks[].deadlineAutoAdded so a later manual removal sticks. Both helpers
   // return the SAME data reference when nothing is due, which makes the
   // store's no-change-no-write skip the disk entirely.
+  // v1.3.0: tasks that just joined workingOn fire an Android notification
+  // (user request 2026-11-18 — the `added` list from applyDueDeadlines).
   const runDailyAutomation = useCallback((d, now) => {
     const today = getCurrentDate()
     const { data: withRecurring, created } = materializeRecurringTasks({
@@ -87,11 +95,19 @@ function AppShell() {
       now,
       generateId
     })
-    const { data: next } = applyDueDeadlines({
+    const { data: next, added } = applyDueDeadlines({
       data: withRecurring,
       today,
       now
     })
+    if (added.length > 0) {
+      const taskById = new Map((withRecurring.tasks || []).map(t => [t.id, t]))
+      const addedTasks = added.map(id => taskById.get(id)).filter(Boolean)
+      if (addedTasks.length > 0) {
+        // fire-and-forget: a notification failure must never fail the mutation
+        notifyWorkingOnAdds(addedTasks).catch(() => {})
+      }
+    }
     return created.length > 0 || next !== d ? next : d
   }, [])
 
@@ -109,7 +125,21 @@ function AppShell() {
         // change retries it
         materializedDataRef.current = null
       })
+    // v1.3.0: keep the scheduled day-of deadline reminders in sync with
+    // the data (schedule new deadlines, cancel completed/removed ones).
+    // Runs on every data change; when the mutation above lands, the effect
+    // re-runs and re-syncs against the final document.
+    syncDeadlineReminders(state.data?.tasks, getCurrentDate()).catch(() => {})
   }, [state.status, state.data, store, runDailyAutomation])
+
+  // v1.3.0 notifications bootstrap (user request 2026-11-18): foreground
+  // handler + channel, and the POST_NOTIFICATIONS runtime permission ask —
+  // once per session, the first time the app reaches ready state.
+  useEffect(() => {
+    if (state.status !== 'ready') return
+    configureNotifications().catch(() => {})
+    ensureNotificationPermission().catch(() => {})
+  }, [state.status])
 
   // Foreground day-rollover: Android suspends timers while backgrounded, so
   // a deadline (or a weekday recurring task) that becomes due while the app

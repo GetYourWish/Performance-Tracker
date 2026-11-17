@@ -4,7 +4,8 @@
 //   R5  deadlines (chips, editor)
 //   R7  threads (#N continuation below the source task)
 //   R8  recurring editor (Settings ▸ Categories)
-//   R10 info bubble in the categories sidebar, minimize button in the nav
+//   R10 info bubble in the categories sidebar; the nav minimize button
+//      (also R10) was removed in v1.3.0 — see v1.3.0-desktop.test.jsx
 //   R11 category note popup renders through a portal (embed fix)
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import '@testing-library/jest-dom/vitest'
@@ -14,7 +15,6 @@ import Board from '../components/Board'
 import { WorkingOnPopup } from '../components/WorkingOnMarker'
 import Settings from '../components/Settings'
 import Reviews from '../components/Reviews'
-import App from '../App'
 import { getCurrentDate } from '@performance-tracker/core'
 
 afterEach(cleanup)
@@ -486,24 +486,7 @@ describe('Reviews TaskDetailPopup category editing (R4)', () => {
   })
 })
 
-// ---- R10: nav minimize button ------------------------------------------------
-
-describe('App nav minimize button (R10)', () => {
-  it('renders the minimize button in the top nav', async () => {
-    const mockApi = {
-      getAppState: vi.fn().mockResolvedValue({ dataPath: 'C:/data/tracker.json' }),
-      loadData: vi.fn().mockResolvedValue(makeData()),
-      getWatcherEnabled: vi.fn().mockResolvedValue(true),
-      checkConflicts: vi.fn().mockResolvedValue([]),
-      minimizeWindow: vi.fn().mockResolvedValue(true),
-      onExternalChange: vi.fn(() => () => {}),
-      saveData: vi.fn().mockResolvedValue({})
-    }
-    vi.stubGlobal('api', mockApi)
-    render(<App />)
-    const btn = await screen.findByRole('button', { name: 'Minimize window' })
-    fireEvent.click(btn)
-    expect(mockApi.minimizeWindow).toHaveBeenCalledTimes(1)
-    vi.unstubAllGlobals()
-  })
-})
+// ---- R10: nav minimize button — REMOVED in v1.3.0 (user follow-up
+// 2026-11-18: "the minimize window button ... you must delete it"). The
+// native title bar already provides the control; the in-app duplicate is
+// gone. Regression coverage lives in v1.3.0-desktop.test.jsx.
