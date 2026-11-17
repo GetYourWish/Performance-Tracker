@@ -1,0 +1,9 @@
+# Normalize line endings: text files get LF in the repository; the
+# working-tree checkout follows each developer machine core.autocrlf
+# setting. Kills the CRLF "illusion diffs" (files show as modified with
+# zero content changes) that polluted git status after Windows checkouts.
+* text=auto
+
+# Windows batch scripts MUST keep CRLF in the working tree — cmd.exe
+# chokes on LF-only .bat files, so pin them regardless of autocrlf.
+*.bat text eol=crlf
